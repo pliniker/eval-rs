@@ -1,6 +1,8 @@
 [package]
 name = "eval-rs"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Peter Liniker <peter.liniker+github@gmail.com>"]
 
 [dependencies]
+clap = "2.20.3"
+rustyline = "1.0.0"
