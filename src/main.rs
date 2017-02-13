@@ -38,6 +38,7 @@ fn read_print_loop() -> Result<(), ReadlineError> {
         None => None,
     };
 
+    // () means no completion support
     let mut reader = Editor::<()>::new();
 
     // try to load the history file, failing silently if it can't be read
@@ -46,8 +47,10 @@ fn read_print_loop() -> Result<(), ReadlineError> {
     }
 
     // repl
+    let mut input_counter = 1;
     loop {
-        let readline = reader.readline("# ");
+        let readline = reader.readline(&format!("evalrus:{:03}> ", input_counter));
+        input_counter += 1;
 
         match readline {
             // valid input
@@ -94,7 +97,7 @@ fn main() {
         // otherwise begin a repl
 
         read_print_loop().unwrap_or_else(|err| {
-            println!("exited with {}", err);
+            println!("exited because: {}", err);
             process::exit(0);
         });
     }
