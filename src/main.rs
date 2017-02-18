@@ -1,5 +1,4 @@
 
-#[macro_use]
 extern crate clap;
 extern crate rustyline;
 
@@ -14,6 +13,10 @@ use clap::{Arg, App};
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
+
+mod error;
+mod lexer;
+mod printer;
 
 
 // read a file into a String
@@ -38,6 +41,7 @@ fn read_print_loop() -> Result<(), ReadlineError> {
         None => None,
     };
 
+    // () means no completion support
     let mut reader = Editor::<()>::new();
 
     // try to load the history file, failing silently if it can't be read
@@ -46,14 +50,20 @@ fn read_print_loop() -> Result<(), ReadlineError> {
     }
 
     // repl
+    let mut input_counter = 1;
     loop {
-        let readline = reader.readline("# ");
+        let readline = reader.readline(&format!("evalrus:{:03}> ", input_counter));
+        input_counter += 1;
 
         match readline {
             // valid input
             Ok(line) => {
                 reader.add_history_entry(&line);
-                println!("{}", line);
+
+                match lexer::tokenize(line) {
+                    Ok(tokens) => printer::print(&tokens),
+                    Err(e) => println!("Error on line/char {}/{}: {}", e.lineno(), e.charno(), e.message())
+                }
             }
 
             // some kind of termination condition
@@ -88,13 +98,16 @@ fn main() {
             process::exit(1);
         });
 
-        println!("{}", contents);
+        match lexer::tokenize(contents) {
+            Ok(tokens) => printer::print(&tokens),
+            Err(e) => println!("Error on line/char {}/{}: {}", e.lineno(), e.charno(), e.message())
+        }
 
     } else {
         // otherwise begin a repl
 
         read_print_loop().unwrap_or_else(|err| {
-            println!("exited with {}", err);
+            println!("exited because: {}", err);
             process::exit(0);
         });
     }
