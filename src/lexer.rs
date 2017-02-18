@@ -52,7 +52,7 @@ pub fn tokenize(input: String) -> Result<Vec<Token>, ParseError> {
 
     // characters that terminate a symbol
     let terminating = [OPEN_BRACKET, CLOSE_BRACKET, SPACE, TAB];
-    let is_terminating = |c| terminating.iter().filter(|&t| c == *t).count() > 0;
+    let is_terminating = |c: char| terminating.iter().any(|t| c == *t);
 
     // return value
     let mut tokens = Vec::new();
