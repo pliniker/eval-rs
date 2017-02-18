@@ -1,5 +1,5 @@
 [package]
-name = "eval-rs"
+name = "evalrus"
 version = "0.0.1"
 authors = ["Peter Liniker <peter.liniker+github@gmail.com>"]
 
