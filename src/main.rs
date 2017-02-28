@@ -1,5 +1,6 @@
 
 extern crate clap;
+extern crate memalloc;
 extern crate rustyline;
 
 
@@ -16,6 +17,7 @@ use rustyline::Editor;
 
 mod error;
 mod lexer;
+mod memory;
 mod printer;
 
 
