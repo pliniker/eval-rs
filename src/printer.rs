@@ -10,7 +10,7 @@ pub fn print(tokens: &Vec<Token>) {
 
     for token in tokens {
         match token.token_type() {
-            &OpenBracket => {
+            &OpenParen => {
                 if last_was_symbol {
                     print!(" (");
                 } else {
@@ -21,7 +21,7 @@ pub fn print(tokens: &Vec<Token>) {
                 last_was_close = false;
             },
 
-            &CloseBracket => {
+            &CloseParen => {
                 print!(")");
                 last_was_symbol = false;
                 last_was_close = true;
@@ -35,6 +35,12 @@ pub fn print(tokens: &Vec<Token>) {
                 }
 
                 last_was_symbol = true;
+                last_was_close = false;
+            },
+
+            &Dot => {
+                print!(" . ");
+                last_was_symbol = false;
                 last_was_close = false;
             }
         }
