@@ -18,7 +18,8 @@ use rustyline::Editor;
 mod error;
 mod lexer;
 mod memory;
-mod printer;
+mod parser;
+//mod printer;
 
 
 // read a file into a String
@@ -32,7 +33,7 @@ fn load_file(filename: &str) -> Result<String, io::Error> {
 
 
 // read a line at a time, printing the input back out
-fn read_print_loop() -> Result<(), ReadlineError> {
+fn read_print_loop(mem: &mut memory::Arena) -> Result<(), ReadlineError> {
 
     // establish a repl input history file path
     let history_file = match env::home_dir() {
@@ -62,8 +63,8 @@ fn read_print_loop() -> Result<(), ReadlineError> {
             Ok(line) => {
                 reader.add_history_entry(&line);
 
-                match lexer::tokenize(line) {
-                    Ok(tokens) => printer::print(&tokens),
+                match parser::parse(mem, line) {
+                    Ok(tokens) => (),
                     Err(e) => println!("Error on line/char {}/{}: {}", e.lineno(), e.charno(), e.message())
                 }
             }
@@ -92,6 +93,9 @@ fn main() {
             .index(1))
         .get_matches();
 
+    // make a memory heap
+    let mut mem = memory::Arena::new(65536);
+
     if let Some(filename) = matches.value_of("filename") {
         // if a filename was specified, read it into a String
 
@@ -100,15 +104,15 @@ fn main() {
             process::exit(1);
         });
 
-        match lexer::tokenize(contents) {
-            Ok(tokens) => printer::print(&tokens),
+        match parser::parse(&mut mem, contents) {
+            Ok(value) => (),
             Err(e) => println!("Error on line/char {}/{}: {}", e.lineno(), e.charno(), e.message())
         }
 
     } else {
         // otherwise begin a repl
 
-        read_print_loop().unwrap_or_else(|err| {
+        read_print_loop(&mut mem).unwrap_or_else(|err| {
             println!("exited because: {}", err);
             process::exit(0);
         });

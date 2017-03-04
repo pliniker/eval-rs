@@ -35,10 +35,6 @@ impl Token {
             token: token,
         }
     }
-
-    pub fn token_type(&self) -> &TokenType {
-        &self.token
-    }
 }
 
 
