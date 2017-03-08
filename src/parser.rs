@@ -1,7 +1,45 @@
+use std::mem;
 
 use error::{ParseError, SourcePos};
 use lexer::{tokenize, Token, TokenType};
 use memory::{Arena, Ptr};
+
+
+//
+// Composition of an iterator over Tokens and the last Token that was returned
+// by the iterator, allowing repeated querying of the last Token obtained
+// without advancing the iterator.
+//
+struct TokenStream<I: Iterator<Item = Token>> {
+    tokens: I,
+    peek: Option<Token>
+}
+
+
+impl<I: Iterator<Item = Token>> TokenStream<I> {
+    fn new(mut tokens: I) -> TokenStream<I> {
+        let peek = tokens.next();
+        TokenStream {
+            tokens: tokens,
+            peek: peek
+        }
+    }
+
+    // Peek at the next token in the stream. This can be called repeatedly
+    // without advancing the position in the stream.
+    fn peek(&self) -> &Option<Token> {
+        &self.peek
+    }
+
+    // Move the token we're peeking at to the caller and get the next token
+    // to peek at.
+    fn consume(&mut self) -> Option<Token> {
+        let mut value = self.tokens.next();
+        mem::swap(&mut value, &mut self.peek);
+        println!("{:?}", value);
+        value
+    }
+}
 
 
 #[derive(Copy, Clone)]
@@ -44,106 +82,129 @@ impl Pair {
 }
 
 
-fn expression<'a, I>(mem: &mut Arena, tokens: &mut I) -> Result<Value, ParseError>
+// I implemented a Linked List! This type is internal to the parser to
+// simplify the code.
+struct PairList {
+    head: Option<Ptr<Pair>>,
+    tail: Option<Ptr<Pair>>
+}
+
+
+impl PairList {
+    fn open() -> PairList {
+        PairList { head: None, tail: None }
+    }
+
+    fn push(&mut self, value: Value, mem: &mut Arena) {
+        if let Some(mut old_tail) = self.tail {
+            let new_tail = old_tail.append(mem, value);
+            self.tail = Some(new_tail);
+        } else {
+            let mut pair = Pair::alloc(mem);
+            pair.set(value);
+            self.head = Some(pair);
+            self.tail = self.head;
+        }
+    }
+
+    fn dot(&mut self, value: Value) {
+        if let Some(mut old_tail) = self.tail {
+            old_tail.dot(value);
+        } else {
+            panic!("cannot dot an empty PairList!")
+        }
+    }
+
+    fn close(self) -> Ptr<Pair> {
+        self.head.expect("cannot close empty PairList!")
+    }
+}
+
+
+//
+// A list is either
+// * empty
+// * a sequence of s-expressions
+//
+// If a list token is a Dot, it must be followed by an s-expression and a CloseParen
+//
+fn parse_list<I>(mem: &mut Arena, tokens: &mut TokenStream<I>) -> Result<Value, ParseError>
     where I: Iterator<Item = Token>
 {
     use self::TokenType::*;
 
-    let mut token = tokens.next();
-
-    // immediate close paren means empty-list/nil
-    if let Some(Token { token: CloseParen, pos: _ }) = token {
+    if let &Some(Token { token: CloseParen, pos: _ }) = tokens.peek() {
+        tokens.consume();
         return Ok(Value::Nil);
     }
 
-    // otherwise this is a list
-    let head = Pair::alloc(mem);
-    // make a tail to append things into
-    let mut tail = head;
-
-    // loop state variables
-    let mut first_token = true;
-    let mut after_dot = false;
-    let mut expect_closeparen = false;
-    let mut expect_list = true;
+    let mut list = PairList::open();
 
     loop {
-        println!("{:?}", token);
-        match token {
-            // Open parenthesis
-            Some(Token { token: OpenParen, pos }) => {
-                if expect_closeparen {
-                    return Err(ParseError::new(
-                        pos, String::from("expected close-paren")));
-                }
+        match tokens.peek() {
+            &Some(Token { token: OpenParen, pos: _ }) => {
+                list.push(parse_list(mem, tokens)?, mem);
+                tokens.consume();
+            },
 
-                if first_token {
-                    tail.set(expression(mem, tokens)?);
-                    first_token = false;
-                } else if after_dot {
-                    tail.dot(expression(mem, tokens)?);
-                    expect_closeparen = true;
-                } else {
-                    let expr = expression(mem, tokens)?;
-                    tail = tail.append(mem, expr);
+            &Some(Token { token: Symbol(ref _sym), pos }) => {
+                list.push(Value::Symbol(pos), mem);
+                tokens.consume();
+            },
+
+            &Some(Token { token: Dot, pos }) => {
+                // the only valid sequence here on out is Dot s-expression CloseParen
+                list.dot(parse_sexpr(mem, tokens)?);
+                tokens.consume();
+
+                match tokens.peek() {
+                    &Some(Token { token: CloseParen, pos: _ }) => (),
+                    _ => return Err(ParseError::new(pos, String::from("s-expr after . must be followed by close parenthesis")))
                 }
             },
 
-            // Symbol
-            Some(Token { token: Symbol(sym), pos }) => {
-                if expect_closeparen {
-                    return Err(ParseError::new(
-                        pos, String::from("expected close-paren")));
-                }
-
-                if first_token {
-                    tail.set(Value::Symbol(pos));
-                    first_token = false;
-                } else if after_dot {
-                    tail.dot(Value::Symbol(pos));
-                    expect_closeparen = true;
-                } else {
-                    tail = tail.append(mem, Value::Symbol(pos));
-                }
-            },
-
-            // Dot: something . something)
-            Some(Token { token: Dot, pos }) => {
-                if expect_closeparen {
-                    return Err(ParseError::new(
-                        pos, String::from("expected close-paren")));
-                }
-
-                after_dot = true;
-            }
-
-            // Close parenthesis
-            Some(Token { token: CloseParen, pos: _ }) => {
-                expect_list = false;
+            &Some(Token { token: CloseParen, pos: _ }) => {
+                tokens.consume();
                 break;
-            }
-
-            // end of tokens
-            None => {
-                if expect_list {
-                    return Err(ParseError::new(
-                        (0, 0), String::from("unexpected end of stream")));
-                } else {
-                    break;
-                }
             },
-        }
 
-        token = tokens.next();
+            &None => {
+                return Err(ParseError::new((0, 0), String::from("unexpected end of stream")));
+            }
+        }
     }
 
-    Ok(Value::Pair(head))
+    Ok(Value::Pair(list.close()))
+}
+
+
+// Parse a single s-expression
+fn parse_sexpr<I>(mem: &mut Arena, tokens: &mut TokenStream<I>) -> Result<Value, ParseError>
+    where I: Iterator<Item = Token>
+{
+    use self::TokenType::*;
+
+    match tokens.peek() {
+        &Some(Token { token: OpenParen, pos: _ })
+            => parse_list(mem, tokens),
+
+        &Some(Token { token: Symbol(ref _sym), pos })
+            => Ok(Value::Symbol(pos)),
+
+        &Some(Token { token: CloseParen, pos })
+            => Err(ParseError::new(pos, String::from("unmatched close parenthesis"))),
+
+        &Some(Token { token: Dot, pos })
+            => Err(ParseError::new(pos, String::from("invalid symbol '.'"))),
+
+        &None => Ok(Value::Nil)
+    }
 }
 
 
 fn parse_tokens(mem: &mut Arena, mut tokens: Vec<Token>) -> Result<Value, ParseError> {
-    let mut iter = tokens.drain(..);
-    expression(mem, &mut iter)
+    let mut tokenstream = TokenStream::new(tokens.drain(..));
+    parse_sexpr(mem, &mut tokenstream)
 }
 
 
