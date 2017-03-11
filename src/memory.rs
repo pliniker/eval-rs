@@ -27,6 +27,16 @@ impl<T> DerefMut for Ptr<T> {
 }
 
 
+impl<T> Copy for Ptr<T> {}
+
+
+impl<T> Clone for Ptr<T> {
+    fn clone(&self) -> Ptr<T> {
+        Ptr { ptr: self.ptr }
+    }
+}
+
+
 pub struct Arena {
     buffer: *mut u8,
     size: isize,
