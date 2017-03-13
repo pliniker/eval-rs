@@ -65,7 +65,7 @@ fn read_print_loop(mem: &mut memory::Arena) -> Result<(), ReadlineError> {
                 reader.add_history_entry(&line);
 
                 match parser::parse(mem, line) {
-                    Ok(ast) => printer::print(&ast),
+                    Ok(ast) => println!("{}", printer::print(&ast)),
                     Err(e) => println!("Error on line/char {}/{}: {}", e.lineno(), e.charno(), e.message())
                 }
             }
@@ -106,7 +106,7 @@ fn main() {
         });
 
         match parser::parse(&mut mem, contents) {
-            Ok(ast) => printer::print(&ast),
+            Ok(ast) => println!("{}", printer::print(&ast)),
             Err(e) => println!("Error on line/char {}/{}: {}", e.lineno(), e.charno(), e.message())
         }
 

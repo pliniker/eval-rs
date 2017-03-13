@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use error::{ParseError, SourcePos};
+use error::{ParseError};
 use lexer::{tokenize, Token, TokenType};
 use memory::{Arena, Ptr};
 use types::{Pair, Value};
@@ -147,81 +147,82 @@ pub fn parse(mem: &mut Arena, input: String) -> Result<Value, ParseError> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use printer::print;
+
+    fn check(input: String, expect: String) {
+        let mut mem = Arena::new(1024);
+        let ast = parse(&mut mem, input).unwrap();
+        println!("expect: {}\n\tgot:    {}\n\tdebug:  {:?}", &expect, &ast, &ast);
+        assert!(print(&ast) == expect);
+    }
 
     #[test]
     fn parse_empty_list() {
-        let mut mem = Arena::new(256);
-        if let Ok(Value::Nil) = parse(&mut mem, String::from("()")) {
-            // ok
-        } else {
-            assert!(false);
-        }
+        let input = String::from("()");
+        let expect = input.clone();
+        check(input, expect);
     }
 
     #[test]
     fn parse_symbol() {
-        let mut mem = Arena::new(256);
-        if let Ok(Value::Symbol(_)) = parse(&mut mem, String::from("a")) {
-            // ok
-        } else {
-            assert!(false);
-        }
+        let input = String::from("a");
+        let expect = String::from("X");
+        check(input, expect);
     }
 
     #[test]
     fn parse_list() {
-        let mut mem = Arena::new(256);
-        if let Ok(have) = parse(&mut mem, String::from("(a)")) {
-            assert!(have ==
-                    Value::Pair(Pair::alloc_with_first(
-                        &mut mem,
-                        Value::Symbol((0, 0)))));
-        } else {
-            assert!(false);
-        }
+        let input = String::from("(a)");
+        let expect = String::from("(X)");
+        check(input, expect);
     }
 
     #[test]
-    fn parse_nested_list() {
-        let mut mem = Arena::new(256);
-        if let Ok(have) = parse(&mut mem, String::from("((a))")) {
+    fn parse_list_nested1() {
+        let input = String::from("((a))");
+        let expect = String::from("((X))");
+        check(input, expect);
+    }
 
-            let inner = Value::Pair(Pair::alloc_with_first(
-                &mut mem,
-                Value::Symbol((0, 0))));
+    #[test]
+    fn parse_list_nested2() {
+        let input = String::from("(a (b c) d)");
+        let expect = String::from("(X (X X) X)");
+        check(input, expect);
+    }
 
-            assert!(have ==
-                    Value::Pair(Pair::alloc_with_first(
-                        &mut mem,
-                        inner)))
-        } else {
-            assert!(false);
-        }
+    #[test]
+    fn parse_list_nested3() {
+        let input = String::from("(a b (c (d)))");
+        let expect = String::from("(X X (X (X)))");
+        check(input, expect);
     }
 
     #[test]
     fn parse_longer_list() {
-        let mut mem = Arena::new(256);
-        if let Ok(have) = parse(&mut mem, String::from("(a b c)")) {
-            let c = Value::Pair(Pair::alloc_with_first(&mut mem, Value::Symbol((0, 0))));
-            let b = Value::Pair(Pair::alloc_with_both(&mut mem, Value::Symbol((0, 0)), c));
-            let a = Value::Pair(Pair::alloc_with_both(&mut mem, Value::Symbol((0, 0)), b));
-
-            assert!(have == a);
-        } else {
-            assert!(false);
-        }
+        let input = String::from("(a b c)");
+        let expect = String::from("(X X X)");
+        check(input, expect);
     }
 
     #[test]
     fn parse_dot_notation() {
-        let mut mem = Arena::new(256);
-        if let Ok(have) = parse(&mut mem, String::from("(a . b)")) {
-            assert!(have == Value::Pair(Pair::alloc_with_both(&mut mem, Value::Symbol((0, 0)), Value::Symbol((0, 0)))));
-        } else {
-            assert!(false);
-        }
+        let input = String::from("(a . b)");
+        let expect = String::from("(X . X)");
+        check(input, expect);
     }
 
-    // TODO add expect-to-fail test
+    #[test]
+    fn parse_dot_notation_longer() {
+        let input = String::from("((a . b) . (c . d))");
+        let expect = String::from("((X . X) X . X)");
+        check(input, expect);
+    }
+
+    #[test]
+    fn parse_dot_notation_with_nil() {
+        let input = String::from("(a . ())");
+        let expect = String::from("(X)");
+        check(input, expect);
+    }
 }

@@ -32,12 +32,11 @@ impl fmt::Display for Value {
 
             &Value::Pair(ptr) => {
                 let mut tail = ptr;
-
                 write!(f, "({}", tail.first)?;
 
                 while let Value::Pair(next) = tail.second {
-                    write!(f, " {}", tail.first);
                     tail = next;
+                    write!(f, " {}", tail.first)?;
                 }
 
                 if let Value::Symbol(_) = tail.second {
@@ -46,6 +45,17 @@ impl fmt::Display for Value {
 
                 write!(f, ")")
             }
+        }
+    }
+}
+
+
+impl fmt::Debug for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &Value::Nil => write!(f, "nil"),
+            &Value::Symbol(_) => write!(f, "X"),
+            &Value::Pair(ptr) => write!(f, "({:?} . {:?})", ptr.first, ptr.second)
         }
     }
 }
@@ -63,20 +73,6 @@ impl Pair {
         mem.allocate(Pair {
             first: Value::Nil,
             second: Value::Nil
-        })
-    }
-
-    pub fn alloc_with_first(mem: &mut Arena, first: Value) -> Ptr<Pair> {
-        mem.allocate(Pair {
-            first: first,
-            second: Value::Nil
-        })
-    }
-
-    pub fn alloc_with_both(mem: &mut Arena, first: Value, second: Value) -> Ptr<Pair> {
-        mem.allocate(Pair {
-            first: first,
-            second: second
         })
     }
 
