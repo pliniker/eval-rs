@@ -6,7 +6,7 @@ use memory::{Arena, Ptr};
 
 #[derive(Copy, Clone)]
 pub enum Value {
-//  Symbol(String, SourcePos),  // TODO do something about this!
+    //  Symbol(String, SourcePos),  // TODO do something about this!
     Symbol(SourcePos),
     Pair(Ptr<Pair>),
     Nil,
@@ -17,8 +17,20 @@ impl PartialEq for Value {
     fn eq(&self, other: &Value) -> bool {
         match self {
             &Value::Nil => if let &Value::Nil = other { true } else { false },
-            &Value::Symbol(_) => if let &Value::Symbol(_) = other { true } else { false },
-            &Value::Pair(lptr) => if let &Value::Pair(rptr) = other { lptr.eq(rptr) } else { false },
+            &Value::Symbol(_) => {
+                if let &Value::Symbol(_) = other {
+                    true
+                } else {
+                    false
+                }
+            }
+            &Value::Pair(lptr) => {
+                if let &Value::Pair(rptr) = other {
+                    lptr.eq(rptr)
+                } else {
+                    false
+                }
+            }
         }
     }
 }
@@ -55,7 +67,7 @@ impl fmt::Debug for Value {
         match self {
             &Value::Nil => write!(f, "nil"),
             &Value::Symbol(_) => write!(f, "X"),
-            &Value::Pair(ptr) => write!(f, "({:?} . {:?})", ptr.first, ptr.second)
+            &Value::Pair(ptr) => write!(f, "({:?} . {:?})", ptr.first, ptr.second),
         }
     }
 }
@@ -72,7 +84,7 @@ impl Pair {
     pub fn alloc(mem: &mut Arena) -> Ptr<Pair> {
         mem.allocate(Pair {
             first: Value::Nil,
-            second: Value::Nil
+            second: Value::Nil,
         })
     }
 

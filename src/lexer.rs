@@ -59,10 +59,10 @@ pub fn tokenize(input: String) -> Result<Vec<Token>, ParseError> {
 
     loop {
         match current {
-            Some(TAB) =>
-                return Err(ParseError::new(
-                    (lineno, charno),
-                    String::from("tabs are not valid whitespace"))),
+            Some(TAB) => {
+                return Err(ParseError::new((lineno, charno),
+                                           String::from("tabs are not valid whitespace")))
+            }
 
             Some(SPACE) => current = chars.next(),
 
@@ -157,9 +157,12 @@ mod test {
         if let Ok(tokens) = tokenize(String::from("(foo bar baz)")) {
             assert!(tokens.len() == 5);
             assert_eq!(tokens[0], Token::new((1, 0), TokenType::OpenParen));
-            assert_eq!(tokens[1], Token::new((1, 1), TokenType::Symbol(String::from("foo"))));
-            assert_eq!(tokens[2], Token::new((1, 5), TokenType::Symbol(String::from("bar"))));
-            assert_eq!(tokens[3], Token::new((1, 9), TokenType::Symbol(String::from("baz"))));
+            assert_eq!(tokens[1],
+                       Token::new((1, 1), TokenType::Symbol(String::from("foo"))));
+            assert_eq!(tokens[2],
+                       Token::new((1, 5), TokenType::Symbol(String::from("bar"))));
+            assert_eq!(tokens[3],
+                       Token::new((1, 9), TokenType::Symbol(String::from("baz"))));
             assert_eq!(tokens[4], Token::new((1, 12), TokenType::CloseParen));
         } else {
             assert!(false, "unexpected error");
@@ -171,9 +174,12 @@ mod test {
         if let Ok(tokens) = tokenize(String::from("( foo\nbar\nbaz\n)")) {
             assert!(tokens.len() == 5);
             assert_eq!(tokens[0], Token::new((1, 0), TokenType::OpenParen));
-            assert_eq!(tokens[1], Token::new((1, 2), TokenType::Symbol(String::from("foo"))));
-            assert_eq!(tokens[2], Token::new((2, 0), TokenType::Symbol(String::from("bar"))));
-            assert_eq!(tokens[3], Token::new((3, 0), TokenType::Symbol(String::from("baz"))));
+            assert_eq!(tokens[1],
+                       Token::new((1, 2), TokenType::Symbol(String::from("foo"))));
+            assert_eq!(tokens[2],
+                       Token::new((2, 0), TokenType::Symbol(String::from("bar"))));
+            assert_eq!(tokens[3],
+                       Token::new((3, 0), TokenType::Symbol(String::from("baz"))));
             assert_eq!(tokens[4], Token::new((4, 0), TokenType::CloseParen));
         } else {
             assert!(false, "unexpected error");

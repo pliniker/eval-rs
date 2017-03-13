@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use error::{ParseError};
+use error::ParseError;
 use lexer::{tokenize, Token, TokenType};
 use memory::{Arena, Ptr};
 use types::{Pair, Value};
@@ -10,13 +10,16 @@ use types::{Pair, Value};
 // simplify the code.
 struct PairList {
     head: Option<Ptr<Pair>>,
-    tail: Option<Ptr<Pair>>
+    tail: Option<Ptr<Pair>>,
 }
 
 
 impl PairList {
     fn open() -> PairList {
-        PairList { head: None, tail: None }
+        PairList {
+            head: None,
+            tail: None,
+        }
     }
 
     fn push(&mut self, value: Value, mem: &mut Arena) {
@@ -69,12 +72,12 @@ fn parse_list<'a, I>(mem: &mut Arena, tokens: &mut Peekable<I>) -> Result<Value,
             Some(&&Token { token: OpenParen, pos: _ }) => {
                 tokens.next();
                 list.push(parse_list(mem, tokens)?, mem);
-            },
+            }
 
             Some(&&Token { token: Symbol(ref _sym), pos }) => {
                 tokens.next();
                 list.push(Value::Symbol(pos), mem);
-            },
+            }
 
             Some(&&Token { token: Dot, pos }) => {
                 // the only valid sequence here on out is Dot s-expression CloseParen
@@ -83,14 +86,18 @@ fn parse_list<'a, I>(mem: &mut Arena, tokens: &mut Peekable<I>) -> Result<Value,
 
                 match tokens.peek() {
                     Some(&&Token { token: CloseParen, pos: _ }) => (),
-                    _ => return Err(ParseError::new(pos, String::from("s-expr after . must be followed by close parenthesis")))
+                    _ => {
+                        return Err(ParseError::new(pos,
+                                                   String::from("s-expr after . must be \
+                                                                 followed by close parenthesis")))
+                    }
                 }
-            },
+            }
 
             Some(&&Token { token: CloseParen, pos: _ }) => {
                 tokens.next();
                 break;
-            },
+            }
 
             None => {
                 return Err(ParseError::new((0, 0), String::from("unexpected end of stream")));
@@ -112,18 +119,20 @@ fn parse_sexpr<'a, I>(mem: &mut Arena, tokens: &mut Peekable<I>) -> Result<Value
         Some(&&Token { token: OpenParen, pos: _ }) => {
             tokens.next();
             parse_list(mem, tokens)
-        },
+        }
 
         Some(&&Token { token: Symbol(ref _sym), pos }) => {
             tokens.next();
             Ok(Value::Symbol(pos))
-        },
+        }
 
-        Some(&&Token { token: CloseParen, pos })
-            => Err(ParseError::new(pos, String::from("unmatched close parenthesis"))),
+        Some(&&Token { token: CloseParen, pos }) => {
+            Err(ParseError::new(pos, String::from("unmatched close parenthesis")))
+        }
 
-        Some(&&Token { token: Dot, pos })
-            => Err(ParseError::new(pos, String::from("invalid symbol '.'"))),
+        Some(&&Token { token: Dot, pos }) => {
+            Err(ParseError::new(pos, String::from("invalid symbol '.'")))
+        }
 
         None => {
             tokens.next();
@@ -152,7 +161,10 @@ mod test {
     fn check(input: String, expect: String) {
         let mut mem = Arena::new(1024);
         let ast = parse(&mut mem, input).unwrap();
-        println!("expect: {}\n\tgot:    {}\n\tdebug:  {:?}", &expect, &ast, &ast);
+        println!("expect: {}\n\tgot:    {}\n\tdebug:  {:?}",
+                 &expect,
+                 &ast,
+                 &ast);
         assert!(print(&ast) == expect);
     }
 

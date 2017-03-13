@@ -66,7 +66,12 @@ fn read_print_loop(mem: &mut memory::Arena) -> Result<(), ReadlineError> {
 
                 match parser::parse(mem, line) {
                     Ok(ast) => println!("{}", printer::print(&ast)),
-                    Err(e) => println!("Error on line/char {}/{}: {}", e.lineno(), e.charno(), e.message())
+                    Err(e) => {
+                        println!("Error on line/char {}/{}: {}",
+                                 e.lineno(),
+                                 e.charno(),
+                                 e.message())
+                    }
                 }
             }
 
@@ -107,7 +112,12 @@ fn main() {
 
         match parser::parse(&mut mem, contents) {
             Ok(ast) => println!("{}", printer::print(&ast)),
-            Err(e) => println!("Error on line/char {}/{}: {}", e.lineno(), e.charno(), e.message())
+            Err(e) => {
+                println!("Error on line/char {}/{}: {}",
+                         e.lineno(),
+                         e.charno(),
+                         e.message())
+            }
         }
 
     } else {
