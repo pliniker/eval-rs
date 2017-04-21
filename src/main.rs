@@ -15,12 +15,16 @@ use clap::{Arg, App};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
+mod environment;
 mod error;
 mod lexer;
 mod memory;
 mod parser;
 mod printer;
+mod symbolmap;
 mod types;
+
+use environment::Environment;
 
 
 // read a file into a String
@@ -34,7 +38,7 @@ fn load_file(filename: &str) -> Result<String, io::Error> {
 
 
 // read a line at a time, printing the input back out
-fn read_print_loop(mem: &mut memory::Arena) -> Result<(), ReadlineError> {
+fn read_print_loop(env: &mut Environment) -> Result<(), ReadlineError> {
 
     // establish a repl input history file path
     let history_file = match env::home_dir() {
@@ -64,7 +68,7 @@ fn read_print_loop(mem: &mut memory::Arena) -> Result<(), ReadlineError> {
             Ok(line) => {
                 reader.add_history_entry(&line);
 
-                match parser::parse(mem, line) {
+                match parser::parse(line, env) {
                     Ok(ast) => println!("{}", printer::print(&ast)),
                     Err(e) => {
                         println!("Error on line/char {}/{}: {}",
@@ -100,7 +104,7 @@ fn main() {
         .get_matches();
 
     // make a memory heap
-    let mut mem = memory::Arena::new(65536);
+    let mut env = Environment::new(65536);
 
     if let Some(filename) = matches.value_of("filename") {
         // if a filename was specified, read it into a String
@@ -110,7 +114,7 @@ fn main() {
             process::exit(1);
         });
 
-        match parser::parse(&mut mem, contents) {
+        match parser::parse(contents, &mut env) {
             Ok(ast) => println!("{}", printer::print(&ast)),
             Err(e) => {
                 println!("Error on line/char {}/{}: {}",
@@ -123,7 +127,7 @@ fn main() {
     } else {
         // otherwise begin a repl
 
-        read_print_loop(&mut mem).unwrap_or_else(|err| {
+        read_print_loop(&mut env).unwrap_or_else(|err| {
             println!("exited because: {}", err);
             process::exit(0);
         });

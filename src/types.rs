@@ -1,15 +1,17 @@
+use std::slice;
 use std::fmt;
+use std::str;
 
 use error::SourcePos;
-use memory::{Arena, Ptr};
+use memory::{Allocator, Ptr};
 
 
+/// This type is not optimally stored. It could be implemented as a tagged pointer.
 #[derive(Copy, Clone)]
 pub enum Value {
-    //  Symbol(String, SourcePos),  // TODO do something about this!
-    Symbol(SourcePos),
-    Pair(Ptr<Pair>),
     Nil,
+    Symbol(Ptr<Symbol>, SourcePos),
+    Pair(Ptr<Pair>),
 }
 
 
@@ -17,13 +19,17 @@ impl PartialEq for Value {
     fn eq(&self, other: &Value) -> bool {
         match self {
             &Value::Nil => if let &Value::Nil = other { true } else { false },
-            &Value::Symbol(_) => {
-                if let &Value::Symbol(_) = other {
-                    true
+
+            // A Symbol is equal if it's pointers are equal
+            &Value::Symbol(lptr, _) => {
+                if let &Value::Symbol(rptr, _) = other {
+                    lptr.is(rptr)
                 } else {
                     false
                 }
             }
+
+            // A pair is equal if it's contents have the same structure
             &Value::Pair(lptr) => {
                 if let &Value::Pair(rptr) = other {
                     lptr.eq(rptr)
@@ -36,11 +42,12 @@ impl PartialEq for Value {
 }
 
 
+/// Standard Display output should print out S-expressions.
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Value::Nil => write!(f, "()"),
-            &Value::Symbol(_) => write!(f, "X"),
+            &Value::Symbol(ptr, _) => write!(f, "{}", unsafe { ptr.as_str() }),
 
             &Value::Pair(ptr) => {
                 let mut tail = ptr;
@@ -51,8 +58,8 @@ impl fmt::Display for Value {
                     write!(f, " {}", tail.first)?;
                 }
 
-                if let Value::Symbol(_) = tail.second {
-                    write!(f, " . X")?;
+                if let Value::Symbol(ptr, _) = tail.second {
+                    write!(f, " . {}", unsafe { ptr.as_str() })?;
                 }
 
                 write!(f, ")")
@@ -62,18 +69,45 @@ impl fmt::Display for Value {
 }
 
 
+/// Debug printing will print Pairs as literally as possible, using dot notation everywhere.
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Value::Nil => write!(f, "nil"),
-            &Value::Symbol(_) => write!(f, "X"),
+            &Value::Symbol(ptr, _) => write!(f, "{}", unsafe { ptr.as_str() }),
             &Value::Pair(ptr) => write!(f, "({:?} . {:?})", ptr.first, ptr.second),
         }
     }
 }
 
 
-// A basic cons cell type
+/// A Symbol is a unique object that has a name string. See SymbolMap also - there should
+/// never be two Symbol instances with the same name.
+pub struct Symbol {
+    // the String object is be owned by a SymbolMap hash table
+    name_ptr: *const u8,
+    name_len: usize,
+}
+
+
+impl Symbol {
+    pub fn new<M>(name: &str, mem: &mut M) -> Ptr<Symbol> where M: Allocator {
+        mem.alloc(Symbol {
+            name_ptr: name.as_ptr(),
+            name_len: name.len(),
+        })
+    }
+
+    /// Unsafe because the &str pointer is owned elsewhere and can't be known
+    /// here if it still exists
+    pub unsafe fn as_str(&self) -> &str {
+        let slice = slice::from_raw_parts(self.name_ptr, self.name_len);
+        str::from_utf8(slice).unwrap()
+    }
+}
+
+
+// A basic Cons cell type
 pub struct Pair {
     pub first: Value,
     pub second: Value,
@@ -81,29 +115,33 @@ pub struct Pair {
 
 
 impl Pair {
-    pub fn alloc(mem: &mut Arena) -> Ptr<Pair> {
-        mem.allocate(Pair {
+    pub fn new<M>(mem: &mut M) -> Ptr<Pair> where M: Allocator {
+        mem.alloc(Pair {
             first: Value::Nil,
             second: Value::Nil,
         })
     }
 
+    /// Set the first value in the Pair
     pub fn set(&mut self, value: Value) {
         self.first = value
     }
 
+    /// Set the second value in the Pair directly
     pub fn dot(&mut self, value: Value) {
         self.second = value
     }
 
-    pub fn append(&mut self, mem: &mut Arena, value: Value) -> Ptr<Pair> {
-        let mut pair = Pair::alloc(mem);
+    /// Set Pair.second to a new Pair with newPair.first set to the value
+    pub fn append<M>(&mut self, value: Value, mem: &mut M) -> Ptr<Pair> where M: Allocator {
+        let mut pair = Pair::new(mem);
         self.second = Value::Pair(pair);
         pair.first = value;
         pair
 
     }
 
+    /// Compare contents of one Pair to another
     pub fn eq(&self, other: Ptr<Pair>) -> bool {
         self.first == other.first && self.second == other.second
     }

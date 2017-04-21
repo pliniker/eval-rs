@@ -2,12 +2,13 @@ use std::iter::Peekable;
 
 use error::ParseError;
 use lexer::{tokenize, Token, TokenType};
-use memory::{Arena, Ptr};
+use memory::{Allocator, Ptr};
+use symbolmap::SymbolMapper;
 use types::{Pair, Value};
 
 
 // I implemented a Linked List! This type is internal to the parser to
-// simplify the code.
+// simplify the code and is not stored in managed memory.
 struct PairList {
     head: Option<Ptr<Pair>>,
     tail: Option<Ptr<Pair>>,
@@ -15,6 +16,7 @@ struct PairList {
 
 
 impl PairList {
+    /// Create a new empty list
     fn open() -> PairList {
         PairList {
             head: None,
@@ -22,18 +24,22 @@ impl PairList {
         }
     }
 
-    fn push(&mut self, value: Value, mem: &mut Arena) {
+    /// Move the given value to managed memory and append it to the list
+    fn push<M>(&mut self, value: Value, mem: &mut M)
+        where M: Allocator
+    {
         if let Some(mut old_tail) = self.tail {
-            let new_tail = old_tail.append(mem, value);
+            let new_tail = old_tail.append(value, mem);
             self.tail = Some(new_tail);
         } else {
-            let mut pair = Pair::alloc(mem);
+            let mut pair = Pair::new(mem);
             pair.set(value);
             self.head = Some(pair);
             self.tail = self.head;
         }
     }
 
+    /// Apply dot-notation to set the second value of the last pair of the list
     fn dot(&mut self, value: Value) {
         if let Some(mut old_tail) = self.tail {
             old_tail.dot(value);
@@ -42,6 +48,7 @@ impl PairList {
         }
     }
 
+    /// Consume the list and return the pair at the head
     fn close(self) -> Ptr<Pair> {
         self.head.expect("cannot close empty PairList!")
     }
@@ -55,8 +62,9 @@ impl PairList {
 //
 // If a list token is a Dot, it must be followed by an s-expression and a CloseParen
 //
-fn parse_list<'a, I>(mem: &mut Arena, tokens: &mut Peekable<I>) -> Result<Value, ParseError>
-    where I: Iterator<Item = &'a Token>
+fn parse_list<'a, I, E>(tokens: &mut Peekable<I>, env: &mut E) -> Result<Value, ParseError>
+    where I: Iterator<Item = &'a Token>,
+          E: Allocator + SymbolMapper
 {
     use self::TokenType::*;
 
@@ -71,18 +79,19 @@ fn parse_list<'a, I>(mem: &mut Arena, tokens: &mut Peekable<I>) -> Result<Value,
         match tokens.peek() {
             Some(&&Token { token: OpenParen, pos: _ }) => {
                 tokens.next();
-                list.push(parse_list(mem, tokens)?, mem);
+                list.push(parse_list(tokens, env)?, env);
             }
 
-            Some(&&Token { token: Symbol(ref _sym), pos }) => {
+            Some(&&Token { token: Symbol(ref name), pos }) => {
                 tokens.next();
-                list.push(Value::Symbol(pos), mem);
+                let sym = env.lookup(name);
+                list.push(Value::Symbol(sym, pos), env);
             }
 
             Some(&&Token { token: Dot, pos }) => {
                 // the only valid sequence here on out is Dot s-expression CloseParen
                 tokens.next();
-                list.dot(parse_sexpr(mem, tokens)?);
+                list.dot(parse_sexpr(tokens, env)?);
 
                 match tokens.peek() {
                     Some(&&Token { token: CloseParen, pos: _ }) => (),
@@ -110,20 +119,22 @@ fn parse_list<'a, I>(mem: &mut Arena, tokens: &mut Peekable<I>) -> Result<Value,
 
 
 // Parse a single s-expression
-fn parse_sexpr<'a, I>(mem: &mut Arena, tokens: &mut Peekable<I>) -> Result<Value, ParseError>
-    where I: Iterator<Item = &'a Token>
+fn parse_sexpr<'a, I, E>(tokens: &mut Peekable<I>, env: &mut E) -> Result<Value, ParseError>
+    where I: Iterator<Item = &'a Token>,
+          E: Allocator + SymbolMapper
 {
     use self::TokenType::*;
 
     match tokens.peek() {
         Some(&&Token { token: OpenParen, pos: _ }) => {
             tokens.next();
-            parse_list(mem, tokens)
+            parse_list(tokens, env)
         }
 
-        Some(&&Token { token: Symbol(ref _sym), pos }) => {
+        Some(&&Token { token: Symbol(ref name), pos }) => {
             tokens.next();
-            Ok(Value::Symbol(pos))
+            let sym = env.lookup(name);
+            Ok(Value::Symbol(sym, pos))
         }
 
         Some(&&Token { token: CloseParen, pos }) => {
@@ -142,25 +153,30 @@ fn parse_sexpr<'a, I>(mem: &mut Arena, tokens: &mut Peekable<I>) -> Result<Value
 }
 
 
-fn parse_tokens(mem: &mut Arena, tokens: Vec<Token>) -> Result<Value, ParseError> {
+fn parse_tokens<E>(tokens: Vec<Token>, env: &mut E) -> Result<Value, ParseError>
+    where E: Allocator + SymbolMapper
+{
     let mut tokenstream = tokens.iter().peekable();
-    parse_sexpr(mem, &mut tokenstream)
+    parse_sexpr(&mut tokenstream, env)
 }
 
 
-pub fn parse(mem: &mut Arena, input: String) -> Result<Value, ParseError> {
-    parse_tokens(mem, tokenize(input)?)
+pub fn parse<E>(input: String, env: &mut E) -> Result<Value, ParseError>
+    where E: Allocator + SymbolMapper
+{
+    parse_tokens(tokenize(input)?, env)
 }
 
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use environment::Environment;
     use printer::print;
 
     fn check(input: String, expect: String) {
-        let mut mem = Arena::new(1024);
-        let ast = parse(&mut mem, input).unwrap();
+        let mut env = Environment::new(1024);
+        let ast = parse(input, &mut env).unwrap();
         println!("expect: {}\n\tgot:    {}\n\tdebug:  {:?}",
                  &expect,
                  &ast,
@@ -178,63 +194,63 @@ mod test {
     #[test]
     fn parse_symbol() {
         let input = String::from("a");
-        let expect = String::from("X");
+        let expect = input.clone();
         check(input, expect);
     }
 
     #[test]
     fn parse_list() {
         let input = String::from("(a)");
-        let expect = String::from("(X)");
+        let expect = input.clone();
         check(input, expect);
     }
 
     #[test]
     fn parse_list_nested1() {
         let input = String::from("((a))");
-        let expect = String::from("((X))");
+        let expect = input.clone();
         check(input, expect);
     }
 
     #[test]
     fn parse_list_nested2() {
         let input = String::from("(a (b c) d)");
-        let expect = String::from("(X (X X) X)");
+        let expect = input.clone();
         check(input, expect);
     }
 
     #[test]
     fn parse_list_nested3() {
         let input = String::from("(a b (c (d)))");
-        let expect = String::from("(X X (X (X)))");
+        let expect = input.clone();
         check(input, expect);
     }
 
     #[test]
     fn parse_longer_list() {
         let input = String::from("(a b c)");
-        let expect = String::from("(X X X)");
+        let expect = input.clone();
         check(input, expect);
     }
 
     #[test]
     fn parse_dot_notation() {
         let input = String::from("(a . b)");
-        let expect = String::from("(X . X)");
+        let expect = input.clone();
         check(input, expect);
     }
 
     #[test]
     fn parse_dot_notation_longer() {
         let input = String::from("((a . b) . (c . d))");
-        let expect = String::from("((X . X) X . X)");
+        let expect = String::from("((a . b) c . d)");
         check(input, expect);
     }
 
     #[test]
     fn parse_dot_notation_with_nil() {
         let input = String::from("(a . ())");
-        let expect = String::from("(X)");
+        let expect = String::from("(a)");
         check(input, expect);
     }
 }
