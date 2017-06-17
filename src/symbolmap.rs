@@ -1,54 +1,54 @@
-
-
+use std::cell::RefCell;
 use std::collections::HashMap;
 
-use memory::{Allocator, Ptr};
+use memory::{Allocator, Arena, Ptr};
 use types::Symbol;
 
 
 /// A trait that describes the ability to look up a Symbol by it's name in a String
-pub trait SymbolMapper {
-    fn lookup(&mut self, name: &String) -> Ptr<Symbol>;
+pub trait SymbolMapper<'a, A: 'a + Allocator> {
+    fn lookup(&'a self, name: &str) -> Ptr<'a, Symbol, A>;
 }
 
 
 /// A mapping of symbol names (Strings) to Symbol pointers. Only one copy of the symbol
 /// name String is kept; a Symbol resides in managed memory with a raw pointer to the
 /// String. Thus the lifetime of the SymbolMap must be at least the lifetime of the
-/// managed memory.
+/// managed memory. This is arranged here by maintaining Symbol memory alongside the
+/// mapping HashMap.
 ///
 /// No Symbol is ever deleted. Symbol name strings must be immutable.
-///
-/// As the internal HashMap is not integrated with managed memory, Symbols cannot be
-/// relocated in managed memory.
-pub struct SymbolMap {
-    map: HashMap<String, Ptr<Symbol>>
+pub struct SymbolMap<'a, A: 'a + Allocator> {
+    map: RefCell<HashMap<String, Ptr<'a, Symbol, A>>>,
+    syms: A,
 }
 
 
-impl SymbolMap {
-    pub fn new() -> SymbolMap {
+impl<'a> SymbolMap<'a, Arena> {
+    pub fn new(capacity: usize) -> SymbolMap<'a, Arena> {
         SymbolMap {
-            map: HashMap::new()
+            map: RefCell::new(HashMap::new()),
+            syms: Arena::new(capacity),
         }
     }
+}
 
-    pub fn lookup<M>(&mut self, name: &str, mem: &mut M) -> Ptr<Symbol>
-        where M: Allocator
-    {
+
+impl<'a, A: 'a + Allocator> SymbolMapper<'a, A> for SymbolMap<'a, A> {
+    fn lookup(&'a self, name: &str) -> Ptr<'a, Symbol, A> {
         // Can't take a map.entry(name) without providing an owned String, i.e. cloning 'name'
         // Can't insert a new entry with just a reference without hashing twice, and cloning 'name'
-        // Which is the lesser weevil? Perhaps making lookups fast and inserts slower.
+        // The common case, lookups, should be fast, inserts can be slower.
 
-        { // appease le borrow chequer inside this block
-            if let Some(ptr) = self.map.get(name) {
+        {
+            if let Some(ptr) = self.map.borrow().get(name) {
                 return ptr.clone();
             }
         }
 
         let name = String::from(name);
-        let ptr = Symbol::new(&name, mem);
-        self.map.insert(name, ptr);
+        let ptr = self.syms.alloc(Symbol::new(&name));
+        self.map.borrow_mut().insert(name, ptr);
         ptr
     }
 }

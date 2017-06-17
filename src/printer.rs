@@ -1,11 +1,12 @@
+use memory::Allocator;
 use types::Value;
 
 
-pub fn print(value: &Value) -> String {
+pub fn print<'a, A: 'a + Allocator>(value: &Value<'a, A>) -> String {
     format!("{}", value)
 }
 
 
-pub fn debug(value: &Value) -> String {
+pub fn debug<'a, A: 'a + Allocator>(value: &Value<'a, A>) -> String {
     format!("{:?}", value)
 }

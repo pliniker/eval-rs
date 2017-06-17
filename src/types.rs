@@ -8,15 +8,15 @@ use memory::{Allocator, Ptr};
 
 /// This type is not optimally stored. It could be implemented as a tagged pointer.
 #[derive(Copy, Clone)]
-pub enum Value {
+pub enum Value<'a, A: 'a + Allocator> {
     Nil,
-    Symbol(Ptr<Symbol>, SourcePos),
-    Pair(Ptr<Pair>),
+    Symbol(Ptr<'a, Symbol, A>, SourcePos),
+    Pair(Ptr<'a, Pair<'a, A>, A>),
 }
 
 
-impl PartialEq for Value {
-    fn eq(&self, other: &Value) -> bool {
+impl<'a, A: 'a + Allocator> PartialEq for Value<'a, A> {
+    fn eq(&self, other: &Value<'a, A>) -> bool {
         match self {
             &Value::Nil => if let &Value::Nil = other { true } else { false },
 
@@ -43,11 +43,11 @@ impl PartialEq for Value {
 
 
 /// Standard Display output should print out S-expressions.
-impl fmt::Display for Value {
+impl<'a, A: 'a + Allocator> fmt::Display for Value<'a, A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Value::Nil => write!(f, "()"),
-            &Value::Symbol(ptr, _) => write!(f, "{}", unsafe { ptr.as_str() }),
+            &Value::Symbol(ptr, _) => write!(f, "{}", ptr.as_str()),
 
             &Value::Pair(ptr) => {
                 let mut tail = ptr;
@@ -59,7 +59,7 @@ impl fmt::Display for Value {
                 }
 
                 if let Value::Symbol(ptr, _) = tail.second {
-                    write!(f, " . {}", unsafe { ptr.as_str() })?;
+                    write!(f, " . {}", ptr.as_str())?;
                 }
 
                 write!(f, ")")
@@ -70,11 +70,11 @@ impl fmt::Display for Value {
 
 
 /// Debug printing will print Pairs as literally as possible, using dot notation everywhere.
-impl fmt::Debug for Value {
+impl<'a, A: 'a + Allocator> fmt::Debug for Value<'a, A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Value::Nil => write!(f, "nil"),
-            &Value::Symbol(ptr, _) => write!(f, "{}", unsafe { ptr.as_str() }),
+            &Value::Symbol(ptr, _) => write!(f, "{}", ptr.as_str()),
             &Value::Pair(ptr) => write!(f, "({:?} . {:?})", ptr.first, ptr.second),
         }
     }
@@ -91,50 +91,52 @@ pub struct Symbol {
 
 
 impl Symbol {
-    pub fn new<M>(name: &str, mem: &mut M) -> Ptr<Symbol> where M: Allocator {
-        mem.alloc(Symbol {
+    pub fn new(name: &str) -> Symbol {
+        Symbol {
             name_ptr: name.as_ptr(),
             name_len: name.len(),
-        })
+        }
     }
 
-    /// Unsafe because the &str pointer is owned elsewhere and can't be known
-    /// here if it still exists
-    pub unsafe fn as_str(&self) -> &str {
-        let slice = slice::from_raw_parts(self.name_ptr, self.name_len);
-        str::from_utf8(slice).unwrap()
+    // As Symbols are owned by a SymbolMap, the name String lifetime is guaranteed
+    // to be at least that of the Symbol
+    pub fn as_str(&self) -> &str {
+        unsafe {
+            let slice = slice::from_raw_parts(self.name_ptr, self.name_len);
+            str::from_utf8(slice).unwrap()
+        }
     }
 }
 
 
 // A basic Cons cell type
-pub struct Pair {
-    pub first: Value,
-    pub second: Value,
+pub struct Pair<'a, A: 'a + Allocator> {
+    pub first: Value<'a, A>,
+    pub second: Value<'a, A>,
 }
 
 
-impl Pair {
-    pub fn new<M>(mem: &mut M) -> Ptr<Pair> where M: Allocator {
-        mem.alloc(Pair {
+impl<'a, A: 'a + Allocator> Pair<'a, A> {
+    pub fn new() -> Pair<'a, A> {
+        Pair {
             first: Value::Nil,
             second: Value::Nil,
-        })
+        }
     }
 
     /// Set the first value in the Pair
-    pub fn set(&mut self, value: Value) {
+    pub fn set(&mut self, value: Value<'a, A>) {
         self.first = value
     }
 
     /// Set the second value in the Pair directly
-    pub fn dot(&mut self, value: Value) {
+    pub fn dot(&mut self, value: Value<'a, A>) {
         self.second = value
     }
 
     /// Set Pair.second to a new Pair with newPair.first set to the value
-    pub fn append<M>(&mut self, value: Value, mem: &mut M) -> Ptr<Pair> where M: Allocator {
-        let mut pair = Pair::new(mem);
+    pub fn append(&mut self, value: Value<'a, A>, mem: &'a A) -> Ptr<'a, Pair<'a, A>, A> {
+        let mut pair = mem.alloc(Pair::new());
         self.second = Value::Pair(pair);
         pair.first = value;
         pair
@@ -142,7 +144,7 @@ impl Pair {
     }
 
     /// Compare contents of one Pair to another
-    pub fn eq(&self, other: Ptr<Pair>) -> bool {
+    pub fn eq(&self, other: Ptr<'a, Pair<'a, A>, A>) -> bool {
         self.first == other.first && self.second == other.second
     }
 }

@@ -25,7 +25,7 @@ impl ParseError {
         self.pos.1
     }
 
-    pub fn message(&self) -> &String {
-        &self.reason
+    pub fn message(&self) -> &str {
+        self.reason.as_str()
     }
 }

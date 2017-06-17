@@ -38,7 +38,7 @@ fn load_file(filename: &str) -> Result<String, io::Error> {
 
 
 // read a line at a time, printing the input back out
-fn read_print_loop(env: &mut Environment) -> Result<(), ReadlineError> {
+fn read_print_loop() -> Result<(), ReadlineError> {
 
     // establish a repl input history file path
     let history_file = match env::home_dir() {
@@ -57,6 +57,8 @@ fn read_print_loop(env: &mut Environment) -> Result<(), ReadlineError> {
         if let Err(_) = reader.load_history(&path) { /* ignore absence or unreadability */ }
     }
 
+    let environ = Environment::new(65536);
+
     // repl
     let mut input_counter = 1;
     loop {
@@ -68,7 +70,7 @@ fn read_print_loop(env: &mut Environment) -> Result<(), ReadlineError> {
             Ok(line) => {
                 reader.add_history_entry(&line);
 
-                match parser::parse(line, env) {
+                match parser::parse(line, &environ) {
                     Ok(ast) => println!("{}", printer::print(&ast)),
                     Err(e) => {
                         println!("Error on line/char {}/{}: {}",
@@ -103,9 +105,6 @@ fn main() {
             .index(1))
         .get_matches();
 
-    // make a memory heap
-    let mut env = Environment::new(65536);
-
     if let Some(filename) = matches.value_of("filename") {
         // if a filename was specified, read it into a String
 
@@ -114,7 +113,8 @@ fn main() {
             process::exit(1);
         });
 
-        match parser::parse(contents, &mut env) {
+        let env = Environment::new(65536);
+        match parser::parse(contents, &env) {
             Ok(ast) => println!("{}", printer::print(&ast)),
             Err(e) => {
                 println!("Error on line/char {}/{}: {}",
@@ -127,7 +127,7 @@ fn main() {
     } else {
         // otherwise begin a repl
 
-        read_print_loop(&mut env).unwrap_or_else(|err| {
+        read_print_loop().unwrap_or_else(|err| {
             println!("exited because: {}", err);
             process::exit(0);
         });

@@ -1,3 +1,5 @@
+use std::cell::Cell;
+use std::marker::PhantomData;
 use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::ptr;
@@ -5,23 +7,21 @@ use std::ptr;
 use memalloc::{allocate, deallocate};
 
 
-// A raw pointer abstraction. This *should* be lifetime-tied to an Arena, but
-// I don't know how to do that without proliferating lifetime annotation
-// *everywhere* and complicating things horribly.
-pub struct Ptr<T> {
+pub struct Ptr<'a, T, A: 'a + Allocator> {
     ptr: *mut T,
+    _marker: PhantomData<&'a A>
 }
 
 
-impl<T> Ptr<T> {
+impl<'a, T, A: 'a + Allocator> Ptr<'a, T, A> {
     /// Pointer identity comparison
-    pub fn is(&self, other: Ptr<T>) -> bool {
+    pub fn is<'b, B: 'b + Allocator>(&self, other: Ptr<'b, T, B>) -> bool {
         self.ptr == other.ptr
     }
 }
 
-
-impl<T> Deref for Ptr<T> {
+// Deref and DerefMut should probably not be implemented because of unsafety
+impl<'a, T, A: 'a + Allocator> Deref for Ptr<'a, T, A> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -30,19 +30,22 @@ impl<T> Deref for Ptr<T> {
 }
 
 
-impl<T> DerefMut for Ptr<T> {
+impl<'a, T, A: 'a + Allocator> DerefMut for Ptr<'a, T, A> {
     fn deref_mut(&mut self) -> &mut T {
         unsafe { &mut *self.ptr }
     }
 }
 
 
-impl<T> Copy for Ptr<T> {}
+impl<'a, T, A: 'a + Allocator> Copy for Ptr<'a, T, A> {}
 
 
-impl<T> Clone for Ptr<T> {
-    fn clone(&self) -> Ptr<T> {
-        Ptr { ptr: self.ptr }
+impl<'a, T, A: 'a + Allocator> Clone for Ptr<'a, T, A> {
+    fn clone(&self) -> Ptr<'a, T, A> {
+        Ptr {
+            ptr: self.ptr,
+            _marker: PhantomData
+        }
     }
 }
 
@@ -50,7 +53,7 @@ impl<T> Clone for Ptr<T> {
 /// An allocator trait that is expected throughout the source code. This should
 /// serve to abstract any allocator backing, allowing easier experimentation.
 pub trait Allocator {
-    fn alloc<T>(&mut self, object: T) -> Ptr<T>;
+    fn alloc<T>(&self, object: T) -> Ptr<T, Self> where Self: Sized;
 }
 
 
@@ -59,7 +62,7 @@ pub trait Allocator {
 pub struct Arena {
     buffer: *mut u8,
     size: usize,
-    bump: usize,
+    bump: Cell<usize>,
 }
 
 
@@ -74,27 +77,31 @@ impl Arena {
         Arena {
             buffer: buffer,
             size: size,
-            bump: 0,
+            bump: Cell::new(0),
         }
     }
 }
 
+
 impl Allocator for Arena {
-    fn alloc<T>(&mut self, object: T) -> Ptr<T> {
-        let next_bump = self.bump + mem::size_of::<T>();
+    fn alloc<T>(&self, object: T) -> Ptr<T, Self> {
+        let next_bump = self.bump.get() + mem::size_of::<T>();
         if next_bump > self.size {
             panic!("out of memory");
         }
 
         let p = unsafe {
-            let p = self.buffer.offset(self.bump as isize) as *mut T;
+            let p = self.buffer.offset(self.bump.get() as isize) as *mut T;
             ptr::write(p, object);
             p
         };
 
-        self.bump = next_bump;
+        self.bump.set(next_bump);
 
-        Ptr { ptr: p }
+        Ptr {
+            ptr: p,
+            _marker: PhantomData
+        }
     }
 }
 

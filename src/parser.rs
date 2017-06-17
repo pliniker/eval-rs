@@ -1,5 +1,6 @@
 use std::iter::Peekable;
 
+use environment::Environment;
 use error::ParseError;
 use lexer::{tokenize, Token, TokenType};
 use memory::{Allocator, Ptr};
@@ -9,15 +10,15 @@ use types::{Pair, Value};
 
 // I implemented a Linked List! This type is internal to the parser to
 // simplify the code and is not stored in managed memory.
-struct PairList {
-    head: Option<Ptr<Pair>>,
-    tail: Option<Ptr<Pair>>,
+struct PairList<'a, A: 'a + Allocator> {
+    head: Option<Ptr<'a, Pair<'a, A>, A>>,
+    tail: Option<Ptr<'a, Pair<'a, A>, A>>,
 }
 
 
-impl PairList {
+impl<'a, A: 'a + Allocator> PairList<'a, A> {
     /// Create a new empty list
-    fn open() -> PairList {
+    fn open() -> PairList<'a, A> {
         PairList {
             head: None,
             tail: None,
@@ -25,14 +26,13 @@ impl PairList {
     }
 
     /// Move the given value to managed memory and append it to the list
-    fn push<M>(&mut self, value: Value, mem: &mut M)
-        where M: Allocator
+    fn push(&mut self, value: Value<'a, A>, mem: &'a A)
     {
         if let Some(mut old_tail) = self.tail {
             let new_tail = old_tail.append(value, mem);
             self.tail = Some(new_tail);
         } else {
-            let mut pair = Pair::new(mem);
+            let mut pair = mem.alloc(Pair::new());
             pair.set(value);
             self.head = Some(pair);
             self.tail = self.head;
@@ -40,7 +40,7 @@ impl PairList {
     }
 
     /// Apply dot-notation to set the second value of the last pair of the list
-    fn dot(&mut self, value: Value) {
+    fn dot(&mut self, value: Value<'a, A>) {
         if let Some(mut old_tail) = self.tail {
             old_tail.dot(value);
         } else {
@@ -49,7 +49,7 @@ impl PairList {
     }
 
     /// Consume the list and return the pair at the head
-    fn close(self) -> Ptr<Pair> {
+    fn close(self) -> Ptr<'a, Pair<'a, A>, A> {
         self.head.expect("cannot close empty PairList!")
     }
 }
@@ -62,9 +62,10 @@ impl PairList {
 //
 // If a list token is a Dot, it must be followed by an s-expression and a CloseParen
 //
-fn parse_list<'a, I, E>(tokens: &mut Peekable<I>, env: &mut E) -> Result<Value, ParseError>
-    where I: Iterator<Item = &'a Token>,
-          E: Allocator + SymbolMapper
+fn parse_list<'i, 'a, I, A>(tokens: &mut Peekable<I>,
+                            env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseError>
+    where I: Iterator<Item = &'i Token>,
+          A: 'a + Allocator
 {
     use self::TokenType::*;
 
@@ -79,13 +80,13 @@ fn parse_list<'a, I, E>(tokens: &mut Peekable<I>, env: &mut E) -> Result<Value, 
         match tokens.peek() {
             Some(&&Token { token: OpenParen, pos: _ }) => {
                 tokens.next();
-                list.push(parse_list(tokens, env)?, env);
+                list.push(parse_list(tokens, env)?, &env.mem);
             }
 
             Some(&&Token { token: Symbol(ref name), pos }) => {
                 tokens.next();
-                let sym = env.lookup(name);
-                list.push(Value::Symbol(sym, pos), env);
+                let sym = env.syms.lookup(name);
+                list.push(Value::Symbol(sym, pos), &env.mem);
             }
 
             Some(&&Token { token: Dot, pos }) => {
@@ -119,9 +120,10 @@ fn parse_list<'a, I, E>(tokens: &mut Peekable<I>, env: &mut E) -> Result<Value, 
 
 
 // Parse a single s-expression
-fn parse_sexpr<'a, I, E>(tokens: &mut Peekable<I>, env: &mut E) -> Result<Value, ParseError>
-    where I: Iterator<Item = &'a Token>,
-          E: Allocator + SymbolMapper
+fn parse_sexpr<'i, 'a, I, A>(tokens: &mut Peekable<I>,
+                             env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseError>
+    where I: Iterator<Item = &'i Token>,
+          A: 'a + Allocator
 {
     use self::TokenType::*;
 
@@ -133,7 +135,7 @@ fn parse_sexpr<'a, I, E>(tokens: &mut Peekable<I>, env: &mut E) -> Result<Value,
 
         Some(&&Token { token: Symbol(ref name), pos }) => {
             tokens.next();
-            let sym = env.lookup(name);
+            let sym = env.syms.lookup(name);
             Ok(Value::Symbol(sym, pos))
         }
 
@@ -153,16 +155,18 @@ fn parse_sexpr<'a, I, E>(tokens: &mut Peekable<I>, env: &mut E) -> Result<Value,
 }
 
 
-fn parse_tokens<E>(tokens: Vec<Token>, env: &mut E) -> Result<Value, ParseError>
-    where E: Allocator + SymbolMapper
+fn parse_tokens<'a, A>(tokens: Vec<Token>,
+                       env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseError>
+    where A: 'a + Allocator
 {
     let mut tokenstream = tokens.iter().peekable();
     parse_sexpr(&mut tokenstream, env)
 }
 
 
-pub fn parse<E>(input: String, env: &mut E) -> Result<Value, ParseError>
-    where E: Allocator + SymbolMapper
+pub fn parse<'a, A>(input: String,
+                    env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseError>
+    where A: 'a + Allocator
 {
     parse_tokens(tokenize(input)?, env)
 }
