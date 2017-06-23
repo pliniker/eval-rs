@@ -10,7 +10,7 @@ use memory::{Allocator, Ptr};
 #[derive(Copy, Clone)]
 pub enum Value<'a, A: 'a + Allocator> {
     Nil,
-    Symbol(Ptr<'a, Symbol, A>, SourcePos),
+    Symbol(Ptr<'a, Symbol, A>),
     Pair(Ptr<'a, Pair<'a, A>, A>),
 }
 
@@ -21,8 +21,8 @@ impl<'a, A: 'a + Allocator> PartialEq for Value<'a, A> {
             &Value::Nil => if let &Value::Nil = other { true } else { false },
 
             // A Symbol is equal if it's pointers are equal
-            &Value::Symbol(lptr, _) => {
-                if let &Value::Symbol(rptr, _) = other {
+            &Value::Symbol(lptr) => {
+                if let &Value::Symbol(rptr) = other {
                     lptr.is(rptr)
                 } else {
                     false
@@ -47,7 +47,7 @@ impl<'a, A: 'a + Allocator> fmt::Display for Value<'a, A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Value::Nil => write!(f, "()"),
-            &Value::Symbol(ptr, _) => write!(f, "{}", ptr.as_str()),
+            &Value::Symbol(ptr) => write!(f, "{}", ptr.as_str()),
 
             &Value::Pair(ptr) => {
                 let mut tail = ptr;
@@ -58,7 +58,7 @@ impl<'a, A: 'a + Allocator> fmt::Display for Value<'a, A> {
                     write!(f, " {}", tail.first)?;
                 }
 
-                if let Value::Symbol(ptr, _) = tail.second {
+                if let Value::Symbol(ptr) = tail.second {
                     write!(f, " . {}", ptr.as_str())?;
                 }
 
@@ -74,7 +74,7 @@ impl<'a, A: 'a + Allocator> fmt::Debug for Value<'a, A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Value::Nil => write!(f, "nil"),
-            &Value::Symbol(ptr, _) => write!(f, "{}", ptr.as_str()),
+            &Value::Symbol(ptr) => write!(f, "{}", ptr.as_str()),
             &Value::Pair(ptr) => write!(f, "({:?} . {:?})", ptr.first, ptr.second),
         }
     }
@@ -84,7 +84,7 @@ impl<'a, A: 'a + Allocator> fmt::Debug for Value<'a, A> {
 /// A Symbol is a unique object that has a name string. See SymbolMap also - there should
 /// never be two Symbol instances with the same name.
 pub struct Symbol {
-    // the String object is be owned by a SymbolMap hash table
+    // the String object must be owned by a SymbolMap hash table
     name_ptr: *const u8,
     name_len: usize,
 }
@@ -113,6 +113,8 @@ impl Symbol {
 pub struct Pair<'a, A: 'a + Allocator> {
     pub first: Value<'a, A>,
     pub second: Value<'a, A>,
+    pub first_pos: Option<SourcePos>,
+    pub second_pos: Option<SourcePos>
 }
 
 
@@ -121,6 +123,8 @@ impl<'a, A: 'a + Allocator> Pair<'a, A> {
         Pair {
             first: Value::Nil,
             second: Value::Nil,
+            first_pos: None,
+            second_pos: None
         }
     }
 
@@ -140,7 +144,16 @@ impl<'a, A: 'a + Allocator> Pair<'a, A> {
         self.second = Value::Pair(pair);
         pair.first = value;
         pair
+    }
 
+    /// Set the source code position of the lhs of the pair
+    pub fn set_first_source_pos(&mut self, pos: SourcePos) {
+        self.first_pos = Some(pos);
+    }
+
+    /// Set the source code position of the rhs of the pair
+    pub fn set_second_source_pos(&mut self, pos: SourcePos) {
+        self.second_pos = Some(pos)
     }
 
     /// Compare contents of one Pair to another

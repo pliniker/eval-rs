@@ -20,7 +20,7 @@ impl<'a, T, A: 'a + Allocator> Ptr<'a, T, A> {
     }
 }
 
-// Deref and DerefMut should probably not be implemented because of unsafety
+
 impl<'a, T, A: 'a + Allocator> Deref for Ptr<'a, T, A> {
     type Target = T;
 

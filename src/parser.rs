@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 
 use environment::Environment;
-use error::ParseError;
+use error::{ParseError, SourcePos};
 use lexer::{tokenize, Token, TokenType};
 use memory::{Allocator, Ptr};
 use symbolmap::SymbolMapper;
@@ -26,23 +26,31 @@ impl<'a, A: 'a + Allocator> PairList<'a, A> {
     }
 
     /// Move the given value to managed memory and append it to the list
-    fn push(&mut self, value: Value<'a, A>, mem: &'a A)
+    fn push(&mut self, value: Value<'a, A>, mem: &'a A, pos: SourcePos)
     {
         if let Some(mut old_tail) = self.tail {
-            let new_tail = old_tail.append(value, mem);
+            let mut new_tail = old_tail.append(value, mem);
             self.tail = Some(new_tail);
+            // set source code line/char
+            new_tail.set_first_source_pos(pos);
+            old_tail.set_second_source_pos(pos);
         } else {
             let mut pair = mem.alloc(Pair::new());
             pair.set(value);
             self.head = Some(pair);
             self.tail = self.head;
+            // set source code line/char
+            pair.set_first_source_pos(pos);
+            pair.set_second_source_pos(pos);
         }
     }
 
     /// Apply dot-notation to set the second value of the last pair of the list
-    fn dot(&mut self, value: Value<'a, A>) {
+    fn dot(&mut self, value: Value<'a, A>, pos: SourcePos) {
         if let Some(mut old_tail) = self.tail {
             old_tail.dot(value);
+            // set source code line/char
+            old_tail.set_second_source_pos(pos);
         } else {
             panic!("cannot dot an empty PairList!")
         }
@@ -78,21 +86,21 @@ fn parse_list<'i, 'a, I, A>(tokens: &mut Peekable<I>,
 
     loop {
         match tokens.peek() {
-            Some(&&Token { token: OpenParen, pos: _ }) => {
+            Some(&&Token { token: OpenParen, pos }) => {
                 tokens.next();
-                list.push(parse_list(tokens, env)?, &env.mem);
+                list.push(parse_list(tokens, env)?, &env.mem, pos);
             }
 
             Some(&&Token { token: Symbol(ref name), pos }) => {
                 tokens.next();
                 let sym = env.syms.lookup(name);
-                list.push(Value::Symbol(sym, pos), &env.mem);
+                list.push(Value::Symbol(sym), &env.mem, pos);
             }
 
             Some(&&Token { token: Dot, pos }) => {
                 // the only valid sequence here on out is Dot s-expression CloseParen
                 tokens.next();
-                list.dot(parse_sexpr(tokens, env)?);
+                list.dot(parse_sexpr(tokens, env)?, pos);
 
                 match tokens.peek() {
                     Some(&&Token { token: CloseParen, pos: _ }) => (),
@@ -133,10 +141,10 @@ fn parse_sexpr<'i, 'a, I, A>(tokens: &mut Peekable<I>,
             parse_list(tokens, env)
         }
 
-        Some(&&Token { token: Symbol(ref name), pos }) => {
+        Some(&&Token { token: Symbol(ref name), pos: _ }) => {
             tokens.next();
             let sym = env.syms.lookup(name);
-            Ok(Value::Symbol(sym, pos))
+            Ok(Value::Symbol(sym))
         }
 
         Some(&&Token { token: CloseParen, pos }) => {

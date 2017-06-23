@@ -27,7 +27,7 @@ mod types;
 use environment::Environment;
 
 
-// read a file into a String
+/// Read a file into a String
 fn load_file(filename: &str) -> Result<String, io::Error> {
     let mut contents = String::new();
 
@@ -37,7 +37,29 @@ fn load_file(filename: &str) -> Result<String, io::Error> {
 }
 
 
-// read a line at a time, printing the input back out
+/// Read an entire file
+fn read_file(filename: &str) -> Result<(), ()> {
+    let contents = load_file(&filename).unwrap_or_else(|err| {
+        println!("failed to read file {}: {}", &filename, err);
+        process::exit(1);
+    });
+
+    let env = Environment::new(65536);
+    match parser::parse(contents, &env) {
+        Ok(ast) => println!("{}", printer::print(&ast)),
+        Err(e) => {
+            println!("Error on line/char {}/{}: {}",
+                     e.lineno(),
+                     e.charno(),
+                     e.message())
+        }
+    }
+
+    Ok(())
+}
+
+
+/// Read a line at a time, printing the input back out
 fn read_print_loop() -> Result<(), ReadlineError> {
 
     // establish a repl input history file path
@@ -99,7 +121,7 @@ fn read_print_loop() -> Result<(), ReadlineError> {
 fn main() {
     // parse command line argument, an optional filename
     let matches = App::new("Eval-R-Us")
-        .about("Evaluate the Expressions!")
+        .about("Evaluate the expressions!")
         .arg(Arg::with_name("filename")
             .help("Optional filename to read in")
             .index(1))
@@ -107,26 +129,12 @@ fn main() {
 
     if let Some(filename) = matches.value_of("filename") {
         // if a filename was specified, read it into a String
-
-        let contents = load_file(&filename).unwrap_or_else(|err| {
-            println!("failed to read file {}: {}", &filename, err);
+        read_file(filename).unwrap_or_else(|_err| {
+            println!("Error...");
             process::exit(1);
         });
-
-        let env = Environment::new(65536);
-        match parser::parse(contents, &env) {
-            Ok(ast) => println!("{}", printer::print(&ast)),
-            Err(e) => {
-                println!("Error on line/char {}/{}: {}",
-                         e.lineno(),
-                         e.charno(),
-                         e.message())
-            }
-        }
-
     } else {
         // otherwise begin a repl
-
         read_print_loop().unwrap_or_else(|err| {
             println!("exited because: {}", err);
             process::exit(0);
