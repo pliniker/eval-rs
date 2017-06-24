@@ -38,7 +38,7 @@ impl Token {
 
 
 // tokenize a String
-pub fn tokenize(input: String) -> Result<Vec<Token>, ParseError> {
+pub fn tokenize(input: &str) -> Result<Vec<Token>, ParseError> {
 
     use self::TokenType::*;
 
@@ -59,8 +59,9 @@ pub fn tokenize(input: String) -> Result<Vec<Token>, ParseError> {
     loop {
         match current {
             Some(TAB) => {
-                return Err(ParseError::new((lineno, charno),
-                                           String::from("tabs are not valid whitespace")))
+                return Err(ParseError::with_pos(
+                    (lineno, charno),
+                    String::from("tabs are not valid whitespace")))
             }
 
             Some(SPACE) => current = chars.next(),
@@ -144,7 +145,7 @@ mod test {
 
     #[test]
     fn lexer_empty_string() {
-        if let Ok(tokens) = tokenize(String::from("")) {
+        if let Ok(tokens) = tokenize("") {
             assert!(tokens.len() == 0);
         } else {
             assert!(false, "unexpected error");
@@ -153,7 +154,7 @@ mod test {
 
     #[test]
     fn lexer_one_line() {
-        if let Ok(tokens) = tokenize(String::from("(foo bar baz)")) {
+        if let Ok(tokens) = tokenize("(foo bar baz)") {
             assert!(tokens.len() == 5);
             assert_eq!(tokens[0], Token::new((1, 0), TokenType::OpenParen));
             assert_eq!(tokens[1],
@@ -170,7 +171,7 @@ mod test {
 
     #[test]
     fn lexer_multi_line() {
-        if let Ok(tokens) = tokenize(String::from("( foo\nbar\nbaz\n)")) {
+        if let Ok(tokens) = tokenize("( foo\nbar\nbaz\n)") {
             assert!(tokens.len() == 5);
             assert_eq!(tokens[0], Token::new((1, 0), TokenType::OpenParen));
             assert_eq!(tokens[1],
@@ -187,9 +188,13 @@ mod test {
 
     #[test]
     fn lexer_bad_whitespace() {
-        if let Err(e) = tokenize(String::from("(foo\n\t(bar))")) {
-            assert_eq!(e.lineno(), 2);
-            assert_eq!(e.charno(), 0);
+        if let Err(e) = tokenize("(foo\n\t(bar))") {
+            if let Some((lineno, charno)) = e.error_pos() {
+                assert_eq!(lineno, 2);
+                assert_eq!(charno, 0);
+            } else {
+                assert!(false, "Expected error position");
+            }
         } else {
             assert!(false, "expected ParseError for tab character");
         }

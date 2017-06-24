@@ -104,11 +104,15 @@ fn parse_list<'i, 'a, I, A>(tokens: &mut Peekable<I>,
 
                 match tokens.peek() {
                     Some(&&Token { token: CloseParen, pos: _ }) => (),
-                    _ => {
-                        return Err(ParseError::new(pos,
-                                                   String::from("s-expr after . must be \
-                                                                 followed by close parenthesis")))
-                    }
+
+                    Some(&&Token { token: _, pos }) => {
+                        return Err(ParseError::with_pos(
+                            pos,
+                            String::from("Dotted pair must be closed by a ')' close-parenthesis")))
+                    },
+
+                    None => return Err(ParseError::error(
+                        String::from("Unexpected end of code stream"))),
                 }
             }
 
@@ -118,7 +122,7 @@ fn parse_list<'i, 'a, I, A>(tokens: &mut Peekable<I>,
             }
 
             None => {
-                return Err(ParseError::new((0, 0), String::from("unexpected end of stream")));
+                return Err(ParseError::error(String::from("Unexpected end of code stream")));
             }
         }
     }
@@ -148,11 +152,11 @@ fn parse_sexpr<'i, 'a, I, A>(tokens: &mut Peekable<I>,
         }
 
         Some(&&Token { token: CloseParen, pos }) => {
-            Err(ParseError::new(pos, String::from("unmatched close parenthesis")))
+            Err(ParseError::with_pos(pos, String::from("Unmatched close parenthesis")))
         }
 
         Some(&&Token { token: Dot, pos }) => {
-            Err(ParseError::new(pos, String::from("invalid symbol '.'")))
+            Err(ParseError::with_pos(pos, String::from("Invalid symbol '.'")))
         }
 
         None => {
@@ -172,7 +176,7 @@ fn parse_tokens<'a, A>(tokens: Vec<Token>,
 }
 
 
-pub fn parse<'a, A>(input: String,
+pub fn parse<'a, A>(input: &str,
                     env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseError>
     where A: 'a + Allocator
 {
@@ -186,7 +190,7 @@ mod test {
     use environment::Environment;
     use printer::print;
 
-    fn check(input: String, expect: String) {
+    fn check(input: &str, expect: &str) {
         let mut env = Environment::new(1024);
         let ast = parse(input, &mut env).unwrap();
         println!("expect: {}\n\tgot:    {}\n\tdebug:  {:?}",
@@ -200,69 +204,69 @@ mod test {
     fn parse_empty_list() {
         let input = String::from("()");
         let expect = input.clone();
-        check(input, expect);
+        check(&input, &expect);
     }
 
     #[test]
     fn parse_symbol() {
         let input = String::from("a");
         let expect = input.clone();
-        check(input, expect);
+        check(&input, &expect);
     }
 
     #[test]
     fn parse_list() {
         let input = String::from("(a)");
         let expect = input.clone();
-        check(input, expect);
+        check(&input, &expect);
     }
 
     #[test]
     fn parse_list_nested1() {
         let input = String::from("((a))");
         let expect = input.clone();
-        check(input, expect);
+        check(&input, &expect);
     }
 
     #[test]
     fn parse_list_nested2() {
         let input = String::from("(a (b c) d)");
         let expect = input.clone();
-        check(input, expect);
+        check(&input, &expect);
     }
 
     #[test]
     fn parse_list_nested3() {
         let input = String::from("(a b (c (d)))");
         let expect = input.clone();
-        check(input, expect);
+        check(&input, &expect);
     }
 
     #[test]
     fn parse_longer_list() {
         let input = String::from("(a b c)");
         let expect = input.clone();
-        check(input, expect);
+        check(&input, &expect);
     }
 
     #[test]
     fn parse_dot_notation() {
         let input = String::from("(a . b)");
         let expect = input.clone();
-        check(input, expect);
+        check(&input, &expect);
     }
 
     #[test]
     fn parse_dot_notation_longer() {
         let input = String::from("((a . b) . (c . d))");
         let expect = String::from("((a . b) c . d)");
-        check(input, expect);
+        check(&input, &expect);
     }
 
     #[test]
     fn parse_dot_notation_with_nil() {
         let input = String::from("(a . ())");
         let expect = String::from("(a)");
-        check(input, expect);
+        check(&input, &expect);
     }
 }

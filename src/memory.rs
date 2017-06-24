@@ -143,7 +143,7 @@ mod test {
 
     #[test]
     fn test_alloc_struct() {
-        let mut mem = Arena::new(1024);
+        let mem = Arena::new(1024);
         let ptr = mem.alloc(Thing::new());
         assert!(ptr.check());
     }
@@ -151,7 +151,7 @@ mod test {
     #[test]
     #[should_panic]
     fn test_out_of_memory() {
-        let mut mem = Arena::new(1024);
+        let mem = Arena::new(1024);
         loop {
             let _ptr = mem.alloc(Thing::new());
         }

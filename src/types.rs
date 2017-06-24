@@ -47,6 +47,7 @@ impl<'a, A: 'a + Allocator> fmt::Display for Value<'a, A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Value::Nil => write!(f, "()"),
+
             &Value::Symbol(ptr) => write!(f, "{}", ptr.as_str()),
 
             &Value::Pair(ptr) => {

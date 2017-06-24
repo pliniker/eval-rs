@@ -1,4 +1,3 @@
-
 extern crate clap;
 extern crate memalloc;
 extern crate rustyline;
@@ -38,6 +37,7 @@ fn load_file(filename: &str) -> Result<String, io::Error> {
 
 
 /// Read an entire file
+/// TODO handle errors out of here more consistently
 fn read_file(filename: &str) -> Result<(), ()> {
     let contents = load_file(&filename).unwrap_or_else(|err| {
         println!("failed to read file {}: {}", &filename, err);
@@ -45,13 +45,10 @@ fn read_file(filename: &str) -> Result<(), ()> {
     });
 
     let env = Environment::new(65536);
-    match parser::parse(contents, &env) {
+    match parser::parse(&contents, &env) {
         Ok(ast) => println!("{}", printer::print(&ast)),
         Err(e) => {
-            println!("Error on line/char {}/{}: {}",
-                     e.lineno(),
-                     e.charno(),
-                     e.message())
+            e.print_with_source(&contents);
         }
     }
 
@@ -92,13 +89,10 @@ fn read_print_loop() -> Result<(), ReadlineError> {
             Ok(line) => {
                 reader.add_history_entry(&line);
 
-                match parser::parse(line, &environ) {
+                match parser::parse(&line, &environ) {
                     Ok(ast) => println!("{}", printer::print(&ast)),
                     Err(e) => {
-                        println!("Error on line/char {}/{}: {}",
-                                 e.lineno(),
-                                 e.charno(),
-                                 e.message())
+                        e.print_with_source(&line);
                     }
                 }
             }
