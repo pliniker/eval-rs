@@ -1,27 +1,47 @@
-use std::slice;
 use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::slice;
 use std::str;
 
+use callables::Function;
 use error::SourcePos;
 use memory::{Allocator, Ptr};
 
 
-/// This type is not optimally stored. It could be implemented as a tagged pointer.
-#[derive(Copy, Clone)]
+/// A fat pointer to a managed-memory object, carrying the type with it.
+/// TODO: use the new union type to implement a tagged pointer?
 pub enum Value<'a, A: 'a + Allocator> {
     Nil,
     Symbol(Ptr<'a, Symbol, A>),
     Pair(Ptr<'a, Pair<'a, A>, A>),
+    Function(Ptr<'a, Function<'a, A>, A>),
 }
+
+
+// Type parameter A should not need to be Clone, so we can't #[derive(Copy, Clone)]
+impl<'a, A: 'a + Allocator> Clone for Value<'a, A> {
+    fn clone(&self) -> Value<'a, A> {
+        match *self {
+            Value::Nil => Value::Nil,
+            Value::Symbol(ptr) => Value::Symbol(ptr),
+            Value::Pair(ptr) => Value::Pair(ptr),
+            Value::Function(ptr) => Value::Function(ptr)
+        }
+    }
+}
+
+
+/// An enum of pointers can be copied
+impl<'a, A: 'a + Allocator> Copy for Value<'a, A> {}
 
 
 impl<'a, A: 'a + Allocator> PartialEq for Value<'a, A> {
     fn eq(&self, other: &Value<'a, A>) -> bool {
-        match self {
-            &Value::Nil => if let &Value::Nil = other { true } else { false },
+        match *self {
+            Value::Nil => if let &Value::Nil = other { true } else { false },
 
             // A Symbol is equal if it's pointers are equal
-            &Value::Symbol(lptr) => {
+            Value::Symbol(lptr) => {
                 if let &Value::Symbol(rptr) = other {
                     lptr.is(rptr)
                 } else {
@@ -30,9 +50,18 @@ impl<'a, A: 'a + Allocator> PartialEq for Value<'a, A> {
             }
 
             // A pair is equal if it's contents have the same structure
-            &Value::Pair(lptr) => {
+            Value::Pair(lptr) => {
                 if let &Value::Pair(rptr) = other {
-                    lptr.eq(rptr)
+                    lptr.eq(&rptr)
+                } else {
+                    false
+                }
+            }
+
+            // A Function is equal if it's pointers are equal
+            Value::Function(lptr) => {
+                if let &Value::Function(rptr) = other {
+                    lptr.is(rptr)
                 } else {
                     false
                 }
@@ -45,12 +74,12 @@ impl<'a, A: 'a + Allocator> PartialEq for Value<'a, A> {
 /// Standard Display output should print out S-expressions.
 impl<'a, A: 'a + Allocator> fmt::Display for Value<'a, A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Value::Nil => write!(f, "()"),
+        match *self {
+            Value::Nil => write!(f, "()"),
 
-            &Value::Symbol(ptr) => write!(f, "{}", ptr.as_str()),
+            Value::Symbol(ptr) => write!(f, "{}", ptr.as_str()),
 
-            &Value::Pair(ptr) => {
+            Value::Pair(ptr) => {
                 let mut tail = ptr;
                 write!(f, "({}", tail.first)?;
 
@@ -64,7 +93,9 @@ impl<'a, A: 'a + Allocator> fmt::Display for Value<'a, A> {
                 }
 
                 write!(f, ")")
-            }
+            },
+
+            Value::Function(ptr) => write!(f, "{}", ptr.as_str()),
         }
     }
 }
@@ -73,10 +104,11 @@ impl<'a, A: 'a + Allocator> fmt::Display for Value<'a, A> {
 /// Debug printing will print Pairs as literally as possible, using dot notation everywhere.
 impl<'a, A: 'a + Allocator> fmt::Debug for Value<'a, A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Value::Nil => write!(f, "nil"),
-            &Value::Symbol(ptr) => write!(f, "{}", ptr.as_str()),
-            &Value::Pair(ptr) => write!(f, "({:?} . {:?})", ptr.first, ptr.second),
+        match *self {
+            Value::Nil => write!(f, "nil"),
+            Value::Symbol(ptr) => write!(f, "{}", ptr.as_str()),
+            Value::Pair(ptr) => write!(f, "({:?} . {:?})", ptr.first, ptr.second),
+            Value::Function(ptr) => write!(f, "{}", ptr.as_str()),
         }
     }
 }
@@ -110,10 +142,18 @@ impl Symbol {
 }
 
 
-// A basic Cons cell type
+impl Hash for Symbol {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state);
+    }
+}
+
+
+/// A basic Cons type cell
 pub struct Pair<'a, A: 'a + Allocator> {
     pub first: Value<'a, A>,
     pub second: Value<'a, A>,
+    // Possible source code positions of the first and second values
     pub first_pos: Option<SourcePos>,
     pub second_pos: Option<SourcePos>
 }

@@ -14,6 +14,7 @@ use clap::{Arg, App};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
+mod callables;
 mod environment;
 mod error;
 mod lexer;
@@ -23,7 +24,8 @@ mod printer;
 mod symbolmap;
 mod types;
 
-use environment::Environment;
+use environment::{Environment, eval};
+use parser::parse;
 
 
 /// Read a file into a String
@@ -62,7 +64,7 @@ fn read_print_loop() -> Result<(), ReadlineError> {
     // establish a repl input history file path
     let history_file = match env::home_dir() {
         Some(mut path) => {
-            path.push(".eval-rs_history");
+            path.push(".evalrus_history");
             Some(String::from(path.to_str().unwrap()))
         }
         None => None,
@@ -89,15 +91,22 @@ fn read_print_loop() -> Result<(), ReadlineError> {
             Ok(line) => {
                 reader.add_history_entry(&line);
 
-                match parser::parse(&line, &environ) {
-                    Ok(ast) => println!("{}", printer::print(&ast)),
-                    Err(e) => {
-                        e.print_with_source(&line);
-                    }
+                // parse/"read"
+                match parse(&line, &environ) {
+                    Ok(value) => {
+                        // eval
+                        match eval(value, &environ) {
+                            // print
+                            Ok(result) => println!("{}", printer::print(&result)),
+                            Err(e) => e.print_with_source(&line),
+                        }
+                    },
+
+                    Err(e) => e.print_with_source(&line)
                 }
             }
 
-            // some kind of termination condition
+            // some kind of program termination condition
             Err(e) => {
                 if let Some(ref path) = history_file {
                     reader.save_history(&path).unwrap_or_else(|err| {

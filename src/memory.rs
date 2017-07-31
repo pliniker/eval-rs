@@ -1,4 +1,6 @@
 use std::cell::Cell;
+use std::cmp::{Eq, PartialEq};
+use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::mem;
 use std::ops::{Deref, DerefMut};
@@ -37,9 +39,27 @@ impl<'a, T, A: 'a + Allocator> DerefMut for Ptr<'a, T, A> {
 }
 
 
+impl<'a, T: Hash, A: 'a + Allocator> Hash for Ptr<'a, T, A> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Self::deref(self).hash(state);
+    }
+}
+
+
+impl<'a, T, A: 'a + Allocator> PartialEq for Ptr<'a, T, A> {
+    fn eq(&self, other: &Ptr<'a, T, A>) -> bool {
+        self.ptr == other.ptr
+    }
+}
+
+
+impl<'a, T, A: 'a + Allocator> Eq for Ptr<'a, T, A> {}
+
+
 impl<'a, T, A: 'a + Allocator> Copy for Ptr<'a, T, A> {}
 
 
+// We don't want to force A to be Clone, so we can't #[derive(Copy, Clone)]
 impl<'a, T, A: 'a + Allocator> Clone for Ptr<'a, T, A> {
     fn clone(&self) -> Ptr<'a, T, A> {
         Ptr {

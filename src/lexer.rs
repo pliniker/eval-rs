@@ -1,4 +1,4 @@
-use error::{ParseError, SourcePos};
+use error::{ParseEvalError, SourcePos};
 
 
 // key characters
@@ -38,7 +38,7 @@ impl Token {
 
 
 // tokenize a String
-pub fn tokenize(input: &str) -> Result<Vec<Token>, ParseError> {
+pub fn tokenize(input: &str) -> Result<Vec<Token>, ParseEvalError> {
 
     use self::TokenType::*;
 
@@ -59,7 +59,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, ParseError> {
     loop {
         match current {
             Some(TAB) => {
-                return Err(ParseError::with_pos(
+                return Err(ParseEvalError::with_pos(
                     (lineno, charno),
                     String::from("tabs are not valid whitespace")))
             }
@@ -196,7 +196,7 @@ mod test {
                 assert!(false, "Expected error position");
             }
         } else {
-            assert!(false, "expected ParseError for tab character");
+            assert!(false, "expected ParseEvalError for tab character");
         }
     }
 }

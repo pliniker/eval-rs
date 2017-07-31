@@ -1,24 +1,28 @@
 
+use std::error::Error;
+use std::fmt;
+
+
 pub type SourcePos = (u32, u32);
 
 
 #[derive(Debug)]
-pub struct ParseError {
+pub struct ParseEvalError {
     pos: Option<SourcePos>,
     reason: String,
 }
 
 
-impl ParseError {
-    pub fn error(reason: String) -> ParseError {
-        ParseError {
+impl ParseEvalError {
+    pub fn error(reason: String) -> ParseEvalError {
+        ParseEvalError {
             pos: None,
             reason: reason
         }
     }
 
-    pub fn with_pos(pos: SourcePos, reason: String) -> ParseError {
-        ParseError {
+    pub fn with_pos(pos: SourcePos, reason: String) -> ParseEvalError {
+        ParseEvalError {
             pos: Some(pos),
             reason: reason,
         }
@@ -47,4 +51,28 @@ impl ParseError {
             println!("error: {}", self.reason);
         }
     }
+}
+
+
+impl fmt::Display for ParseEvalError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.reason)
+    }
+}
+
+
+impl Error for ParseEvalError {
+    fn description(&self) -> &str {
+        &self.reason
+    }
+}
+
+
+pub fn err(reason: &str) -> ParseEvalError {
+    ParseEvalError::error(String::from(reason))
+}
+
+
+pub fn err_wpos(pos: SourcePos, reason: &str) -> ParseEvalError {
+    ParseEvalError::with_pos(pos, String::from(reason))
 }

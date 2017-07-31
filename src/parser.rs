@@ -1,15 +1,14 @@
 use std::iter::Peekable;
 
 use environment::Environment;
-use error::{ParseError, SourcePos};
+use error::{ParseEvalError, SourcePos};
 use lexer::{tokenize, Token, TokenType};
 use memory::{Allocator, Ptr};
 use symbolmap::SymbolMapper;
 use types::{Pair, Value};
 
 
-// I implemented a Linked List! This type is internal to the parser to
-// simplify the code and is not stored in managed memory.
+// A linked list, internal to the parser to simplify the code and is not stored in managed memory
 struct PairList<'a, A: 'a + Allocator> {
     head: Option<Ptr<'a, Pair<'a, A>, A>>,
     tail: Option<Ptr<'a, Pair<'a, A>, A>>,
@@ -68,22 +67,38 @@ impl<'a, A: 'a + Allocator> PairList<'a, A> {
 // * empty
 // * a sequence of s-expressions
 //
-// If a list token is a Dot, it must be followed by an s-expression and a CloseParen
+// If the first list token is:
+//  * a CloseParen, it's a Nil value
+//  * a Dot, this is illegal
+//
+// If a list token is:
+//  * a Dot, it must be followed by an s-expression and a CloseParen
 //
 fn parse_list<'i, 'a, I, A>(tokens: &mut Peekable<I>,
-                            env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseError>
+                            env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseEvalError>
     where I: Iterator<Item = &'i Token>,
           A: 'a + Allocator
 {
     use self::TokenType::*;
 
-    if let Some(&&Token { token: CloseParen, pos: _ }) = tokens.peek() {
-        tokens.next();
-        return Ok(Value::Nil);
+    // peek at very first token after the open-paren
+    match tokens.peek() {
+        Some(&&Token { token: CloseParen, pos: _ }) => {
+            tokens.next();
+            return Ok(Value::Nil);
+        },
+
+        Some(&&Token { token: Dot, pos }) => {
+            return Err(ParseEvalError::with_pos(
+                pos,
+                String::from("Unexpected '.' dot after open-parenthesis")));
+        },
+
+        _ => ()
     }
 
+    // we have what looks like a valid list so far...
     let mut list = PairList::open();
-
     loop {
         match tokens.peek() {
             Some(&&Token { token: OpenParen, pos }) => {
@@ -98,20 +113,20 @@ fn parse_list<'i, 'a, I, A>(tokens: &mut Peekable<I>,
             }
 
             Some(&&Token { token: Dot, pos }) => {
-                // the only valid sequence here on out is Dot s-expression CloseParen
                 tokens.next();
                 list.dot(parse_sexpr(tokens, env)?, pos);
 
+                // the only valid sequence here on out is Dot s-expression CloseParen
                 match tokens.peek() {
                     Some(&&Token { token: CloseParen, pos: _ }) => (),
 
                     Some(&&Token { token: _, pos }) => {
-                        return Err(ParseError::with_pos(
+                        return Err(ParseEvalError::with_pos(
                             pos,
                             String::from("Dotted pair must be closed by a ')' close-parenthesis")))
                     },
 
-                    None => return Err(ParseError::error(
+                    None => return Err(ParseEvalError::error(
                         String::from("Unexpected end of code stream"))),
                 }
             }
@@ -122,7 +137,7 @@ fn parse_list<'i, 'a, I, A>(tokens: &mut Peekable<I>,
             }
 
             None => {
-                return Err(ParseError::error(String::from("Unexpected end of code stream")));
+                return Err(ParseEvalError::error(String::from("Unexpected end of code stream")));
             }
         }
     }
@@ -131,9 +146,15 @@ fn parse_list<'i, 'a, I, A>(tokens: &mut Peekable<I>,
 }
 
 
+//
 // Parse a single s-expression
+//
+// Must be a
+//  * symbol
+//  * or a list
+//
 fn parse_sexpr<'i, 'a, I, A>(tokens: &mut Peekable<I>,
-                             env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseError>
+                             env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseEvalError>
     where I: Iterator<Item = &'i Token>,
           A: 'a + Allocator
 {
@@ -152,11 +173,11 @@ fn parse_sexpr<'i, 'a, I, A>(tokens: &mut Peekable<I>,
         }
 
         Some(&&Token { token: CloseParen, pos }) => {
-            Err(ParseError::with_pos(pos, String::from("Unmatched close parenthesis")))
+            Err(ParseEvalError::with_pos(pos, String::from("Unmatched close parenthesis")))
         }
 
         Some(&&Token { token: Dot, pos }) => {
-            Err(ParseError::with_pos(pos, String::from("Invalid symbol '.'")))
+            Err(ParseEvalError::with_pos(pos, String::from("Invalid symbol '.'")))
         }
 
         None => {
@@ -168,7 +189,7 @@ fn parse_sexpr<'i, 'a, I, A>(tokens: &mut Peekable<I>,
 
 
 fn parse_tokens<'a, A>(tokens: Vec<Token>,
-                       env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseError>
+                       env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseEvalError>
     where A: 'a + Allocator
 {
     let mut tokenstream = tokens.iter().peekable();
@@ -177,7 +198,7 @@ fn parse_tokens<'a, A>(tokens: Vec<Token>,
 
 
 pub fn parse<'a, A>(input: &str,
-                    env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseError>
+                    env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseEvalError>
     where A: 'a + Allocator
 {
     parse_tokens(tokenize(input)?, env)
