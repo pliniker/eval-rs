@@ -9,21 +9,48 @@ use std::ptr;
 use memalloc::{allocate, deallocate};
 
 
-pub struct Ptr<'a, T, A: 'a + Allocator> {
-    ptr: *mut T,
-    _marker: PhantomData<&'a A>
+// we need two allocators:
+// 1. movable objects
+// 2. immovable objects
+//
+// Either:
+// trait Allocator { fn alloc(); fn alloc_immovable(); }
+// heap: Heap;
+//
+// or
+// trait Allocator { fn alloc(); }
+// heap: MovableHeap; heap: StaticHeap;
+// (two parameters everywhere)
+
+/// An allocator trait that is expected throughout the source code. This should
+/// serve to abstract any allocator backing, allowing easier experimentation.
+pub trait Allocator {
+    fn alloc<T>(&self, object: T) -> Ptr<T, Self> where Self: Sized;
 }
 
 
-impl<'a, T, A: 'a + Allocator> Ptr<'a, T, A> {
+// A trait that describes heap operations
+pub trait Heap<A: Allocator> {
+    fn alloc<T>(&self, object: T) -> Ptr<T, A> where Self: Sized;
+    fn alloc_immovable<T>(&self, object: T) -> Ptr<T, A> where Self: Sized;
+}
+
+
+pub struct Ptr<'heap, T, A: 'heap + Allocator> {
+    ptr: *mut T,
+    _marker: PhantomData<&'heap A>
+}
+
+
+impl<'heap, T, A: 'heap + Allocator> Ptr<'heap, T, A> {
     /// Pointer identity comparison
-    pub fn is<'b, B: 'b + Allocator>(&self, other: Ptr<'b, T, B>) -> bool {
+    pub fn is<'anyheap, B: 'anyheap + Allocator>(&self, other: Ptr<'anyheap, T, B>) -> bool {
         self.ptr == other.ptr
     }
 }
 
 
-impl<'a, T, A: 'a + Allocator> Deref for Ptr<'a, T, A> {
+impl<'heap, T, A: 'heap + Allocator> Deref for Ptr<'heap, T, A> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -32,48 +59,41 @@ impl<'a, T, A: 'a + Allocator> Deref for Ptr<'a, T, A> {
 }
 
 
-impl<'a, T, A: 'a + Allocator> DerefMut for Ptr<'a, T, A> {
+impl<'heap, T, A: 'heap + Allocator> DerefMut for Ptr<'heap, T, A> {
     fn deref_mut(&mut self) -> &mut T {
         unsafe { &mut *self.ptr }
     }
 }
 
 
-impl<'a, T: Hash, A: 'a + Allocator> Hash for Ptr<'a, T, A> {
+impl<'heap, T: Hash, A: 'heap + Allocator> Hash for Ptr<'heap, T, A> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         Self::deref(self).hash(state);
     }
 }
 
 
-impl<'a, T, A: 'a + Allocator> PartialEq for Ptr<'a, T, A> {
-    fn eq(&self, other: &Ptr<'a, T, A>) -> bool {
+impl<'heap, T, A: 'heap + Allocator> PartialEq for Ptr<'heap, T, A> {
+    fn eq(&self, other: &Ptr<'heap, T, A>) -> bool {
         self.ptr == other.ptr
     }
 }
 
 
-impl<'a, T, A: 'a + Allocator> Eq for Ptr<'a, T, A> {}
+impl<'heap, T, A: 'heap + Allocator> Eq for Ptr<'heap, T, A> {}
 
 
-impl<'a, T, A: 'a + Allocator> Copy for Ptr<'a, T, A> {}
+impl<'heap, T, A: 'heap + Allocator> Copy for Ptr<'heap, T, A> {}
 
 
 // We don't want to force A to be Clone, so we can't #[derive(Copy, Clone)]
-impl<'a, T, A: 'a + Allocator> Clone for Ptr<'a, T, A> {
-    fn clone(&self) -> Ptr<'a, T, A> {
+impl<'heap, T, A: 'heap + Allocator> Clone for Ptr<'heap, T, A> {
+    fn clone(&self) -> Ptr<'heap, T, A> {
         Ptr {
             ptr: self.ptr,
             _marker: PhantomData
         }
     }
-}
-
-
-/// An allocator trait that is expected throughout the source code. This should
-/// serve to abstract any allocator backing, allowing easier experimentation.
-pub trait Allocator {
-    fn alloc<T>(&self, object: T) -> Ptr<T, Self> where Self: Sized;
 }
 
 

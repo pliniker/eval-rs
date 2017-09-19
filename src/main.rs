@@ -46,7 +46,8 @@ fn read_file(filename: &str) -> Result<(), ()> {
         process::exit(1);
     });
 
-    let env = Environment::new(65536);
+    let env = Environment::new();
+
     match parser::parse(&contents, &env) {
         Ok(ast) => println!("{}", printer::print(&ast)),
         Err(e) => {
