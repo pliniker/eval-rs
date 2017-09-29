@@ -9,8 +9,25 @@ use std::ptr;
 use memalloc::{allocate, deallocate};
 
 
+
+/// An allocator trait that is expected throughout the source code. This should
+/// serve to abstract any allocator backing, allowing easier experimentation.
+pub trait Allocator {
+    /// Allocate and move an object into the space. This object may be garbage
+    /// collected or moved.
+    fn alloc<T>(&self, object: T) -> Ptr<T, Self> where Self: Sized;
+
+    /// Allocate an object with a lifetime and address that lives as long as the
+    /// allocator itself, i.e. is not dynamically garbage collected.
+    fn alloc_static<T>(&self, object: T) -> Ptr<T, Self> where Self: Sized;
+
+    // /// Run a garbage collection iteration.
+    //fn collect(&mut self);
+}
+
+
 /*
-What is it I want?
+What is it we need?
 
  * A vm has a stack, code and a pc
  * A stack has a heap
@@ -28,36 +45,17 @@ A symbol table has a hashmap and an append-only-heap
 3. heap operations can't escape a heap borrow context
 
 heap.mutate(|mem| ptr = mem.alloc())
- */
 
 
-/// An allocator trait that is expected throughout the source code. This should
-/// serve to abstract any allocator backing, allowing easier experimentation.
-pub trait Allocator {
-    /// Allocate and move an object into the space. This object may be garbage
-    /// collected or moved.
-    fn alloc<T>(&self, object: T) -> Ptr<T, Self> where Self: Sized;
-
-    /// Allocate an object with a lifetime and address that lives as long as the
-    /// allocator itself, i.e. is not dynamically garbage collected.
-    fn alloc_static<T>(&self, object: T) -> Ptr<T, Self> where Self: Sized;
-
-    /// Run a garbage collection iteration.
-    fn collect(&mut self);
-}
-
-
-pub trait StackFrames {
-
-}
-
+pub trait StackFrames {}
 
 pub trait Stack {
     type Heap: Allocator;
     type Frames: StackFrames;
 
-    fn mutate<M>(mutator: &mut M) where M: FnMut(&mut Self::Frame, &mut Self::Heap);
+    fn mutate<M>(mutator: &mut M) where M: FnMut(&mut Self::Frames, &mut Self::Heap);
 }
+*/
 
 
 pub struct Ptr<'storage, T, A: 'storage + Allocator> {
@@ -166,6 +164,12 @@ impl Allocator for Arena {
             ptr: p,
             _marker: PhantomData
         }
+    }
+
+    // In this implementation, alloc and alloc_static are the same because
+    // no moving or collection occurs anyway.
+    fn alloc_static<T>(&self, object: T) -> Ptr<T, Self> {
+        self.alloc(object)
     }
 }
 
