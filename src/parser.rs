@@ -103,13 +103,13 @@ fn parse_list<'i, 'a, I, A>(tokens: &mut Peekable<I>,
         match tokens.peek() {
             Some(&&Token { token: OpenParen, pos }) => {
                 tokens.next();
-                list.push(parse_list(tokens, env)?, &env.mem, pos);
+                list.push(parse_list(tokens, env)?, &env.heap, pos);
             }
 
             Some(&&Token { token: Symbol(ref name), pos }) => {
                 tokens.next();
                 let sym = env.syms.lookup(name);
-                list.push(Value::Symbol(sym), &env.mem, pos);
+                list.push(Value::Symbol(sym), &env.heap, pos);
             }
 
             Some(&&Token { token: Dot, pos }) => {

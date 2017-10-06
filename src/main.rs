@@ -25,6 +25,7 @@ mod symbolmap;
 mod types;
 
 use environment::{Environment, eval};
+use memory::Arena;
 use parser::parse;
 
 
@@ -46,7 +47,8 @@ fn read_file(filename: &str) -> Result<(), ()> {
         process::exit(1);
     });
 
-    let env = Environment::new();
+    let heap = Arena::new(65536);
+    let env = Environment::new(&heap);
 
     match parser::parse(&contents, &env) {
         Ok(ast) => println!("{}", printer::print(&ast)),
@@ -79,7 +81,8 @@ fn read_print_loop() -> Result<(), ReadlineError> {
         if let Err(_) = reader.load_history(&path) { /* ignore absence or unreadability */ }
     }
 
-    let environ = Environment::new(65536);
+    let heap = Arena::new(65536);
+    let environ = Environment::new(&heap);
 
     // repl
     let mut input_counter = 1;

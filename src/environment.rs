@@ -6,42 +6,42 @@ use symbolmap::{SymbolMap, SymbolMapper};
 use types::{Symbol, Value};
 
 
-type Bindings<'a, A> = HashMap<Ptr<'a, Symbol, A>, Value<'a, A>>;
+type Bindings<'storage, A> = HashMap<Ptr<'storage, Symbol, A>, Value<'storage, A>>;
 
 
-pub struct Environment<'a, A: 'a + Allocator> {
+pub struct Environment<'storage, A: 'storage + Allocator> {
     // garbage collected heap memory
-    pub heap: &'a A,
+    pub heap: &'storage A,
     // keys to syms are Strings, which have pointers to them in mem.
     // The lifetime of syms must be >= the lifetime of mem
-    pub syms: SymbolMap<'a, A>,
+    pub syms: SymbolMap<'storage, A>,
     // mapping of Symbols to Values
-    pub globals: Bindings<'a, A>,
+    pub globals: Bindings<'storage, A>,
 }
 
 
-impl<'a, A: 'a + Allocator> Environment<'a, A> {
-    pub fn new(sym_heap: &'a A, heap: &'a A) -> Environment<'a, A> {
+impl<'storage, A: 'storage + Allocator> Environment<'storage, A> {
+    pub fn new(heap: &'storage A) -> Environment<'storage, A> {
         Environment {
             heap: heap,
-            syms: SymbolMap::new(sym_heap),
+            syms: SymbolMap::new(heap),
             globals: Bindings::new(),
         }
     }
 }
 
 
-impl<'a, A: 'a + Allocator> Environment<'a, A> {
-    fn add_global_bindings(&'a mut self){
+impl<'storage, A: 'storage + Allocator> Environment<'storage, A> {
+    fn add_global_bindings(&'storage mut self){
         let evalrus_true = self.syms.lookup("true");
         self.globals.insert(evalrus_true, Value::Symbol(evalrus_true));
     }
 }
 
 
-pub fn eval<'a, A: 'a + Allocator>(expr: Value<'a, A>,
-                                   env: &'a Environment<'a, A>)
-                                   -> Result<Value<'a, A>, ParseEvalError> {
+pub fn eval<'storage, A: 'storage + Allocator>(expr: Value<'storage, A>,
+                                   env: &'storage Environment<'storage, A>)
+                                   -> Result<Value<'storage, A>, ParseEvalError> {
     match expr {
         Value::Symbol(ptr) => {
             match env.globals.get(&ptr) {
@@ -59,10 +59,10 @@ pub fn eval<'a, A: 'a + Allocator>(expr: Value<'a, A>,
 }
 
 
-pub fn apply<'a, A: 'a + Allocator>(function: Value<'a, A>,
-                                    params: Value<'a, A>,
-                                    env: &'a Environment<'a, A>)
-                                    -> Result<Value<'a, A>, ParseEvalError> {
+pub fn apply<'storage, A: 'storage + Allocator>(function: Value<'storage, A>,
+                                    params: Value<'storage, A>,
+                                    env: &'storage Environment<'storage, A>)
+                                    -> Result<Value<'storage, A>, ParseEvalError> {
     // TODO need to eval params
     let params = match params {
         Value::Pair(_) => eval(params, env)?,
@@ -82,8 +82,8 @@ pub fn apply<'a, A: 'a + Allocator>(function: Value<'a, A>,
 }
 
 
-fn next_param<'a, A: 'a + Allocator>(param_list: Value<'a, A>)
-                                     -> Result<(Value<'a, A>, Value<'a, A>), ParseEvalError> {
+fn next_param<'storage, A: 'storage + Allocator>(param_list: Value<'storage, A>)
+                                     -> Result<(Value<'storage, A>, Value<'storage, A>), ParseEvalError> {
     match param_list {
         Value::Pair(pair) => Ok((pair.first, pair.second)),
         Value::Nil => Ok((Value::Nil, Value::Nil)),
@@ -92,9 +92,9 @@ fn next_param<'a, A: 'a + Allocator>(param_list: Value<'a, A>)
 }
 
 
-fn atom<'a, A: 'a + Allocator>(params: Value<'a, A>,
-                               env: &'a Environment<'a, A>)
-                               -> Result<Value<'a, A>, ParseEvalError> {
+fn atom<'storage, A: 'storage + Allocator>(params: Value<'storage, A>,
+                               env: &'storage Environment<'storage, A>)
+                               -> Result<Value<'storage, A>, ParseEvalError> {
     let (value, rest) = next_param(params)?;
 
     if let Value::Nil = rest {

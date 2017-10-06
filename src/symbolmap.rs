@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use memory::{Allocator, Arena, Ptr};
+use memory::{Allocator, Ptr};
 use types::Symbol;
 
 
@@ -20,7 +20,7 @@ pub trait SymbolMapper<'a, A: 'a + Allocator> {
 /// No Symbol is ever deleted. Symbol name strings must be immutable.
 pub struct SymbolMap<'a, A: 'a + Allocator> {
     map: RefCell<HashMap<String, Ptr<'a, Symbol, A>>>,
-    syms: &'a A,
+    heap: &'a A,
 }
 
 
@@ -28,7 +28,7 @@ impl<'a, A: 'a + Allocator> SymbolMap<'a, A> {
     pub fn new(allocator: &'a A) -> SymbolMap<'a, A> {
         SymbolMap {
             map: RefCell::new(HashMap::new()),
-            syms: allocator,
+            heap: allocator,
         }
     }
 }
@@ -47,7 +47,7 @@ impl<'a, A: 'a + Allocator> SymbolMapper<'a, A> for SymbolMap<'a, A> {
         }
 
         let name = String::from(name);
-        let ptr = self.syms.alloc(Symbol::new(&name));
+        let ptr = self.heap.alloc_static(Symbol::new(&name));
         self.map.borrow_mut().insert(name, ptr);
         ptr
     }
