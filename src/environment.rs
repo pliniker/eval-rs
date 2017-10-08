@@ -39,9 +39,11 @@ impl<'storage, A: 'storage + Allocator> Environment<'storage, A> {
 }
 
 
-pub fn eval<'storage, A: 'storage + Allocator>(expr: Value<'storage, A>,
-                                   env: &'storage Environment<'storage, A>)
-                                   -> Result<Value<'storage, A>, ParseEvalError> {
+pub fn eval<'storage, A: 'storage + Allocator>(
+    expr: Value<'storage, A>,
+    env: &'storage Environment<'storage, A>)
+    -> Result<Value<'storage, A>, ParseEvalError>
+{
     match expr {
         Value::Symbol(ptr) => {
             match env.globals.get(&ptr) {
@@ -51,7 +53,7 @@ pub fn eval<'storage, A: 'storage + Allocator>(expr: Value<'storage, A>,
         }
 
         Value::Pair(ptr) => {
-            apply(ptr.first, ptr.second, env)
+            apply(expr, env)
         },
 
         anything_else => Ok(anything_else)
@@ -59,51 +61,37 @@ pub fn eval<'storage, A: 'storage + Allocator>(expr: Value<'storage, A>,
 }
 
 
-pub fn apply<'storage, A: 'storage + Allocator>(function: Value<'storage, A>,
-                                    params: Value<'storage, A>,
-                                    env: &'storage Environment<'storage, A>)
-                                    -> Result<Value<'storage, A>, ParseEvalError> {
-    // TODO need to eval params
-    let params = match params {
-        Value::Pair(_) => eval(params, env)?,
-        Value::Nil => params,
-        _ => return Err(err("Parameter(s) must be in list form"))
-    };
+pub fn apply<'storage, A: 'storage + Allocator>(
+    params: Value<'storage, A>,
+    env: &'storage Environment<'storage, A>)
+    -> Result<Value<'storage, A>, ParseEvalError>
+{
+    // TODO need to eval rest, one list item at a time
+
+    let (function, rest) = flatten_args!(one_and_rest => params);
 
     if let Value::Symbol(ptr) = function {
-        if ptr == env.syms.lookup("atom") {
-            atom(params, env)
+        if let Some(&Value::Function(f)) = env.globals.get(&ptr) {
+            f.call(rest, env)
         } else {
             Err(err(&format!("Symbol {} is not bound to a function", ptr.as_str())))
         }
     } else {
-        Err(err("Object in function position is not a symbol"))
+        Err(err("Only symbols may be bound to functions"))
     }
 }
 
 
-fn next_param<'storage, A: 'storage + Allocator>(param_list: Value<'storage, A>)
-                                     -> Result<(Value<'storage, A>, Value<'storage, A>), ParseEvalError> {
-    match param_list {
-        Value::Pair(pair) => Ok((pair.first, pair.second)),
-        Value::Nil => Ok((Value::Nil, Value::Nil)),
-        _ => Err(err("Expected a parameter list"))
-    }
-}
+fn atom<'storage, A: 'storage + Allocator>(
+    params: Value<'storage, A>,
+    env: &'storage Environment<'storage, A>)
+    -> Result<Value<'storage, A>, ParseEvalError>
+{
+    let (value,) = flatten_args!(one_only => params);
 
-
-fn atom<'storage, A: 'storage + Allocator>(params: Value<'storage, A>,
-                               env: &'storage Environment<'storage, A>)
-                               -> Result<Value<'storage, A>, ParseEvalError> {
-    let (value, rest) = next_param(params)?;
-
-    if let Value::Nil = rest {
-        match value {
-            Value::Symbol(_) => Ok(Value::Symbol(env.syms.lookup("true"))),
-            Value::Nil => Ok(Value::Symbol(env.syms.lookup("true"))),
-            _ => Ok(Value::Nil)
-        }
-    } else {
-        Err(err("One parameter expected"))
+    match value {
+        Value::Symbol(_) => Ok(Value::Symbol(env.syms.lookup("true"))),
+        Value::Nil => Ok(Value::Symbol(env.syms.lookup("true"))),
+        _ => Ok(Value::Nil)
     }
 }

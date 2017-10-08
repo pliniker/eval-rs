@@ -14,6 +14,7 @@ use clap::{Arg, App};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
+#[macro_use]
 mod callables;
 mod environment;
 mod error;
