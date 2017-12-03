@@ -83,7 +83,7 @@ fn read_print_loop() -> Result<(), ReadlineError> {
     }
 
     let heap = Arena::new(65536);
-    let environ = Environment::new(&heap);
+    let mut environ = Environment::new(&heap);
 
     // repl
     let mut input_counter = 1;

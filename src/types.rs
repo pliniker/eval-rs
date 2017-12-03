@@ -5,22 +5,22 @@ use std::str;
 
 use callables::Function;
 use error::SourcePos;
-use memory::{Allocator, Ptr};
+use memory::{Heap, Ptr};
 
 
 /// A fat pointer to a managed-memory object, carrying the type with it.
 /// TODO: use the new union type to implement a tagged pointer?
-pub enum Value<'a, A: 'a + Allocator> {
+pub enum Value<'heap, A: 'heap + Heap> {
     Nil,
-    Symbol(Ptr<'a, Symbol, A>),
-    Pair(Ptr<'a, Pair<'a, A>, A>),
-    Function(Ptr<'a, Function<'a, A>, A>),
+    Symbol(Ptr<'heap, Symbol, A>),
+    Pair(Ptr<'heap, Pair<'heap, A>, A>),
+    Function(Ptr<'heap, Function<'heap, A>, A>),
 }
 
 
 // Type parameter A should not need to be Clone, so we can't #[derive(Copy, Clone)]
-impl<'a, A: 'a + Allocator> Clone for Value<'a, A> {
-    fn clone(&self) -> Value<'a, A> {
+impl<'heap, A: 'heap + Heap> Clone for Value<'heap, A> {
+    fn clone(&self) -> Value<'heap, A> {
         match *self {
             Value::Nil => Value::Nil,
             Value::Symbol(ptr) => Value::Symbol(ptr),
@@ -32,11 +32,11 @@ impl<'a, A: 'a + Allocator> Clone for Value<'a, A> {
 
 
 /// An enum of pointers can be copied
-impl<'a, A: 'a + Allocator> Copy for Value<'a, A> {}
+impl<'heap, A: 'heap + Heap> Copy for Value<'heap, A> {}
 
 
-impl<'a, A: 'a + Allocator> PartialEq for Value<'a, A> {
-    fn eq(&self, other: &Value<'a, A>) -> bool {
+impl<'heap, A: 'heap + Heap> PartialEq for Value<'heap, A> {
+    fn eq(&self, other: &Value<'heap, A>) -> bool {
         match *self {
             Value::Nil => if let &Value::Nil = other { true } else { false },
 
@@ -72,7 +72,7 @@ impl<'a, A: 'a + Allocator> PartialEq for Value<'a, A> {
 
 
 /// Standard Display output should print out S-expressions.
-impl<'a, A: 'a + Allocator> fmt::Display for Value<'a, A> {
+impl<'heap, A: 'heap + Heap> fmt::Display for Value<'heap, A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Value::Nil => write!(f, "()"),
@@ -95,20 +95,20 @@ impl<'a, A: 'a + Allocator> fmt::Display for Value<'a, A> {
                 write!(f, ")")
             },
 
-            Value::Function(ptr) => write!(f, "{}", ptr.as_str()),
+            Value::Function(ptr) => write!(f, "{}", ptr.name()),
         }
     }
 }
 
 
 /// Debug printing will print Pairs as literally as possible, using dot notation everywhere.
-impl<'a, A: 'a + Allocator> fmt::Debug for Value<'a, A> {
+impl<'heap, A: 'heap + Heap> fmt::Debug for Value<'heap, A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Value::Nil => write!(f, "nil"),
             Value::Symbol(ptr) => write!(f, "{}", ptr.as_str()),
             Value::Pair(ptr) => write!(f, "({:?} . {:?})", ptr.first, ptr.second),
-            Value::Function(ptr) => write!(f, "{}", ptr.as_str()),
+            Value::Function(ptr) => write!(f, "{}", ptr.name()),
         }
     }
 }
@@ -150,17 +150,17 @@ impl Hash for Symbol {
 
 
 /// A basic Cons type cell
-pub struct Pair<'a, A: 'a + Allocator> {
-    pub first: Value<'a, A>,
-    pub second: Value<'a, A>,
+pub struct Pair<'heap, A: 'heap + Heap> {
+    pub first: Value<'heap, A>,
+    pub second: Value<'heap, A>,
     // Possible source code positions of the first and second values
     pub first_pos: Option<SourcePos>,
     pub second_pos: Option<SourcePos>
 }
 
 
-impl<'a, A: 'a + Allocator> Pair<'a, A> {
-    pub fn new() -> Pair<'a, A> {
+impl<'heap, A: 'heap + Heap> Pair<'heap, A> {
+    pub fn new() -> Pair<'heap, A> {
         Pair {
             first: Value::Nil,
             second: Value::Nil,
@@ -170,21 +170,13 @@ impl<'a, A: 'a + Allocator> Pair<'a, A> {
     }
 
     /// Set the first value in the Pair
-    pub fn set(&mut self, value: Value<'a, A>) {
+    pub fn set(&mut self, value: Value<'heap, A>) {
         self.first = value
     }
 
     /// Set the second value in the Pair directly
-    pub fn dot(&mut self, value: Value<'a, A>) {
+    pub fn dot(&mut self, value: Value<'heap, A>) {
         self.second = value
-    }
-
-    /// Set Pair.second to a new Pair with newPair.first set to the value
-    pub fn append(&mut self, value: Value<'a, A>, mem: &'a A) -> Ptr<'a, Pair<'a, A>, A> {
-        let mut pair = mem.alloc(Pair::new());
-        self.second = Value::Pair(pair);
-        pair.first = value;
-        pair
     }
 
     /// Set the source code position of the lhs of the pair
@@ -198,7 +190,15 @@ impl<'a, A: 'a + Allocator> Pair<'a, A> {
     }
 
     /// Compare contents of one Pair to another
-    pub fn eq(&self, other: Ptr<'a, Pair<'a, A>, A>) -> bool {
+    pub fn eq(&self, other: Ptr<'heap, Pair<'heap, A>, A>) -> bool {
         self.first == other.first && self.second == other.second
+    }
+
+    /// Set Pair.second to a new Pair with newPair.first set to the value
+    pub fn append(&mut self, allocator: &'heap A, value: Value<'heap, A>) -> Ptr<'heap, Pair<'heap, A>, A> {
+        let mut pair = allocator.alloc(Pair::new());
+        self.second = Value::Pair(pair);
+        pair.first = value;
+        pair
     }
 }

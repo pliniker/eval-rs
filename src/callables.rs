@@ -1,6 +1,6 @@
 use environment::Environment;
 use error::ParseEvalError;
-use memory::{Allocator, Ptr};
+use memory::{Heap, Ptr};
 use types::{Symbol, Value};
 
 
@@ -8,13 +8,13 @@ type FunctionPtr<'a, A> = fn(Value<'a, A>, &'a Environment<'a, A>) -> Result<Val
 
 
 /// A function pointer enabling first class functions
-pub struct Function<'a, A: 'a + Allocator> {
+pub struct Function<'a, A: 'a + Heap> {
     name: Ptr<'a, Symbol, A>,
     func: FunctionPtr<'a, A>,
 }
 
 
-impl<'a, A: 'a + Allocator> Function<'a, A> {
+impl<'a, A: 'a + Heap> Function<'a, A> {
     pub fn name(&self) -> &str {
         self.name.as_str()
     }

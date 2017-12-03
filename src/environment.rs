@@ -1,26 +1,32 @@
 use std::collections::HashMap;
 
 use error::{err, err_wpos, ParseEvalError};
-use memory::{Allocator, Arena, Ptr};
+use memory::{Heap, Ptr};
 use symbolmap::{SymbolMap, SymbolMapper};
 use types::{Symbol, Value};
 
+/*
+An environment is a level in a bindings heirarchy
 
+
+ */
+
+// TODO this should be similar to SymbolMap?
 type Bindings<'storage, A> = HashMap<Ptr<'storage, Symbol, A>, Value<'storage, A>>;
 
 
-pub struct Environment<'storage, A: 'storage + Allocator> {
+// TODO Environment is a bad name
+pub struct Environment<'storage, A: 'storage + Heap> {
     // garbage collected heap memory
     pub heap: &'storage A,
-    // keys to syms are Strings, which have pointers to them in mem.
-    // The lifetime of syms must be >= the lifetime of mem
+    // keys to syms are Strings, which have pointers to them in heap
     pub syms: SymbolMap<'storage, A>,
     // mapping of Symbols to Values
     pub globals: Bindings<'storage, A>,
 }
 
 
-impl<'storage, A: 'storage + Allocator> Environment<'storage, A> {
+impl<'storage, A: 'storage + Heap> Environment<'storage, A> {
     pub fn new(heap: &'storage A) -> Environment<'storage, A> {
         Environment {
             heap: heap,
@@ -31,15 +37,7 @@ impl<'storage, A: 'storage + Allocator> Environment<'storage, A> {
 }
 
 
-impl<'storage, A: 'storage + Allocator> Environment<'storage, A> {
-    fn add_global_bindings(&'storage mut self){
-        let evalrus_true = self.syms.lookup("true");
-        self.globals.insert(evalrus_true, Value::Symbol(evalrus_true));
-    }
-}
-
-
-pub fn eval<'storage, A: 'storage + Allocator>(
+pub fn eval<'storage, A: 'storage + Heap>(
     expr: Value<'storage, A>,
     env: &'storage Environment<'storage, A>)
     -> Result<Value<'storage, A>, ParseEvalError>
@@ -61,7 +59,7 @@ pub fn eval<'storage, A: 'storage + Allocator>(
 }
 
 
-pub fn apply<'storage, A: 'storage + Allocator>(
+pub fn apply<'storage, A: 'storage + Heap>(
     params: Value<'storage, A>,
     env: &'storage Environment<'storage, A>)
     -> Result<Value<'storage, A>, ParseEvalError>
@@ -82,7 +80,7 @@ pub fn apply<'storage, A: 'storage + Allocator>(
 }
 
 
-fn atom<'storage, A: 'storage + Allocator>(
+fn atom<'storage, A: 'storage + Heap>(
     params: Value<'storage, A>,
     env: &'storage Environment<'storage, A>)
     -> Result<Value<'storage, A>, ParseEvalError>

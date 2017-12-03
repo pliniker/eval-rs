@@ -1,13 +1,13 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use memory::{Allocator, Ptr};
+use memory::{StaticAllocator, Ptr};
 use types::Symbol;
 
 
 /// A trait that describes the ability to look up a Symbol by it's name in a String
-pub trait SymbolMapper<'a, A: 'a + Allocator> {
-    fn lookup(&self, name: &str) -> Ptr<'a, Symbol, A>;
+pub trait SymbolMapper<'heap, A: 'heap + StaticAllocator> {
+    fn lookup(&self, name: &str) -> Ptr<'heap, Symbol, A>;
 }
 
 
@@ -18,24 +18,24 @@ pub trait SymbolMapper<'a, A: 'a + Allocator> {
 /// mapping HashMap.
 ///
 /// No Symbol is ever deleted. Symbol name strings must be immutable.
-pub struct SymbolMap<'a, A: 'a + Allocator> {
-    map: RefCell<HashMap<String, Ptr<'a, Symbol, A>>>,
-    heap: &'a A,
+pub struct SymbolMap<'heap, A: 'heap + StaticAllocator> {
+    map: RefCell<HashMap<String, Ptr<'heap, Symbol, A>>>,
+    heap: &'heap A,
 }
 
 
-impl<'a, A: 'a + Allocator> SymbolMap<'a, A> {
-    pub fn new(allocator: &'a A) -> SymbolMap<'a, A> {
+impl<'heap, A: 'heap + StaticAllocator> SymbolMap<'heap, A> {
+    pub fn new(heap: &'heap A) -> SymbolMap<'heap, A> {
         SymbolMap {
             map: RefCell::new(HashMap::new()),
-            heap: allocator,
+            heap: heap,
         }
     }
 }
 
 
-impl<'a, A: 'a + Allocator> SymbolMapper<'a, A> for SymbolMap<'a, A> {
-    fn lookup(&self, name: &str) -> Ptr<'a, Symbol, A> {
+impl<'heap, A: 'heap + StaticAllocator> SymbolMapper<'heap, A> for SymbolMap<'heap, A> {
+    fn lookup(&self, name: &str) -> Ptr<'heap, Symbol, A> {
         // Can't take a map.entry(name) without providing an owned String, i.e. cloning 'name'
         // Can't insert a new entry with just a reference without hashing twice, and cloning 'name'
         // The common case, lookups, should be fast, inserts can be slower.

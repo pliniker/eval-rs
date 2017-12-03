@@ -3,21 +3,21 @@ use std::iter::Peekable;
 use environment::Environment;
 use error::{ParseEvalError, SourcePos};
 use lexer::{tokenize, Token, TokenType};
-use memory::{Allocator, Ptr};
+use memory::{Heap, Ptr};
 use symbolmap::SymbolMapper;
 use types::{Pair, Value};
 
 
 // A linked list, internal to the parser to simplify the code and is not stored in managed memory
-struct PairList<'a, A: 'a + Allocator> {
-    head: Option<Ptr<'a, Pair<'a, A>, A>>,
-    tail: Option<Ptr<'a, Pair<'a, A>, A>>,
+struct PairList<'heap, A: 'heap + Heap> {
+    head: Option<Ptr<'heap, Pair<'heap, A>, A>>,
+    tail: Option<Ptr<'heap, Pair<'heap, A>, A>>,
 }
 
 
-impl<'a, A: 'a + Allocator> PairList<'a, A> {
+impl<'heap, A: 'heap + Heap> PairList<'heap, A> {
     /// Create a new empty list
-    fn open() -> PairList<'a, A> {
+    fn open() -> PairList<'heap, A> {
         PairList {
             head: None,
             tail: None,
@@ -25,16 +25,16 @@ impl<'a, A: 'a + Allocator> PairList<'a, A> {
     }
 
     /// Move the given value to managed memory and append it to the list
-    fn push(&mut self, value: Value<'a, A>, mem: &'a A, pos: SourcePos)
+    fn push(&mut self, value: Value<'heap, A>, pos: SourcePos, heap: &'heap A)
     {
         if let Some(mut old_tail) = self.tail {
-            let mut new_tail = old_tail.append(value, mem);
+            let mut new_tail = old_tail.append(heap, value);
             self.tail = Some(new_tail);
             // set source code line/char
             new_tail.set_first_source_pos(pos);
             old_tail.set_second_source_pos(pos);
         } else {
-            let mut pair = mem.alloc(Pair::new());
+            let mut pair = heap.alloc(Pair::new());
             pair.set(value);
             self.head = Some(pair);
             self.tail = self.head;
@@ -45,7 +45,7 @@ impl<'a, A: 'a + Allocator> PairList<'a, A> {
     }
 
     /// Apply dot-notation to set the second value of the last pair of the list
-    fn dot(&mut self, value: Value<'a, A>, pos: SourcePos) {
+    fn dot(&mut self, value: Value<'heap, A>, pos: SourcePos) {
         if let Some(mut old_tail) = self.tail {
             old_tail.dot(value);
             // set source code line/char
@@ -56,7 +56,7 @@ impl<'a, A: 'a + Allocator> PairList<'a, A> {
     }
 
     /// Consume the list and return the pair at the head
-    fn close(self) -> Ptr<'a, Pair<'a, A>, A> {
+    fn close(self) -> Ptr<'heap, Pair<'heap, A>, A> {
         self.head.expect("cannot close empty PairList!")
     }
 }
@@ -74,10 +74,11 @@ impl<'a, A: 'a + Allocator> PairList<'a, A> {
 // If a list token is:
 //  * a Dot, it must be followed by an s-expression and a CloseParen
 //
-fn parse_list<'i, 'a, I, A>(tokens: &mut Peekable<I>,
-                            env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseEvalError>
+fn parse_list<'i, 'heap, I, A>(
+    tokens: &mut Peekable<I>,
+    env: &'heap Environment<'heap, A>) -> Result<Value<'heap, A>, ParseEvalError>
     where I: Iterator<Item = &'i Token>,
-          A: 'a + Allocator
+          A: 'heap + Heap
 {
     use self::TokenType::*;
 
@@ -103,13 +104,13 @@ fn parse_list<'i, 'a, I, A>(tokens: &mut Peekable<I>,
         match tokens.peek() {
             Some(&&Token { token: OpenParen, pos }) => {
                 tokens.next();
-                list.push(parse_list(tokens, env)?, &env.heap, pos);
+                list.push(parse_list(tokens, env)?, pos, &env.heap);
             }
 
             Some(&&Token { token: Symbol(ref name), pos }) => {
                 tokens.next();
                 let sym = env.syms.lookup(name);
-                list.push(Value::Symbol(sym), &env.heap, pos);
+                list.push(Value::Symbol(sym), pos, &env.heap);
             }
 
             Some(&&Token { token: Dot, pos }) => {
@@ -153,10 +154,11 @@ fn parse_list<'i, 'a, I, A>(tokens: &mut Peekable<I>,
 //  * symbol
 //  * or a list
 //
-fn parse_sexpr<'i, 'a, I, A>(tokens: &mut Peekable<I>,
-                             env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseEvalError>
+fn parse_sexpr<'i, 'heap, I, A>(
+    tokens: &mut Peekable<I>,
+    env: &'heap Environment<'heap, A>) -> Result<Value<'heap, A>, ParseEvalError>
     where I: Iterator<Item = &'i Token>,
-          A: 'a + Allocator
+          A: 'heap + Heap
 {
     use self::TokenType::*;
 
@@ -188,18 +190,18 @@ fn parse_sexpr<'i, 'a, I, A>(tokens: &mut Peekable<I>,
 }
 
 
-fn parse_tokens<'a, A>(tokens: Vec<Token>,
-                       env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseEvalError>
-    where A: 'a + Allocator
+fn parse_tokens<'heap, A>(tokens: Vec<Token>,
+                       env: &'heap Environment<'heap, A>) -> Result<Value<'heap, A>, ParseEvalError>
+    where A: 'heap + Heap
 {
     let mut tokenstream = tokens.iter().peekable();
     parse_sexpr(&mut tokenstream, env)
 }
 
 
-pub fn parse<'a, A>(input: &str,
-                    env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseEvalError>
-    where A: 'a + Allocator
+pub fn parse<'heap, A>(input: &str,
+                    env: &'heap Environment<'heap, A>) -> Result<Value<'heap, A>, ParseEvalError>
+    where A: 'heap + Heap
 {
     parse_tokens(tokenize(input)?, env)
 }
@@ -209,10 +211,12 @@ pub fn parse<'a, A>(input: &str,
 mod test {
     use super::*;
     use environment::Environment;
+    use memory::Arena;
     use printer::print;
 
     fn check(input: &str, expect: &str) {
-        let mut env = Environment::new(1024);
+        let heap = Arena::new(1024);
+        let mut env = Environment::new(&heap);
         let ast = parse(input, &mut env).unwrap();
         println!("expect: {}\n\tgot:    {}\n\tdebug:  {:?}",
                  &expect,
