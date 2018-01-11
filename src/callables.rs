@@ -1,10 +1,10 @@
-use environment::Environment;
 use error::ParseEvalError;
-use memory::{Heap, Ptr};
+use heap::{Heap, Ptr};
+use memory::Memory;
 use types::{Symbol, Value};
 
 
-type FunctionPtr<'a, A> = fn(Value<'a, A>, &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseEvalError>;
+type FunctionPtr<'a, A> = fn(Value<'a, A>, &'a Memory<'a, A>) -> Result<Value<'a, A>, ParseEvalError>;
 
 
 /// A function pointer enabling first class functions
@@ -19,7 +19,7 @@ impl<'a, A: 'a + Heap> Function<'a, A> {
         self.name.as_str()
     }
 
-    pub fn call(&self, params: Value<'a, A>, env: &'a Environment<'a, A>) -> Result<Value<'a, A>, ParseEvalError> {
+    pub fn call(&self, params: Value<'a, A>, env: &'a Memory<'a, A>) -> Result<Value<'a, A>, ParseEvalError> {
         (self.func)(params, env)
     }
 }

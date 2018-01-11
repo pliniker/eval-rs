@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use memory::{StaticAllocator, Ptr};
+use heap::{StaticAllocator, Ptr};
 use types::Symbol;
 
 

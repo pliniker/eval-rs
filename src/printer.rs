@@ -1,4 +1,4 @@
-use memory::Heap;
+use heap::Heap;
 use types::Value;
 
 

@@ -1,9 +1,9 @@
 use std::iter::Peekable;
 
-use environment::Environment;
 use error::{ParseEvalError, SourcePos};
 use lexer::{tokenize, Token, TokenType};
-use memory::{Heap, Ptr};
+use memory::Memory;
+use heap::{Heap, Ptr};
 use symbolmap::SymbolMapper;
 use types::{Pair, Value};
 
@@ -76,7 +76,7 @@ impl<'heap, A: 'heap + Heap> PairList<'heap, A> {
 //
 fn parse_list<'i, 'heap, I, A>(
     tokens: &mut Peekable<I>,
-    env: &'heap Environment<'heap, A>) -> Result<Value<'heap, A>, ParseEvalError>
+    env: &'heap Memory<'heap, A>) -> Result<Value<'heap, A>, ParseEvalError>
     where I: Iterator<Item = &'i Token>,
           A: 'heap + Heap
 {
@@ -156,7 +156,7 @@ fn parse_list<'i, 'heap, I, A>(
 //
 fn parse_sexpr<'i, 'heap, I, A>(
     tokens: &mut Peekable<I>,
-    env: &'heap Environment<'heap, A>) -> Result<Value<'heap, A>, ParseEvalError>
+    env: &'heap Memory<'heap, A>) -> Result<Value<'heap, A>, ParseEvalError>
     where I: Iterator<Item = &'i Token>,
           A: 'heap + Heap
 {
@@ -191,7 +191,7 @@ fn parse_sexpr<'i, 'heap, I, A>(
 
 
 fn parse_tokens<'heap, A>(tokens: Vec<Token>,
-                       env: &'heap Environment<'heap, A>) -> Result<Value<'heap, A>, ParseEvalError>
+                       env: &'heap Memory<'heap, A>) -> Result<Value<'heap, A>, ParseEvalError>
     where A: 'heap + Heap
 {
     let mut tokenstream = tokens.iter().peekable();
@@ -200,7 +200,7 @@ fn parse_tokens<'heap, A>(tokens: Vec<Token>,
 
 
 pub fn parse<'heap, A>(input: &str,
-                    env: &'heap Environment<'heap, A>) -> Result<Value<'heap, A>, ParseEvalError>
+                    env: &'heap Memory<'heap, A>) -> Result<Value<'heap, A>, ParseEvalError>
     where A: 'heap + Heap
 {
     parse_tokens(tokenize(input)?, env)
@@ -210,13 +210,13 @@ pub fn parse<'heap, A>(input: &str,
 #[cfg(test)]
 mod test {
     use super::*;
-    use environment::Environment;
-    use memory::Arena;
+    use memory::Memory;
+    use heap::Arena;
     use printer::print;
 
     fn check(input: &str, expect: &str) {
         let heap = Arena::new(1024);
-        let mut env = Environment::new(&heap);
+        let mut env = Memory::new(&heap);
         let ast = parse(input, &mut env).unwrap();
         println!("expect: {}\n\tgot:    {}\n\tdebug:  {:?}",
                  &expect,

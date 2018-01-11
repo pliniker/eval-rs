@@ -16,17 +16,18 @@ use rustyline::Editor;
 
 #[macro_use]
 mod callables;
-mod environment;
 mod error;
+mod heap;
 mod lexer;
 mod memory;
 mod parser;
 mod printer;
+mod rawptr;
 mod symbolmap;
 mod types;
 
-use environment::{Environment, eval};
-use memory::Arena;
+use memory::{Memory, eval};
+use heap::Arena;
 use parser::parse;
 
 
@@ -49,7 +50,7 @@ fn read_file(filename: &str) -> Result<(), ()> {
     });
 
     let heap = Arena::new(65536);
-    let env = Environment::new(&heap);
+    let env = Memory::with_heap(&heap);
 
     match parser::parse(&contents, &env) {
         Ok(ast) => println!("{}", printer::print(&ast)),
@@ -83,8 +84,12 @@ fn read_print_loop() -> Result<(), ReadlineError> {
     }
 
     let heap = Arena::new(65536);
-    let mut environ = Environment::new(&heap);
+    let mut mem = Memory::with_heap(&heap);
 
+    mem.mutate_with(|heap, syms| {
+
+
+    });
     // repl
     let mut input_counter = 1;
     loop {
@@ -97,10 +102,10 @@ fn read_print_loop() -> Result<(), ReadlineError> {
                 reader.add_history_entry(&line);
 
                 // parse/"read"
-                match parse(&line, &environ) {
+                match parse(&line, &mem) {
                     Ok(value) => {
                         // eval
-                        match eval(value, &environ) {
+                        match eval(value, &mem) {
                             // print
                             Ok(result) => println!("{}", printer::print(&result)),
                             Err(e) => e.print_with_source(&line),

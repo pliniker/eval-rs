@@ -1,6 +1,0 @@
-[package]
-name = "mm"
-version = "0.1.0"
-authors = ["Peter Liniker <peter.liniker+github@gmail.com>"]
-
-[dependencies]

@@ -5,7 +5,7 @@ use std::str;
 
 use callables::Function;
 use error::SourcePos;
-use memory::{Heap, Ptr};
+use heap::{Heap, Ptr};
 
 
 /// A fat pointer to a managed-memory object, carrying the type with it.
