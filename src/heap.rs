@@ -9,6 +9,16 @@ use std::ptr;
 use memalloc::{allocate, deallocate};
 use rawptr;
 
+/*
+// use rawptr::Allocator types internally
+
+pub trait Heap {
+  fn alloc<T>(7self, object: T) -> Ptr<T, Self> where Self: Sized;
+  fn alloc_static<T>(&self, object: T) -> Ptr<T, Self> where Self: Sized;
+  fn collect(&mut self);
+}
+*/
+
 
 /// Trait that all allocator types must derive from for `Ptr` lifetime restriction
 pub trait Allocator {}
