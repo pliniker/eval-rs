@@ -98,6 +98,7 @@ impl<'heap, A: 'heap + Heap> fmt::Display for Value<'heap, A> {
             Value::Function(ptr) => write!(f, "{}", ptr.name()),
         }
     }
+
 }
 
 

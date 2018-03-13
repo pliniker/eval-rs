@@ -21,8 +21,9 @@ mod heap;
 mod lexer;
 mod memory;
 mod parser;
+mod primitives;
 mod printer;
-mod rawptr;
+mod taggedptr;
 mod symbolmap;
 mod types;
 
