@@ -6,13 +6,19 @@ use memalloc::{allocate, deallocate};
 use taggedptr::TaggedPtr;
 
 
-/// A heap trait
-pub trait Heap {
-    fn alloc<T>(&self, object: T) -> TaggedPtr;
-    fn alloc_static<T>(&self, object: T) -> TaggedPtr;
-    fn lookup_symbol(&self, name: &str) -> TaggedPtr;
+/// A memory error type, encompassing all memory related errors at this
+/// time.
+pub enum MemError {
+    OOM
 }
 
+
+/// A heap trait
+pub trait Heap {
+    fn alloc<T>(&self, object: T) -> Result<TaggedPtr, MemError>;
+    fn alloc_static<T>(&self, object: T) -> Result<TaggedPtr, MemError>;
+    fn lookup_symbol(&self, name: &str) -> Result<TaggedPtr, MemError>;
+}
 
 
 /// A fixed-size block of contiguous bytes type that implements the Heap
@@ -25,57 +31,57 @@ pub struct Arena {
 
 
 impl Arena {
-    pub fn new(size: usize) -> Arena {
+    pub fn new(size: usize) -> Result<Arena, MemError> {
         let buffer = unsafe { allocate(size) };
 
         if buffer == ptr::null_mut() {
-            panic!("could not allocate memory!");
-        }
-
-        Arena {
-            buffer: buffer,
-            size: size,
-            bump: Cell::new(0),
+            Err(MemError::OOM)
+        } else {
+            Ok(
+                Arena {
+                    buffer: buffer,
+                    size: size,
+                    bump: Cell::new(0),
+                }
+            )
         }
     }
-}
 
-
-impl Heap for Arena {
-    /// Allocate a new object and return it's pointer
-    fn alloc<T>(&self, object: T) -> Ptr<T, Self> {
+    // Allocate a new object and return it's pointer
+    fn inner_alloc<T>(&self, object: T) -> Result<*mut T, MemError> {
         let next_bump = self.bump.get() + mem::size_of::<T>();
+
         if next_bump > self.size {
-            panic!("out of memory");
-        }
+            Err(MemError::OOM)
+        } else {
 
-        let p = unsafe {
-            let p = self.buffer.offset(self.bump.get() as isize) as *mut T;
-            ptr::write(p, object);
-            p
-        };
+            let ptr = unsafe {
+                let p = self.buffer.offset(self.bump.get() as isize) as *mut T;
+                ptr::write(p, object);
+                p
+            };
 
-        self.bump.set(next_bump);
+            self.bump.set(next_bump);
 
-        Ptr {
-            ptr: p,
-            _marker: PhantomData
+            Ok(ptr)
         }
     }
 }
 
 
 impl Heap for Arena {
-    /// In this implementation, alloc and alloc_static are the same because
-    /// no moving or collection occurs anyway.
-    fn alloc_static<T>(&self, object: T) -> Ptr<T, Self> {
-        self.alloc(object)
+    fn alloc<Pair>(&self, object: Pair) -> Result<TaggedPtr, MemError> {
+        Err(MemError::OOM)
+    }
+
+    fn alloc_static<T>(&self, object: T) -> Result<TaggedPtr, MemError> {
+        Err(MemError::OOM)
+    }
+
+    fn lookup_symbol(&self, name: &str) -> Result<TaggedPtr, MemError> {
+        Err(MemError::OOM)
     }
 }
-
-
-impl Heap for Arena {}
-impl Heap for Arena {}
 
 
 impl Drop for Arena {

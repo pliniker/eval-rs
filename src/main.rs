@@ -15,23 +15,23 @@ use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 #[macro_use]
-mod callables;
+//mod callables;
 mod error;
 mod heap;
 mod lexer;
-mod memory;
-mod parser;
+//mod memory;
+//mod parser;
 mod primitives;
-mod printer;
+//mod printer;
 mod taggedptr;
-mod symbolmap;
-mod types;
+//mod symbolmap;
+//mod types;
 
-use memory::{Memory, eval};
+//use memory::{Memory, eval};
 use heap::Arena;
-use parser::parse;
+//use parser::parse;
 
-
+/*
 /// Read a file into a String
 fn load_file(filename: &str) -> Result<String, io::Error> {
     let mut contents = String::new();
@@ -130,9 +130,9 @@ fn read_print_loop() -> Result<(), ReadlineError> {
         }
     }
 }
+*/
 
-
-fn main() {
+fn main() { /*
     // parse command line argument, an optional filename
     let matches = App::new("Eval-R-Us")
         .about("Evaluate the expressions!")
@@ -153,5 +153,5 @@ fn main() {
             println!("exited because: {}", err);
             process::exit(0);
         });
-    }
+    } */
 }

@@ -87,12 +87,12 @@ impl TaggedPtr {
 
     fn number(value: isize) -> TaggedPtr {
         TaggedPtr {
-            tag: (value as usize << 2) | TAG_NUMBER
+            tag: ((value as usize) << 2) | TAG_NUMBER
         }
     }
 
     pub fn is_nil(&self) -> bool {
-        self.tag == 0
+        unsafe { self.tag == 0 }
     }
 
     fn into_fat_ptr(&self) -> FatPtr {
@@ -104,7 +104,8 @@ impl TaggedPtr {
                     TAG_OBJECT => FatPtr::Object(RawPtr::from_tagged_ptr(self.object)),
                     TAG_PAIR => FatPtr::Pair(RawPtr::from_tagged_ptr(self.pair)),
                     TAG_SYMBOL => FatPtr::Symbol(RawPtr::from_tagged_ptr(self.symbol)),
-                    TAG_NUMBER => FatPtr::Number(self.number >> 2)
+                    TAG_NUMBER => FatPtr::Number(self.number >> 2),
+                    _ => panic!("Corrupt pointer tag!")
                 }
             }
         }
@@ -129,16 +130,4 @@ impl From<FatPtr> for TaggedPtr {
             FatPtr::Number(value) => TaggedPtr::number(value)
         }
     }
-}
-
-
-enum AllocatorError {
-    OOM
-}
-
-
-pub trait Allocator {
-    /// Allocate space and move the given object into the space, returning an instance of
-    /// `AllocatorError` if allocation failed.
-    fn alloc<T>(&self, object: T) -> Result<TaggedPtr, AllocatorError>;
 }
