@@ -1,6 +1,9 @@
 use std::convert::From;
+use std::mem::{size_of, transmute};
 
-use primitives::{ObjectHeader, Pair, Symbol};
+use primitives::{ObjectHeader, Pair, Symbol,
+                 StringObject, NumberObject,
+                 Redirect};
 
 
 /// Wrapper around a raw pointer type
@@ -22,10 +25,36 @@ impl<T> Copy for RawPtr<T> {}
 
 
 impl<T> RawPtr<T> {
+    /// From raw-raw pointer
+    pub fn from_raw(object: *mut T) -> RawPtr<T> {
+        RawPtr {
+            raw: object
+        }
+    }
+
+    /// Zero out the tag bits and keep the pointer
     fn from_tagged_ptr(object: *mut T) -> RawPtr<T> {
         RawPtr {
             raw: (object as usize & TAG_MASK) as *mut T
         }
+    }
+
+    /// Get a pointer to an ObjectHeader (that may or may not exist) for the
+    /// object pointed at
+    unsafe fn header(&self) -> RawPtr<ObjectHeader> {
+        let header_pos = (self.raw as usize) - size_of::<ObjectHeader>();
+
+        RawPtr {
+            raw: header_pos as *mut ObjectHeader
+        }
+    }
+
+    unsafe fn deref(&self) -> &T {
+        &*self.raw
+    }
+
+    unsafe fn deref_mut(&self) -> &mut T {
+        &mut *self.raw
     }
 }
 
@@ -34,10 +63,11 @@ impl<T> RawPtr<T> {
 #[derive(Copy, Clone)]
 pub enum FatPtr {
     Nil,
-    Object(RawPtr<ObjectHeader>),
     Pair(RawPtr<Pair>),
     Symbol(RawPtr<Symbol>),
-    Number(isize)
+    Number(isize),
+    NumberObject(RawPtr<NumberObject>),
+    StringObject(RawPtr<StringObject>),
 }
 
 
@@ -45,10 +75,10 @@ pub enum FatPtr {
 #[derive(Copy, Clone)]
 pub union TaggedPtr {
     tag: usize,
-    object: *mut ObjectHeader,
     pair: *mut Pair,
     symbol: *mut Symbol,
     number: isize,
+    object: *mut (),
 }
 
 
@@ -67,7 +97,7 @@ impl TaggedPtr {
         }
     }
 
-    fn object(ptr: RawPtr<ObjectHeader>) -> TaggedPtr {
+    fn object(ptr: RawPtr<()>) -> TaggedPtr {
         TaggedPtr {
             tag: (ptr.raw as usize) | TAG_OBJECT
         }
@@ -101,7 +131,12 @@ impl TaggedPtr {
                 FatPtr::Nil
             } else {
                 match self.tag & TAG_MASK {
-                    TAG_OBJECT => FatPtr::Object(RawPtr::from_tagged_ptr(self.object)),
+                    TAG_OBJECT => {
+                        let raw_object = RawPtr::from_tagged_ptr(self.object);
+                        let header = raw_object.header();
+
+                        header.deref().object_rawptr()
+                    },
                     TAG_PAIR => FatPtr::Pair(RawPtr::from_tagged_ptr(self.pair)),
                     TAG_SYMBOL => FatPtr::Symbol(RawPtr::from_tagged_ptr(self.symbol)),
                     TAG_NUMBER => FatPtr::Number(self.number >> 2),
@@ -124,10 +159,10 @@ impl From<FatPtr> for TaggedPtr {
     fn from(ptr: FatPtr) -> TaggedPtr {
         match ptr {
             FatPtr::Nil => TaggedPtr::nil(),
-            FatPtr::Object(raw) => TaggedPtr::object(raw),
+            //FatPtr::ObjectHeader(raw) => TaggedPtr::object(raw),
             FatPtr::Pair(raw) => TaggedPtr::pair(raw),
             FatPtr::Symbol(raw) => TaggedPtr::symbol(raw),
-            FatPtr::Number(value) => TaggedPtr::number(value)
+            FatPtr::Number(value) => TaggedPtr::number(value),
         }
     }
 }
