@@ -1,9 +1,8 @@
 use std::hash::{Hash, Hasher};
 use std::slice;
-use std::mem::size_of;
 use std::str;
 
-use taggedptr::{FatPtr, RawPtr, TaggedPtr};
+use taggedptr::TaggedPtr;
 
 
 /// A Symbol is a unique object that has a unique name string. The backing storage for the
@@ -41,37 +40,6 @@ impl Hash for Symbol {
 }
 
 
-/// A heap-allocated object header
-pub struct ObjectHeader {
-    flags: u32,
-    size: u32
-}
-
-
-impl ObjectHeader {
-    pub fn object_rawptr(&self) -> FatPtr {
-        unsafe {
-            let object_pos = (
-                self as *const ObjectHeader as *const () as usize) + size_of::<Self>();
-
-            match self.flags & HEADER_TAG_MASK {
-                HEADER_TAG_PAIR => FatPtr::Pair(RawPtr::from_raw(object_pos as *mut Pair)),
-                _ => panic!("Corrupt ObjectHeader type tag!")
-            }
-        }
-    }
-}
-
-
-const HEADER_MARK_BIT: u32 = 0x1;
-
-const HEADER_TAG_MASK: u32 = !(0xf << 1);
-const HEADER_TAG_PAIR: u32 = 0x00 << 1;
-const HEADER_TAG_NUMBER: u32 = 0x01 << 1;
-const HEADER_TAG_STRING: u32 = 0x02 << 1;
-const HEADER_TAG_REDIRECT: u32 = 0x3 << 1;
-
-
 // The following types must be have an ObjectHeader preceding them on the heap
 
 /// Redefine Pair from types.rs
@@ -90,10 +58,4 @@ pub struct NumberObject {
 /// A heap-allocated string
 pub struct StringObject {
     len: usize,
-}
-
-
-/// A pointer redirection when an object has been moved
-pub struct Redirect {
-    new_location: *mut ()
 }
