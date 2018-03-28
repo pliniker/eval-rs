@@ -9,6 +9,7 @@ use taggedptr::TaggedPtr;
 /// underlying str data must have a lifetime of at least that of the Symbol instance to
 /// prevent use-after-free.
 /// See `SymbolMap`
+/// TODO is there a way to formalize this relationship?
 pub struct Symbol {
     name_ptr: *const u8,
     name_len: usize,
@@ -49,13 +50,13 @@ pub struct Pair {
 }
 
 
-/// A heap-allocated number
+/// TODO A heap-allocated number
 pub struct NumberObject {
     value: isize
 }
 
 
-/// A heap-allocated string
+/// TODO A heap-allocated string
 pub struct StringObject {
     len: usize,
 }
