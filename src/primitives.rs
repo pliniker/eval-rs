@@ -2,8 +2,8 @@ use std::hash::{Hash, Hasher};
 use std::slice;
 use std::str;
 
+use error::SourcePos;
 use taggedptr::TaggedPtr;
-
 
 /// A Symbol is a unique object that has a unique name string. The backing storage for the
 /// underlying str data must have a lifetime of at least that of the Symbol instance to
@@ -40,13 +40,41 @@ impl Hash for Symbol {
     }
 }
 
-
 // The following types must be have an ObjectHeader preceding them on the heap
 
 /// Redefine Pair from types.rs
 pub struct Pair {
-    first: TaggedPtr,
-    second: TaggedPtr
+    pub first: TaggedPtr,
+    pub second: TaggedPtr,
+    // Possible source code positions of the first and second values
+    pub first_pos: Option<SourcePos>,
+    pub second_pos: Option<SourcePos>
+}
+
+
+impl Pair {
+    pub fn new() -> Pair {
+        Pair {
+            first: TaggedPtr::nil(),
+            second: TaggedPtr::nil(),
+            first_pos: None,
+            second_pos: None
+        }
+    }
+/*
+    /// Compare contents of one Pair to another
+    pub fn eq(&self, other: RawPtr<Pair>) -> bool {
+        self.first == other.first && self.second == other.second
+    }
+
+    /// Set Pair.second to a new Pair with newPair.first set to the value
+    pub fn append(&mut self, allocator: &'heap A, value: Value<'heap, A>) -> Ptr<'heap, Pair<'heap, A>, A> {
+        let mut pair = allocator.alloc(Pair::new());
+        self.second = Value::Pair(pair);
+        pair.first = value;
+        pair
+    }
+*/
 }
 
 
@@ -60,3 +88,11 @@ pub struct NumberObject {
 pub struct StringObject {
     len: usize,
 }
+
+
+/// TODO A function/closure pointer
+pub struct FunctionObject {
+}
+
+
+// TODO: Array, Dict...

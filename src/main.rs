@@ -15,6 +15,7 @@ use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 #[macro_use]
+mod arena;
 //mod callables;
 mod error;
 mod heap;
@@ -23,12 +24,13 @@ mod lexer;
 //mod parser;
 mod primitives;
 //mod printer;
+mod rawptr;
 mod taggedptr;
-//mod symbolmap;
+mod symbolmap;
 //mod types;
 
 //use memory::{Memory, eval};
-use heap::Arena;
+use arena::Arena;
 //use parser::parse;
 
 /*

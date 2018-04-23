@@ -10,58 +10,22 @@
 use std::convert::From;
 use std::mem::size_of;
 
-use primitives::{Pair, NumberObject, StringObject, Symbol};
-
-
-/// Wrapper around a bare pointer type
-pub struct RawPtr<T> {
-    raw: *mut T
-}
-
-
-impl<T> Clone for RawPtr<T> {
-    fn clone(&self) -> RawPtr<T> {
-        RawPtr {
-            raw: self.raw
-        }
-    }
-}
-
-
-impl<T> Copy for RawPtr<T> {}
+use primitives::{FunctionObject, NumberObject, Pair, StringObject, Symbol};
+use rawptr::RawPtr;
 
 
 impl<T> RawPtr<T> {
-    /// From a bare pointer
-    pub fn from_bare(object: *mut T) -> RawPtr<T> {
-        RawPtr {
-            raw: object
-        }
-    }
-
     /// Zero out the tag bits and keep the pointer
     fn from_tagged_bare(object: *mut T) -> RawPtr<T> {
-        RawPtr {
-            raw: (object as usize & TAG_MASK) as *mut T
-        }
+        Self::from_bare((object as usize & TAG_MASK) as *mut T)
     }
 
     /// Get a pointer to an ObjectHeader (that may or may not exist) for the
     /// object pointed at
     unsafe fn get_header_ptr(&self) -> RawPtr<ObjectHeader> {
-        let header_pos = (self.raw as usize) - size_of::<ObjectHeader>();
+        let header_pos = (self.to_bare() as usize) - size_of::<ObjectHeader>();
 
-        RawPtr {
-            raw: header_pos as *mut ObjectHeader
-        }
-    }
-
-    pub unsafe fn deref(&self) -> &T {
-        &*self.raw
-    }
-
-    pub unsafe fn deref_mut(&mut self) -> &mut T {
-        &mut *self.raw
+        RawPtr::from_bare(header_pos as *mut ObjectHeader)
     }
 }
 
@@ -75,6 +39,30 @@ pub enum FatPtr {
     Number(isize),
     NumberObject(RawPtr<NumberObject>),
     StringObject(RawPtr<StringObject>),
+    FunctionObject(RawPtr<FunctionObject>),
+}
+
+
+impl From<TaggedPtr> for FatPtr {
+    fn from(ptr: TaggedPtr) -> FatPtr {
+        ptr.into_fat_ptr()
+    }
+}
+
+
+/// Value comparison, not identity comparison
+impl PartialEq for FatPtr {
+    fn eq(&self, other: &FatPtr) -> bool {
+
+        use self::FatPtr::*;
+
+        match (*self, *other) {
+            (Nil, Nil) => true,
+            (Number(i), Number(j)) => i == j,
+            // TODO
+            _ => false
+        }
+    }
 }
 
 
@@ -99,7 +87,7 @@ const PTR_MASK: usize = !0x3;
 
 
 impl TaggedPtr {
-    fn nil() -> TaggedPtr {
+    pub fn nil() -> TaggedPtr {
         TaggedPtr {
             tag: 0
         }
@@ -107,19 +95,19 @@ impl TaggedPtr {
 
     fn object<T>(ptr: RawPtr<T>) -> TaggedPtr {
         TaggedPtr {
-            tag: (ptr.raw as usize) | TAG_OBJECT
+            tag: (ptr.to_bare() as usize) | TAG_OBJECT
         }
     }
 
     fn pair(ptr: RawPtr<Pair>) -> TaggedPtr {
         TaggedPtr {
-            tag: (ptr.raw as usize) | TAG_PAIR
+            tag: (ptr.to_bare() as usize) | TAG_PAIR
         }
     }
 
     fn symbol(ptr: RawPtr<Symbol>) -> TaggedPtr {
         TaggedPtr {
-            tag: (ptr.raw as usize) | TAG_SYMBOL
+            tag: (ptr.to_bare() as usize) | TAG_SYMBOL
         }
     }
 
@@ -156,13 +144,6 @@ impl TaggedPtr {
 }
 
 
-impl From<TaggedPtr> for FatPtr {
-    fn from(ptr: TaggedPtr) -> FatPtr {
-        ptr.into_fat_ptr()
-    }
-}
-
-
 impl From<FatPtr> for TaggedPtr {
     fn from(ptr: FatPtr) -> TaggedPtr {
         match ptr {
@@ -172,19 +153,31 @@ impl From<FatPtr> for TaggedPtr {
             FatPtr::Pair(raw) => TaggedPtr::pair(raw),
             FatPtr::NumberObject(raw) => TaggedPtr::object(raw),
             FatPtr::StringObject(raw) => TaggedPtr::object(raw),
+            FatPtr::FunctionObject(raw) => TaggedPtr::object(raw),
         }
     }
 }
 
+
+/// The pointer values must be identical for two TaggedPtr instances
+/// to be equal
+impl PartialEq for TaggedPtr {
+    fn eq(&self, other: &TaggedPtr) -> bool {
+        unsafe {
+            self.tag == other.tag
+        }
+    }
+}
 
 // Defintions for heap allocated object header
 
 const HEADER_MARK_BIT: u32 = 0x1;
 const HEADER_TAG_MASK: u32 = !(0x0f << 1);
 const HEADER_TAG_PAIR: u32 = 0x00 << 1;
-const HEADER_TAG_NUMBER: u32 = 0x01 << 1;
-const HEADER_TAG_STRING: u32 = 0x02 << 1;
-const HEADER_TAG_REDIRECT: u32 = 0x3 << 1;
+const HEADER_TAG_REDIRECT: u32 = 0x1 << 1;
+const HEADER_TAG_NUMBER: u32 = 0x02 << 1;
+const HEADER_TAG_STRING: u32 = 0x03 << 1;
+const HEADER_TAG_FUNCTION: u32 = 0x04 << 1;
 
 
 /// A heap-allocated object header
@@ -204,9 +197,12 @@ impl ObjectHeader {
 
             match self.flags & HEADER_TAG_MASK {
                 HEADER_TAG_REDIRECT => {
-                    let redir_header = unsafe { &*(object_addr as *mut Redirect) }.new_location;
+                    let redir_header = { &*(object_addr as *mut Redirect) }.new_location;
                     redir_header.deref().to_object_fatptr()
                 },
+
+                HEADER_TAG_FUNCTION =>
+                    FatPtr::FunctionObject(RawPtr::from_bare(object_addr as *mut FunctionObject)),
 
                 HEADER_TAG_PAIR =>
                     FatPtr::Pair(RawPtr::from_bare(object_addr as *mut Pair)),

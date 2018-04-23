@@ -1,13 +1,16 @@
+/// Implements str interning for mapping Symbol names to unique pointers
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use heap::{StaticAllocator, Ptr};
-use types::Symbol;
+use heap::Allocator;
+use primitives::Symbol;
+use rawptr::RawPtr;
 
 
-/// A trait that describes the ability to look up a Symbol by it's name in a String
-pub trait SymbolMapper<'heap, A: 'heap + StaticAllocator> {
-    fn lookup(&self, name: &str) -> Ptr<'heap, Symbol, A>;
+/// A trait that describes the ability to look up a Symbol by it's name in a str
+pub trait SymbolMapper {
+    fn lookup(&self, name: &str) -> RawPtr<Symbol>;
 }
 
 
@@ -18,36 +21,36 @@ pub trait SymbolMapper<'heap, A: 'heap + StaticAllocator> {
 /// mapping HashMap.
 ///
 /// No Symbol is ever deleted. Symbol name strings must be immutable.
-pub struct SymbolMap<'heap, A: 'heap + StaticAllocator> {
-    map: RefCell<HashMap<String, Ptr<'heap, Symbol, A>>>,
-    heap: &'heap A,
+pub struct SymbolMap<A: Allocator + Default> {
+    map: RefCell<HashMap<String, RawPtr<Symbol>>>,
+    arena: A,
 }
 
 
-impl<'heap, A: 'heap + StaticAllocator> SymbolMap<'heap, A> {
-    pub fn new(heap: &'heap A) -> SymbolMap<'heap, A> {
+impl<A: Allocator + Default> SymbolMap<A> {
+    pub fn new() -> SymbolMap<A> {
         SymbolMap {
             map: RefCell::new(HashMap::new()),
-            heap: heap,
+            arena: Default::default(),
         }
     }
 }
 
 
-impl<'heap, A: 'heap + StaticAllocator> SymbolMapper<'heap, A> for SymbolMap<'heap, A> {
-    fn lookup(&self, name: &str) -> Ptr<'heap, Symbol, A> {
+impl<A: Allocator + Default> SymbolMapper for SymbolMap<A> {
+    fn lookup(&self, name: &str) -> RawPtr<Symbol> {
         // Can't take a map.entry(name) without providing an owned String, i.e. cloning 'name'
         // Can't insert a new entry with just a reference without hashing twice, and cloning 'name'
         // The common case, lookups, should be fast, inserts can be slower.
 
         {
             if let Some(ptr) = self.map.borrow().get(name) {
-                return ptr.clone();
+                return *ptr
             }
         }
 
         let name = String::from(name);
-        let ptr = self.heap.alloc_static(Symbol::new(&name));
+        let ptr = self.arena.alloc(Symbol::new(&name)).unwrap();
         self.map.borrow_mut().insert(name, ptr);
         ptr
     }
