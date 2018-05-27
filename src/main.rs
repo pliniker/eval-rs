@@ -1,5 +1,5 @@
 extern crate clap;
-extern crate memalloc;
+extern crate blockalloc;
 extern crate rustyline;
 
 

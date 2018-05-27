@@ -5,5 +5,5 @@ authors = ["Peter Liniker <peter.liniker+github@gmail.com>"]
 
 [dependencies]
 clap = "2.20.3"
-memalloc = "0.1.0"
 rustyline = "1.0.0"
+blockalloc = { git = "https://github.com/rust-hosted-langs/book/" }

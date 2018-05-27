@@ -4,54 +4,62 @@
 /// Implements the low level `Allocator` trait.
 
 use std::cell::{Cell, RefCell};
-use std::mem;
+use std::mem::{replace, size_of};
 use std::ptr;
 
-use memalloc::{allocate, deallocate};
+use blockalloc::{Block, BlockError};
 
 use heap::{Allocator, MemError};
 use rawptr::RawPtr;
 
 
-const BLOCK_SIZE: usize = 4096;
+/// Global fixed sized blocks
+const BLOCK_SIZE: usize = 4096 * 2;
 
 
-/// A fixed-size block of contiguous bytes type
-struct Block {
-    buffer: *mut u8,
-    size: usize,
+/// Any BlockError we'll just convert to Out Of Memory
+impl From<BlockError> for MemError {
+    fn from(_error: BlockError) -> Self {
+        MemError::OOM
+    }
+}
+
+
+/// A wrapper around a Block, adding a bump-allocation offset
+struct BumpBlock {
+    block: Block,
     bump: Cell<usize>,
 }
 
 
-impl Block {
-    fn new(size: usize) -> Result<Block, MemError> {
-        let buffer = unsafe { allocate(size) };
+impl BumpBlock {
+    fn new() -> Result<BumpBlock, MemError> {
+        let block = Block::new(BLOCK_SIZE)?;
 
-        if buffer == ptr::null_mut() {
-            Err(MemError::OOM)
-        } else {
-            Ok(
-                Block {
-                    buffer: buffer,
-                    size: size,
-                    bump: Cell::new(0),
-                }
-            )
-        }
+        Ok(
+            BumpBlock {
+                block: block,
+                bump: Cell::new(0),
+            }
+        )
     }
 
     // Allocate a new object and return it's pointer
     fn inner_alloc<T>(&self, object: T) -> Result<*mut T, T> {
-        let next_bump = self.bump.get() + mem::size_of::<T>();
 
-        if next_bump > self.size {
+        // double-word alignment
+        let align = size_of::<usize>() * 2;
+        let size = (size_of::<T>() & !(align - 1)) + align;
+
+        let next_bump = self.bump.get() + size;
+
+        if next_bump > BLOCK_SIZE {
             // just return the object if the block would overflow by allocating
             // the object into it
             Err(object)
         } else {
             let ptr = unsafe {
-                let p = self.buffer.offset(self.bump.get() as isize) as *mut T;
+                let p = self.block.as_ptr().offset(self.bump.get() as isize) as *mut T;
                 ptr::write(p, object);
                 p
             };
@@ -64,23 +72,16 @@ impl Block {
 }
 
 
-impl Drop for Block {
-    fn drop(&mut self) {
-        unsafe { deallocate(self.buffer, self.size) };
-    }
-}
-
-
 struct BlockList {
-    pub current: Block,
-    pub rest: Vec<Block>
+    pub current: BumpBlock,
+    pub rest: Vec<BumpBlock>
 }
 
 
 impl BlockList {
-    fn new(block_size: usize) -> BlockList {
+    fn new() -> BlockList {
         BlockList {
-            current: Block::new(block_size).unwrap(),
+            current: BumpBlock::new().unwrap(),
             rest: Vec::new()
         }
     }
@@ -95,9 +96,9 @@ pub struct Arena {
 
 
 impl Arena {
-    pub fn new(block_size: usize) -> Arena {
+    pub fn new() -> Arena {
         Arena {
-            blocks: RefCell::new(BlockList::new(block_size))
+            blocks: RefCell::new(BlockList::new())
         }
     }
 }
@@ -111,7 +112,7 @@ impl Allocator for Arena {
             Ok(ptr) => Ok(RawPtr::from_bare(ptr)),
 
             Err(object) => {
-                let previous = mem::replace(&mut blocks.current, Block::new(BLOCK_SIZE).unwrap());
+                let previous = replace(&mut blocks.current, BumpBlock::new()?);
                 blocks.rest.push(previous);
 
                 match blocks.current.inner_alloc(object) {
@@ -126,7 +127,7 @@ impl Allocator for Arena {
 
 impl Default for Arena {
     fn default() -> Arena {
-        Arena::new(BLOCK_SIZE)
+        Arena::new()
     }
 }
 
@@ -161,24 +162,27 @@ mod test {
 
     #[test]
     fn test_alloc_struct() {
-        let mem = Arena::new(1024);
+        let mem = Arena::new();
         if let Ok(ptr) = mem.alloc(Thing::new()) {
             assert!(unsafe { ptr.deref().check() });
         }
     }
 
     #[test]
-    fn test_out_of_memory() {
-        let mem = Block::new(mem::size_of::<Thing>() * 3).unwrap();
+    fn test_bump() {
+        let mem = BumpBlock::new().unwrap();
 
-        for _ in 0..3 {
+        let align = size_of::<usize>() * 2;
+        let size = (size_of::<Thing>() & !(align - 1)) + align;
+
+        for i in 0..(BLOCK_SIZE / size) {
             if let Err(_) = mem.inner_alloc(Thing::new()) {
-                assert!(false);
+                assert!(false, format!("no {} failed to allocate", i));
             }
         }
 
         if let Ok(_) = mem.inner_alloc(Thing::new()) {
-            assert!(false)
+            assert!(false, "last failed to fail to allocate")
         }
     }
 }
