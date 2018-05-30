@@ -1,9 +1,9 @@
-/// Implements a monotonically growing memory backing for objects that
-/// will be managed externally to this store.
+/// An Arena type for backing interned objects.
 ///
 /// Implements the low level `Allocator` trait.
 
-use std::cell::{Cell, RefCell};
+
+use std::cell::UnsafeCell;
 use std::mem::{replace, size_of};
 use std::ptr;
 
@@ -17,7 +17,8 @@ use rawptr::RawPtr;
 const BLOCK_SIZE: usize = 4096 * 2;
 
 
-/// Any BlockError we'll just convert to Out Of Memory
+/// Any BlockError we'll just convert to Out Of Memory - in any case it's
+/// a terminating error.
 impl From<BlockError> for MemError {
     fn from(_error: BlockError) -> Self {
         MemError::OOM
@@ -26,32 +27,32 @@ impl From<BlockError> for MemError {
 
 
 /// A wrapper around a Block, adding a bump-allocation offset
-struct BumpBlock {
+struct SimpleBumpBlock {
     block: Block,
-    bump: Cell<usize>,
+    bump: usize,
 }
 
 
-impl BumpBlock {
-    fn new() -> Result<BumpBlock, MemError> {
+impl SimpleBumpBlock {
+    fn new() -> Result<SimpleBumpBlock, MemError> {
         let block = Block::new(BLOCK_SIZE)?;
 
         Ok(
-            BumpBlock {
+            SimpleBumpBlock {
                 block: block,
-                bump: Cell::new(0),
+                bump: 0,
             }
         )
     }
 
     // Allocate a new object and return it's pointer
-    fn inner_alloc<T>(&self, object: T) -> Result<*mut T, T> {
+    fn inner_alloc<T>(&mut self, object: T) -> Result<*mut T, T> {
 
-        // double-word alignment
-        let align = size_of::<usize>() * 2;
+        // word align everything
+        let align = size_of::<usize>();
         let size = (size_of::<T>() & !(align - 1)) + align;
 
-        let next_bump = self.bump.get() + size;
+        let next_bump = self.bump + size;
 
         if next_bump > BLOCK_SIZE {
             // just return the object if the block would overflow by allocating
@@ -59,12 +60,12 @@ impl BumpBlock {
             Err(object)
         } else {
             let ptr = unsafe {
-                let p = self.block.as_ptr().offset(self.bump.get() as isize) as *mut T;
+                let p = self.block.as_ptr().offset(self.bump as isize) as *mut T;
                 ptr::write(p, object);
                 p
             };
 
-            self.bump.set(next_bump);
+            self.bump = next_bump;
 
             Ok(ptr)
         }
@@ -73,46 +74,48 @@ impl BumpBlock {
 
 
 struct BlockList {
-    pub current: BumpBlock,
-    pub rest: Vec<BumpBlock>
+    current: SimpleBumpBlock,
+    rest: Vec<SimpleBumpBlock>
 }
 
 
 impl BlockList {
-    fn new() -> BlockList {
-        BlockList {
-            current: BumpBlock::new().unwrap(),
+    fn new() -> Result<BlockList, MemError> {
+        Ok(BlockList {
+            current: SimpleBumpBlock::new()?,
             rest: Vec::new()
-        }
+        })
     }
 }
 
 
-/// An arena of any object type. Allocation returns `RawPtr<T>` types
-/// which must be separately lifetime-managed.
+/// An arena of any object type. Allocation returns `RawPtr<T>` types.
+///
 pub struct Arena {
-    blocks: RefCell<BlockList>
+    /// Use UnsafeCell to avoid RefCell overhead. This member will only be
+    /// accessed in `alloc<T>()`.
+    blocks: UnsafeCell<BlockList>
 }
 
 
 impl Arena {
-    pub fn new() -> Arena {
-        Arena {
-            blocks: RefCell::new(BlockList::new())
-        }
+    pub fn new() -> Result<Arena, MemError> {
+        Ok(Arena {
+            blocks: UnsafeCell::new(BlockList::new()?)
+        })
     }
 }
 
 
 impl Allocator for Arena {
     fn alloc<T>(&self, object: T) -> Result<RawPtr<T>, MemError> {
-        let mut blocks = self.blocks.borrow_mut();
+        let blocks: &mut BlockList = unsafe { &mut *self.blocks.get() };
 
         match blocks.current.inner_alloc(object) {
             Ok(ptr) => Ok(RawPtr::from_bare(ptr)),
 
             Err(object) => {
-                let previous = replace(&mut blocks.current, BumpBlock::new()?);
+                let previous = replace(&mut blocks.current, SimpleBumpBlock::new()?);
                 blocks.rest.push(previous);
 
                 match blocks.current.inner_alloc(object) {
@@ -127,7 +130,7 @@ impl Allocator for Arena {
 
 impl Default for Arena {
     fn default() -> Arena {
-        Arena::new()
+        Arena::new().expect("failed to allocate an initial Arena block")
     }
 }
 
@@ -162,7 +165,7 @@ mod test {
 
     #[test]
     fn test_alloc_struct() {
-        let mem = Arena::new();
+        let mem = Arena::new().unwrap();
         if let Ok(ptr) = mem.alloc(Thing::new()) {
             assert!(unsafe { ptr.deref().check() });
         }
@@ -170,9 +173,11 @@ mod test {
 
     #[test]
     fn test_bump() {
-        let mem = BumpBlock::new().unwrap();
+        // test expected block capacity and overflow handling
 
-        let align = size_of::<usize>() * 2;
+        let mut mem = SimpleBumpBlock::new().unwrap();
+
+        let align = size_of::<usize>();
         let size = (size_of::<Thing>() & !(align - 1)) + align;
 
         for i in 0..(BLOCK_SIZE / size) {
