@@ -10,8 +10,8 @@
 use std::convert::From;
 use std::mem::size_of;
 
-use primitives::{FunctionObject, NumberObject, Pair, StringObject, Symbol};
-use rawptr::RawPtr;
+use primitives::{NumberObject, Pair, Symbol};
+use stickyimmix::RawPtr;
 
 
 impl<T> RawPtr<T> {
@@ -38,8 +38,6 @@ pub enum FatPtr {
     Symbol(RawPtr<Symbol>),
     Number(isize),
     NumberObject(RawPtr<NumberObject>),
-    StringObject(RawPtr<StringObject>),
-    FunctionObject(RawPtr<FunctionObject>),
 }
 
 
@@ -152,8 +150,6 @@ impl From<FatPtr> for TaggedPtr {
             FatPtr::Symbol(raw) => TaggedPtr::symbol(raw),
             FatPtr::Pair(raw) => TaggedPtr::pair(raw),
             FatPtr::NumberObject(raw) => TaggedPtr::object(raw),
-            FatPtr::StringObject(raw) => TaggedPtr::object(raw),
-            FatPtr::FunctionObject(raw) => TaggedPtr::object(raw),
         }
     }
 }
@@ -174,10 +170,7 @@ impl PartialEq for TaggedPtr {
 const HEADER_MARK_BIT: u32 = 0x1;
 const HEADER_TAG_MASK: u32 = !(0x0f << 1);
 const HEADER_TAG_PAIR: u32 = 0x00 << 1;
-const HEADER_TAG_REDIRECT: u32 = 0x1 << 1;
-const HEADER_TAG_NUMBER: u32 = 0x02 << 1;
-const HEADER_TAG_STRING: u32 = 0x03 << 1;
-const HEADER_TAG_FUNCTION: u32 = 0x04 << 1;
+const HEADER_TAG_NUMBER: u32 = 0x01 << 1;
 
 
 /// A heap-allocated object header
@@ -196,31 +189,14 @@ impl ObjectHeader {
             ) + size_of::<Self>();
 
             match self.flags & HEADER_TAG_MASK {
-                HEADER_TAG_REDIRECT => {
-                    let redir_header = { &*(object_addr as *mut Redirect) }.new_location;
-                    redir_header.deref().to_object_fatptr()
-                },
-
-                HEADER_TAG_FUNCTION =>
-                    FatPtr::FunctionObject(RawPtr::from_bare(object_addr as *mut FunctionObject)),
-
                 HEADER_TAG_PAIR =>
                     FatPtr::Pair(RawPtr::from_bare(object_addr as *mut Pair)),
 
                 HEADER_TAG_NUMBER =>
                     FatPtr::NumberObject(RawPtr::from_bare(object_addr as *mut NumberObject)),
 
-                HEADER_TAG_STRING =>
-                    FatPtr::StringObject(RawPtr::from_bare(object_addr as *mut StringObject)),
-
                 _ => panic!("Invalid ObjectHeader type tag!")
             }
         }
     }
-}
-
-
-/// A pointer redirection type for when an object has been moved
-pub struct Redirect {
-    new_location: RawPtr<ObjectHeader>
 }

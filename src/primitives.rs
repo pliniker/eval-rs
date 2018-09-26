@@ -1,3 +1,10 @@
+// TODO type system as ECS:
+//
+// an instance has a type
+// a type is an Entity
+// a type has a set of traits (Components)
+
+
 use std::hash::{Hash, Hasher};
 use std::slice;
 use std::str;
@@ -82,17 +89,3 @@ impl Pair {
 pub struct NumberObject {
     value: isize
 }
-
-
-/// TODO A heap-allocated string
-pub struct StringObject {
-    len: usize,
-}
-
-
-/// TODO A function/closure pointer
-pub struct FunctionObject {
-}
-
-
-// TODO: Array, Dict...

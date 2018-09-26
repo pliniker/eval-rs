@@ -1,6 +1,6 @@
 extern crate clap;
-extern crate blockalloc;
 extern crate rustyline;
+extern crate stickyimmix;
 
 
 use std::env;
@@ -24,7 +24,7 @@ mod lexer;
 //mod parser;
 mod primitives;
 //mod printer;
-mod rawptr;
+//mod rawptr;
 mod taggedptr;
 mod symbolmap;
 //mod types;
