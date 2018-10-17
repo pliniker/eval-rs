@@ -2,6 +2,8 @@
 use std::error::Error;
 use std::fmt;
 
+use blockalloc::BlockError;
+
 
 /// Source code position
 #[derive(Debug)]
@@ -92,13 +94,24 @@ impl Error for RuntimeError {
 }
 
 
-/// Convenience function for building a `ParseEvalError`
+/// Convenience function for building a parser error
 pub fn err_parser(reason: &str) -> RuntimeError {
     RuntimeError::with_reason(ErrorKind::ParseError(String::from(reason)))
 }
 
 
-/// Convenience function for building a `ParseEvalError` including a source position
+/// Convenience function for building a parser error including a source position
 pub fn err_parser_wpos(pos: SourcePos, reason: &str) -> RuntimeError {
     RuntimeError::with_pos(ErrorKind::ParseError(String::from(reason)), pos)
+}
+
+
+/// Convert from BlockError
+impl From<BlockError> for RuntimeError {
+    fn from(other: BlockError) -> RuntimeError {
+        match other {
+            BlockError::OOM => RuntimeError::new(ErrorKind::OutOfMemory),
+            BlockError::BadRequest => RuntimeError::new(ErrorKind::BadAllocation)
+        }
+    }
 }
