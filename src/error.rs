@@ -3,28 +3,43 @@ use std::error::Error;
 use std::fmt;
 
 
-pub type SourcePos = (u32, u32);
-
-
+/// Source code position
 #[derive(Debug)]
-pub struct ParseEvalError {
-    pos: Option<SourcePos>,
-    reason: String,
+struct SourcePos {
+    line: u32,
+    column: u32
 }
 
 
-impl ParseEvalError {
-    pub fn error(reason: String) -> ParseEvalError {
-        ParseEvalError {
+#[derive(Debug)]
+enum ErrorKind {
+    ParseError(String),
+    EvalError(String),
+    OutOfMemory,
+    BadAllocation,
+}
+
+
+/// An Eval-rs runtime error type
+#[derive(Debug)]
+pub struct RuntimeError {
+    kind: ErrorKind,
+    pos: Option<SourcePos>,
+}
+
+
+impl RuntimeError {
+    pub fn new(kind: ErrorKind) -> RuntimeError {
+        RuntimeError {
+            kind: kind,
             pos: None,
-            reason: reason
         }
     }
 
-    pub fn with_pos(pos: SourcePos, reason: String) -> ParseEvalError {
-        ParseEvalError {
+    pub fn with_pos(kind: ErrorKind, pos: SourcePos) -> RuntimeError {
+        RuntimeError {
+            kind: kind,
             pos: Some(pos),
-            reason: reason,
         }
     }
 
@@ -34,45 +49,56 @@ impl ParseEvalError {
 
     /// Given the relevant source code string, show the error in context
     pub fn print_with_source(&self, source: &str) {
-        if let Some((lineno, charno)) = self.pos {
+        if let Some(pos) = self.pos {
             let mut iter = source.lines().enumerate();
 
             while let Some((count, line)) = iter.next() {
                 // count starts at 0, line numbers start at 1
-                if count + 1 == lineno as usize {
-                    println!("error: {}", self.reason);
-                    println!("{:5}|{}", lineno, line);
-                    println!("{:5}|{:width$}^", " ", " ", width = charno as usize);
+                if count + 1 == pos.line as usize {
+                    println!("error: {}", self);
+                    println!("{:5}|{}", pos.line, line);
+                    println!("{:5}|{:width$}^", " ", " ", width = pos.char as usize);
                     println!("{:5}|", " ");
                     return;
                 }
             }
         } else {
-            println!("error: {}", self.reason);
+            println!("error: {}", self);
         }
     }
 }
 
 
-impl fmt::Display for ParseEvalError {
+impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.reason)
+        match self.kind {
+            ErrorKind::ParseError(reason) => write!(f, "Parse error: {}", reason),
+            ErrorKind::EvalError(reason) => write!(f, "Evaluation error: {}", reason),
+            ErrorKind::OutOfMemory => write!(f, "Out of memory!"),
+            ErrorKind::BadAllocation => write!(f, "An invalid memory size allocation was requested!"),
+        }
     }
 }
 
 
-impl Error for ParseEvalError {
+impl Error for RuntimeError {
     fn description(&self) -> &str {
         &self.reason
     }
+
+    fn cause(&self) -> Option<&Error> {
+        None
+    }
 }
 
 
-pub fn err(reason: &str) -> ParseEvalError {
-    ParseEvalError::error(String::from(reason))
+/// Convenience function for building a `ParseEvalError`
+pub fn err_parser(reason: &str) -> RuntimeError {
+    RuntimeError::with_reason(ErrorKind::ParseError(String::from(reason)))
 }
 
 
-pub fn err_wpos(pos: SourcePos, reason: &str) -> ParseEvalError {
-    ParseEvalError::with_pos(pos, String::from(reason))
+/// Convenience function for building a `ParseEvalError` including a source position
+pub fn err_parser_wpos(pos: SourcePos, reason: &str) -> RuntimeError {
+    RuntimeError::with_pos(ErrorKind::ParseError(String::from(reason)), pos)
 }

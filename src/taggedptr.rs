@@ -11,22 +11,11 @@ use std::convert::From;
 use std::mem::size_of;
 
 use primitives::{NumberObject, Pair, Symbol};
-use stickyimmix::RawPtr;
+use stickyimmix::{AllocHeader, Mark, SizeClass, RawPtr};
 
 
-impl<T> RawPtr<T> {
-    /// Zero out the tag bits and keep the pointer
-    fn from_tagged_bare(object: *mut T) -> RawPtr<T> {
-        Self::from_bare((object as usize & TAG_MASK) as *mut T)
-    }
-
-    /// Get a pointer to an ObjectHeader (that may or may not exist) for the
-    /// object pointed at
-    unsafe fn get_header_ptr(&self) -> RawPtr<ObjectHeader> {
-        let header_pos = (self.to_bare() as usize) - size_of::<ObjectHeader>();
-
-        RawPtr::from_bare(header_pos as *mut ObjectHeader)
-    }
+fn rawptr_from_tagged_bare<T>(object: *const T) -> RawPtr<T> {
+    RawPtr::new((object as usize & TAG_MASK) as *const T)
 }
 
 
@@ -93,19 +82,19 @@ impl TaggedPtr {
 
     fn object<T>(ptr: RawPtr<T>) -> TaggedPtr {
         TaggedPtr {
-            tag: (ptr.to_bare() as usize) | TAG_OBJECT
+            tag: (ptr.get() as usize) | TAG_OBJECT
         }
     }
 
     fn pair(ptr: RawPtr<Pair>) -> TaggedPtr {
         TaggedPtr {
-            tag: (ptr.to_bare() as usize) | TAG_PAIR
+            tag: (ptr.get() as usize) | TAG_PAIR
         }
     }
 
     fn symbol(ptr: RawPtr<Symbol>) -> TaggedPtr {
         TaggedPtr {
-            tag: (ptr.to_bare() as usize) | TAG_SYMBOL
+            tag: (ptr.get() as usize) | TAG_SYMBOL
         }
     }
 
@@ -126,10 +115,10 @@ impl TaggedPtr {
             } else {
                 match self.tag & TAG_MASK {
                     TAG_NUMBER => FatPtr::Number(self.number >> 2),
-                    TAG_SYMBOL => FatPtr::Symbol(RawPtr::from_tagged_bare(self.symbol)),
-                    TAG_PAIR => FatPtr::Pair(RawPtr::from_tagged_bare(self.pair)),
+                    TAG_SYMBOL => FatPtr::Symbol(rawptr_from_tagged_bare(self.symbol)),
+                    TAG_PAIR => FatPtr::Pair(rawptr_from_tagged_bare(self.pair)),
                     TAG_OBJECT => {
-                        let object_ptr = RawPtr::from_tagged_bare(self.object);
+                        let object_ptr = rawptr_from_tagged_bare(self.object);
                         let header_ptr = object_ptr.get_header_ptr();
 
                         header_ptr.deref().to_object_fatptr()
@@ -190,13 +179,31 @@ impl ObjectHeader {
 
             match self.flags & HEADER_TAG_MASK {
                 HEADER_TAG_PAIR =>
-                    FatPtr::Pair(RawPtr::from_bare(object_addr as *mut Pair)),
+                    FatPtr::Pair(rawptr_from_tagged_bare(object_addr as *const Pair)),
 
                 HEADER_TAG_NUMBER =>
-                    FatPtr::NumberObject(RawPtr::from_bare(object_addr as *mut NumberObject)),
+                    FatPtr::NumberObject(rawptr_from_tagged_bare(object_addr as *mut NumberObject)),
 
                 _ => panic!("Invalid ObjectHeader type tag!")
             }
         }
+    }
+}
+
+
+impl AllocHeader for ObjectHeader {
+    fn new(size_class: SizeClass, mark_bit: Mark) -> Self {
+        ObjectHeader {}
+    }
+
+    fn mark(&mut self) {
+        unimplemented!()
+    }
+
+    fn is_marked(&self) -> bool {
+        unimplemented!()
+    }
+
+    fn size_class(&self) -> SizeClass {
     }
 }

@@ -5,8 +5,13 @@ use std::collections::HashMap;
 
 use heap::{Allocator, SymbolMapper};
 use primitives::Symbol;
-use rawptr::RawPtr;
+use stickyimmix::RawPtr;
 
+
+/// A trait that describes the ability to look up a Symbol by it's name in a str
+pub trait SymbolMapper {
+    fn lookup(&self, name: &str) -> RawPtr<Symbol>;
+}
 
 
 /// A mapping of symbol names (Strings) to Symbol pointers. Only one copy of the symbol

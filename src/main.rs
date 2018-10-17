@@ -1,3 +1,5 @@
+
+extern crate blockalloc;
 extern crate clap;
 extern crate rustyline;
 extern crate stickyimmix;
@@ -30,7 +32,7 @@ mod symbolmap;
 //mod types;
 
 //use memory::{Memory, eval};
-use arena::Arena;
+use stickyimmix::Heap;
 //use parser::parse;
 
 /*
