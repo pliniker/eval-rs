@@ -3,9 +3,10 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use heap::{Allocator, SymbolMapper};
+use stickyimmix::{AllocRaw, RawPtr};
+
+use arena::Arena;
 use primitives::Symbol;
-use stickyimmix::RawPtr;
 
 
 /// A trait that describes the ability to look up a Symbol by it's name in a str
@@ -21,23 +22,23 @@ pub trait SymbolMapper {
 /// mapping HashMap.
 ///
 /// No Symbol is ever deleted. Symbol name strings must be immutable.
-pub struct SymbolMap<A: Allocator> {
+pub struct SymbolMap {
     map: RefCell<HashMap<String, RawPtr<Symbol>>>,
-    arena: A,
+    arena: Arena,
 }
 
 
-impl<A: Allocator + Default> SymbolMap<A> {
-    pub fn new() -> SymbolMap<A> {
+impl SymbolMap {
+    pub fn new() -> SymbolMap {
         SymbolMap {
             map: RefCell::new(HashMap::new()),
-            arena: Default::default(),
+            arena: Arena::new(),
         }
     }
 }
 
 
-impl<A: Allocator> SymbolMapper for SymbolMap<A> {
+impl SymbolMapper for SymbolMap {
     fn lookup(&self, name: &str) -> RawPtr<Symbol> {
         // Can't take a map.entry(name) without providing an owned String, i.e. cloning 'name'
         // Can't insert a new entry with just a reference without hashing twice, and cloning 'name'

@@ -28,7 +28,7 @@ impl AllocHeader for ArenaHeader {
 /// These values are not dropped on Arena deallocation.
 /// Values must be "atomic", that is, not composed of other object
 /// pointers that need to be traced.
-struct Arena {
+pub struct Arena {
     heap: Heap<ArenaHeader>
 }
 
