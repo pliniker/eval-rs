@@ -1,4 +1,9 @@
-use error::{ParseEvalError, SourcePos};
+/// S-Expression lexer implementation.
+///
+/// This isn't using any look-ahead yet and so always interprets
+/// (.symbol) as ( DOT SYMBOL )
+
+use error::{err_lexer, RuntimeError, SourcePos, spos};
 
 
 // key characters
@@ -38,7 +43,7 @@ impl Token {
 
 
 // tokenize a String
-pub fn tokenize(input: &str) -> Result<Vec<Token>, ParseEvalError> {
+pub fn tokenize(input: &str) -> Result<Vec<Token>, RuntimeError> {
 
     use self::TokenType::*;
 
@@ -59,9 +64,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, ParseEvalError> {
     loop {
         match current {
             Some(TAB) => {
-                return Err(ParseEvalError::with_pos(
-                    (lineno, charno),
-                    String::from("tabs are not valid whitespace")))
+                return Err(err_lexer(spos(lineno, charno), "tabs are not valid whitespace"))
             }
 
             Some(SPACE) => current = chars.next(),
@@ -89,17 +92,17 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, ParseEvalError> {
             // this is not correct because it doesn't allow for a . to begin a number
             // or a symbol. Will have to fix later.
             Some(DOT) => {
-                tokens.push(Token::new((lineno, charno), Dot));
+                tokens.push(Token::new(spos(lineno, charno), Dot));
                 current = chars.next();
             }
 
             Some(OPEN_PAREN) => {
-                tokens.push(Token::new((lineno, charno), OpenParen));
+                tokens.push(Token::new(spos(lineno, charno), OpenParen));
                 current = chars.next();
             }
 
             Some(CLOSE_PAREN) => {
-                tokens.push(Token::new((lineno, charno), CloseParen));
+                tokens.push(Token::new(spos(lineno, charno), CloseParen));
                 current = chars.next();
             }
 
@@ -125,7 +128,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, ParseEvalError> {
                 }
 
                 // complete symbol
-                tokens.push(Token::new((lineno, symbol_begin), Symbol(symbol)));
+                tokens.push(Token::new(spos(lineno, symbol_begin), Symbol(symbol)));
             }
 
             // EOL
@@ -156,14 +159,11 @@ mod test {
     fn lexer_one_line() {
         if let Ok(tokens) = tokenize("(foo bar baz)") {
             assert!(tokens.len() == 5);
-            assert_eq!(tokens[0], Token::new((1, 0), TokenType::OpenParen));
-            assert_eq!(tokens[1],
-                       Token::new((1, 1), TokenType::Symbol(String::from("foo"))));
-            assert_eq!(tokens[2],
-                       Token::new((1, 5), TokenType::Symbol(String::from("bar"))));
-            assert_eq!(tokens[3],
-                       Token::new((1, 9), TokenType::Symbol(String::from("baz"))));
-            assert_eq!(tokens[4], Token::new((1, 12), TokenType::CloseParen));
+            assert_eq!(tokens[0], Token::new(spos(1, 0), TokenType::OpenParen));
+            assert_eq!(tokens[1], Token::new(spos(1, 1), TokenType::Symbol(String::from("foo"))));
+            assert_eq!(tokens[2], Token::new(spos(1, 5), TokenType::Symbol(String::from("bar"))));
+            assert_eq!(tokens[3], Token::new(spos(1, 9), TokenType::Symbol(String::from("baz"))));
+            assert_eq!(tokens[4], Token::new(spos(1, 12), TokenType::CloseParen));
         } else {
             assert!(false, "unexpected error");
         }
@@ -173,14 +173,11 @@ mod test {
     fn lexer_multi_line() {
         if let Ok(tokens) = tokenize("( foo\nbar\nbaz\n)") {
             assert!(tokens.len() == 5);
-            assert_eq!(tokens[0], Token::new((1, 0), TokenType::OpenParen));
-            assert_eq!(tokens[1],
-                       Token::new((1, 2), TokenType::Symbol(String::from("foo"))));
-            assert_eq!(tokens[2],
-                       Token::new((2, 0), TokenType::Symbol(String::from("bar"))));
-            assert_eq!(tokens[3],
-                       Token::new((3, 0), TokenType::Symbol(String::from("baz"))));
-            assert_eq!(tokens[4], Token::new((4, 0), TokenType::CloseParen));
+            assert_eq!(tokens[0], Token::new(spos(1, 0), TokenType::OpenParen));
+            assert_eq!(tokens[1], Token::new(spos(1, 2), TokenType::Symbol(String::from("foo"))));
+            assert_eq!(tokens[2], Token::new(spos(2, 0), TokenType::Symbol(String::from("bar"))));
+            assert_eq!(tokens[3], Token::new(spos(3, 0), TokenType::Symbol(String::from("baz"))));
+            assert_eq!(tokens[4], Token::new(spos(4, 0), TokenType::CloseParen));
         } else {
             assert!(false, "unexpected error");
         }
@@ -189,9 +186,9 @@ mod test {
     #[test]
     fn lexer_bad_whitespace() {
         if let Err(e) = tokenize("(foo\n\t(bar))") {
-            if let Some((lineno, charno)) = e.error_pos() {
-                assert_eq!(lineno, 2);
-                assert_eq!(charno, 0);
+            if let Some(SourcePos { line, column }) = e.error_pos() {
+                assert_eq!(line, 2);
+                assert_eq!(column, 0);
             } else {
                 assert!(false, "Expected error position");
             }

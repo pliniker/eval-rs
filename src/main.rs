@@ -16,7 +16,7 @@ use clap::{Arg, App};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-#[macro_use]
+//#[macro_use] ???
 mod arena;
 //mod callables;
 mod error;
@@ -32,7 +32,6 @@ mod symbolmap;
 //mod types;
 
 //use memory::{Memory, eval};
-use stickyimmix::Heap;
 //use parser::parse;
 
 /*

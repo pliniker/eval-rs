@@ -1,10 +1,7 @@
 
-use primitives::Symbol;
-use stickyimmix::RawPtr;
+use stickyimmix::StickyImmixHeap;
+
+use taggedptr::{ObjectHeader, TypeList};
 
 
-/// A memory error type, encompassing all memory related errors at this time.
-#[derive(Debug)]
-pub enum MemError {
-    OOM,
-}
+pub type Heap = StickyImmixHeap<ObjectHeader>;

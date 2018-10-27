@@ -1,10 +1,14 @@
+/// A memory arena implemented as an ever growing pool of blocks.
+/// Currently implemented on top of stickyimmix without any gc which includes unnecessary
+/// overhead.
 
+use stickyimmix::{AllocError, AllocHeader, AllocRaw, Mark, RawPtr, SizeClass, StickyImmixHeap};
 
-use stickyimmix::{AllocError, AllocHeader, AllocRaw, Heap, Mark, RawPtr, SizeClass};
+use taggedptr::TypeList;
 
 
 /// Allocation header for an Arena-allocated value
-struct ArenaHeader {
+pub struct ArenaHeader {
     // TODO
 }
 
@@ -12,9 +16,7 @@ struct ArenaHeader {
 /// Since we're not using this functionality in an Arena, the impl is just
 /// a set of no-ops.
 impl AllocHeader for ArenaHeader {
-    fn new(_size_class: SizeClass, _mark_bit: Mark) -> Self {
-        ArenaHeader {}
-    }
+    type TypeId = TypeList;
 
     fn mark(&mut self) {}
 
@@ -29,14 +31,14 @@ impl AllocHeader for ArenaHeader {
 /// Values must be "atomic", that is, not composed of other object
 /// pointers that need to be traced.
 pub struct Arena {
-    heap: Heap<ArenaHeader>
+    heap: StickyImmixHeap<ArenaHeader>
 }
 
 
 impl Arena {
     pub fn new() -> Arena {
         Arena {
-            heap: Heap::new()
+            heap: StickyImmixHeap::new()
         }
     }
 }
@@ -49,7 +51,11 @@ impl AllocRaw for Arena {
         self.heap.alloc(object)
     }
 
-    fn get_header(_object: *const ()) -> Self::Header {
-        unimplemented!() // TODO
+    fn get_header(_object: *const ()) -> *const Self::Header {
+        unimplemented!()
+    }
+
+    fn get_object(_header: *const Self::Header) -> *const () {
+        unimplemented!()
     }
 }

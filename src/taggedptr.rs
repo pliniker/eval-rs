@@ -7,11 +7,12 @@
 /// Also defines a `FatPtr` type which is a safe-Rust enum version of all
 /// types which can be expanded from `TaggedPtr` and `ObjectHeader` combined.
 
-use std::convert::From;
 use std::mem::size_of;
 
+use stickyimmix::{AllocHeader, AllocObject, AllocRaw, AllocTypeId, Mark, SizeClass, RawPtr};
+
+use heap::Heap;
 use primitives::{NumberObject, Pair, Symbol};
-use stickyimmix::{AllocHeader, Mark, SizeClass, RawPtr};
 
 
 fn rawptr_from_tagged_bare<T>(object: *const T) -> RawPtr<T> {
@@ -37,7 +38,7 @@ impl From<TaggedPtr> for FatPtr {
 }
 
 
-/// Value comparison, not identity comparison
+/// Identity comparison
 impl PartialEq for FatPtr {
     fn eq(&self, other: &FatPtr) -> bool {
 
@@ -45,8 +46,10 @@ impl PartialEq for FatPtr {
 
         match (*self, *other) {
             (Nil, Nil) => true,
+            (Pair(p), Pair(q)) => p == q,
+            (Symbol(p), Symbol(q)) => p == q,
             (Number(i), Number(j)) => i == j,
-            // TODO
+            (NumberObject(p), NumberObject(q)) => p ==q,
             _ => false
         }
     }
@@ -59,9 +62,9 @@ impl PartialEq for FatPtr {
 pub union TaggedPtr {
     tag: usize,
     number: isize,
-    symbol: *mut Symbol,
-    pair: *mut Pair,
-    object: *mut (),
+    symbol: *const Symbol,
+    pair: *const Pair,
+    object: *const (),
 }
 
 
@@ -117,12 +120,19 @@ impl TaggedPtr {
                     TAG_NUMBER => FatPtr::Number(self.number >> 2),
                     TAG_SYMBOL => FatPtr::Symbol(rawptr_from_tagged_bare(self.symbol)),
                     TAG_PAIR => FatPtr::Pair(rawptr_from_tagged_bare(self.pair)),
-                    TAG_OBJECT => {
-                        let object_ptr = rawptr_from_tagged_bare(self.object);
-                        let header_ptr = object_ptr.get_header_ptr();
 
-                        header_ptr.deref().to_object_fatptr()
+                    TAG_OBJECT => {
+                        let untyped_object_ptr = rawptr_from_tagged_bare(self.object).get();
+                        let header_ptr = Heap::get_header(untyped_object_ptr);
+
+                        let header = &*header_ptr as &ObjectHeader;
+
+                        match header.type_id {
+                            // TODO
+                            _ => panic!("Invalid ObjectHeader type id!")
+                        }
                     },
+
                     _ => panic!("Invalid TaggedPtr type tag!")
                 }
             }
@@ -144,8 +154,7 @@ impl From<FatPtr> for TaggedPtr {
 }
 
 
-/// The pointer values must be identical for two TaggedPtr instances
-/// to be equal
+/// Simple idendity equality
 impl PartialEq for TaggedPtr {
     fn eq(&self, other: &TaggedPtr) -> bool {
         unsafe {
@@ -156,20 +165,34 @@ impl PartialEq for TaggedPtr {
 
 // Defintions for heap allocated object header
 
-const HEADER_MARK_BIT: u32 = 0x1;
-const HEADER_TAG_MASK: u32 = !(0x0f << 1);
-const HEADER_TAG_PAIR: u32 = 0x00 << 1;
-const HEADER_TAG_NUMBER: u32 = 0x01 << 1;
+/// Recognized heap-allocated types
+#[repr(u16)]
+pub enum TypeList {
+    Nil,
+    Pair,
+    Symbol,
+    NumberObject
+}
+
+
+// Mark this as a Stickyimmix type-identifier type
+impl AllocTypeId for TypeList {}
 
 
 /// A heap-allocated object header
 pub struct ObjectHeader {
-    flags: u32,
+    mark: Mark,
+    size_class: SizeClass,
+    type_id: TypeList,
     size: u32
 }
 
 
 impl ObjectHeader {
+    pub fn new(size: u32, type_id: TypeList, size_class: SizeClass, mark: Mark) -> ObjectHeader {
+        ObjectHeader { mark, size_class, type_id, size }
+    }
+
     /// Convert the ObjectHeader address to a FatPtr pointing at the object itself
     pub fn to_object_fatptr(&self) -> FatPtr {
         unsafe {
@@ -177,33 +200,55 @@ impl ObjectHeader {
                 self as *const ObjectHeader as *const () as usize
             ) + size_of::<Self>();
 
-            match self.flags & HEADER_TAG_MASK {
-                HEADER_TAG_PAIR =>
+            match self.type_id {
+                TypeList::Pair =>
                     FatPtr::Pair(rawptr_from_tagged_bare(object_addr as *const Pair)),
 
-                HEADER_TAG_NUMBER =>
+                TypeList::NumberObject =>
                     FatPtr::NumberObject(rawptr_from_tagged_bare(object_addr as *mut NumberObject)),
+
+                // TODO
 
                 _ => panic!("Invalid ObjectHeader type tag!")
             }
         }
     }
+
+    // Object should be immediately after object header TODO this is up to the allocator!
+    fn object_addr(&self) -> *const () {
+        unsafe { (self as *const ObjectHeader as *const()).offset(size_of::<Self>() as isize) }
+    }
 }
 
 
 impl AllocHeader for ObjectHeader {
-    fn new(size_class: SizeClass, mark_bit: Mark) -> Self {
-        ObjectHeader {}
-    }
+    type TypeId = TypeList;
 
     fn mark(&mut self) {
-        unimplemented!()
+        self.mark = Mark::Marked;
     }
 
     fn is_marked(&self) -> bool {
-        unimplemented!()
+        self.mark == Mark::Marked
     }
 
     fn size_class(&self) -> SizeClass {
+        self.size_class
     }
+}
+
+
+/// Symbols are managed by the Symbol Mapper, which is backed by an Arena
+impl AllocObject<TypeList> for Symbol {
+    const TYPE_ID: TypeList = TypeList::Symbol;
+}
+
+
+impl AllocObject<TypeList> for Pair {
+    const TYPE_ID: TypeList = TypeList::Pair;
+}
+
+
+impl AllocObject<TypeList> for NumberObject {
+    const TYPE_ID: TypeList = TypeList::NumberObject;
 }

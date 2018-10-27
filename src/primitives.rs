@@ -12,6 +12,7 @@ use std::str;
 use error::SourcePos;
 use taggedptr::TaggedPtr;
 
+
 /// A Symbol is a unique object that has a unique name string. The backing storage for the
 /// underlying str data must have a lifetime of at least that of the Symbol instance to
 /// prevent use-after-free.
@@ -32,7 +33,7 @@ impl Symbol {
         }
     }
 
-    /// unsafe because there is no inbuilt guarantee here that the internal pointer is valid
+    /// Unsafe because Symbol does not own the &str
     pub unsafe fn as_str(&self) -> &str {
         let slice = slice::from_raw_parts(self.name_ptr, self.name_len);
         str::from_utf8(slice).unwrap()
@@ -40,14 +41,13 @@ impl Symbol {
 }
 
 
-/// TODO since as_str() is unsafe, this should be too
+/// TODO since as_str() is unsafe, this should be too, but how can this be made to make sense?
 impl Hash for Symbol {
     fn hash<H: Hasher>(&self, state: &mut H) {
         unsafe { self.as_str() }.hash(state);
     }
 }
 
-// The following types must be have an ObjectHeader preceding them on the heap
 
 /// Redefine Pair from types.rs
 pub struct Pair {
