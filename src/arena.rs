@@ -2,7 +2,7 @@
 /// Currently implemented on top of stickyimmix without any gc which includes unnecessary
 /// overhead.
 
-use stickyimmix::{AllocError, AllocHeader, AllocRaw, Mark, RawPtr, SizeClass, StickyImmixHeap};
+use stickyimmix::{AllocError, AllocHeader, AllocObject, AllocRaw, Mark, RawPtr, SizeClass, StickyImmixHeap};
 
 use taggedptr::TypeList;
 
@@ -17,6 +17,10 @@ pub struct ArenaHeader {
 /// a set of no-ops.
 impl AllocHeader for ArenaHeader {
     type TypeId = TypeList;
+
+    fn new<O: AllocObject<Self::TypeId>>(_size: u32, _size_class: SizeClass, _mark: Mark) -> ArenaHeader {
+        ArenaHeader {}
+    }
 
     fn mark(&mut self) {}
 

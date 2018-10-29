@@ -2,7 +2,7 @@
 /// type of the object pointed to for certain types.
 ///
 /// Defines an `ObjectHeader` type to immediately preceed each heap allocated
-/// objects which also contains a type tag but with space for many more types.
+/// object, which also contains a type tag but with space for many more types.
 ///
 /// Also defines a `FatPtr` type which is a safe-Rust enum version of all
 /// types which can be expanded from `TaggedPtr` and `ObjectHeader` combined.
@@ -189,10 +189,6 @@ pub struct ObjectHeader {
 
 
 impl ObjectHeader {
-    pub fn new(size: u32, type_id: TypeList, size_class: SizeClass, mark: Mark) -> ObjectHeader {
-        ObjectHeader { mark, size_class, type_id, size }
-    }
-
     /// Convert the ObjectHeader address to a FatPtr pointing at the object itself
     pub fn to_object_fatptr(&self) -> FatPtr {
         unsafe {
@@ -223,6 +219,15 @@ impl ObjectHeader {
 
 impl AllocHeader for ObjectHeader {
     type TypeId = TypeList;
+
+    fn new<O: AllocObject<Self::TypeId>>(size: u32, size_class: SizeClass, mark: Mark) -> ObjectHeader {
+        ObjectHeader {
+            mark: mark,
+            size_class: size_class,
+            type_id: O::TYPE_ID,
+            size: size
+        }
+    }
 
     fn mark(&mut self) {
         self.mark = Mark::Marked;
