@@ -126,11 +126,7 @@ impl TaggedPtr {
                         let header_ptr = Heap::get_header(untyped_object_ptr);
 
                         let header = &*header_ptr as &ObjectHeader;
-
-                        match header.type_id {
-                            // TODO
-                            _ => panic!("Invalid ObjectHeader type id!")
-                        }
+                        header.to_object_fatptr()
                     },
 
                     _ => panic!("Invalid TaggedPtr type tag!")
@@ -168,7 +164,6 @@ impl PartialEq for TaggedPtr {
 /// Recognized heap-allocated types
 #[repr(u16)]
 pub enum TypeList {
-    Nil,
     Pair,
     Symbol,
     NumberObject
@@ -184,35 +179,23 @@ pub struct ObjectHeader {
     mark: Mark,
     size_class: SizeClass,
     type_id: TypeList,
-    size: u32
+    size_bytes: u32
 }
 
 
 impl ObjectHeader {
     /// Convert the ObjectHeader address to a FatPtr pointing at the object itself
     pub fn to_object_fatptr(&self) -> FatPtr {
-        unsafe {
-            let object_addr = (
-                self as *const ObjectHeader as *const () as usize
-            ) + size_of::<Self>();
+        let object_addr = Heap::get_object(self);
 
-            match self.type_id {
-                TypeList::Pair =>
-                    FatPtr::Pair(rawptr_from_tagged_bare(object_addr as *const Pair)),
+        // Only Object* types should be derived from the header.
+        // Symbol, Pair and Number should have been derived from a pointer tag.
+        match self.type_id {
+            TypeList::NumberObject =>
+                FatPtr::NumberObject(RawPtr::new(object_addr as *const NumberObject)),
 
-                TypeList::NumberObject =>
-                    FatPtr::NumberObject(rawptr_from_tagged_bare(object_addr as *mut NumberObject)),
-
-                // TODO
-
-                _ => panic!("Invalid ObjectHeader type tag!")
-            }
+            _ => panic!("Invalid ObjectHeader type tag!")
         }
-    }
-
-    // Object should be immediately after object header TODO this is up to the allocator!
-    fn object_addr(&self) -> *const () {
-        unsafe { (self as *const ObjectHeader as *const()).offset(size_of::<Self>() as isize) }
     }
 }
 
@@ -225,7 +208,7 @@ impl AllocHeader for ObjectHeader {
             mark: mark,
             size_class: size_class,
             type_id: O::TYPE_ID,
-            size: size
+            size_bytes: size
         }
     }
 
@@ -239,6 +222,10 @@ impl AllocHeader for ObjectHeader {
 
     fn size_class(&self) -> SizeClass {
         self.size_class
+    }
+
+    fn size(&self) -> u32 {
+        self.size_bytes
     }
 }
 
