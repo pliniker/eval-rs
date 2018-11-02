@@ -27,6 +27,8 @@ impl AllocHeader for ArenaHeader {
     fn is_marked(&self) -> bool { true }
 
     fn size_class(&self) -> SizeClass { SizeClass::Small }
+
+    fn size(&self) -> u32 { 1 }
 }
 
 
@@ -51,7 +53,9 @@ impl Arena {
 impl AllocRaw for Arena {
     type Header = ArenaHeader;
 
-    fn alloc<T>(&self, object: T) -> Result<RawPtr<T>, AllocError> {
+    fn alloc<T>(&self, object: T) -> Result<RawPtr<T>, AllocError>
+        where T: AllocObject<TypeList>
+    {
         self.heap.alloc(object)
     }
 
