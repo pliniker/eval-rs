@@ -2,6 +2,7 @@
 name = "evalrus"
 version = "0.0.1"
 authors = ["Peter Liniker <peter.liniker+github@gmail.com>"]
+edition = "2018"
 
 [dependencies]
 clap = "2.20.3"
