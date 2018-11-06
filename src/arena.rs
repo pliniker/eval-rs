@@ -4,7 +4,7 @@
 
 use stickyimmix::{AllocError, AllocHeader, AllocObject, AllocRaw, Mark, RawPtr, SizeClass, StickyImmixHeap};
 
-use taggedptr::TypeList;
+use crate::taggedptr::TypeList;
 
 
 /// Allocation header for an Arena-allocated value

@@ -9,8 +9,8 @@ use std::hash::{Hash, Hasher};
 use std::slice;
 use std::str;
 
-use error::SourcePos;
-use taggedptr::TaggedPtr;
+use crate::error::SourcePos;
+use crate::taggedptr::TaggedPtr;
 
 
 /// A Symbol is a unique object that has a unique name string. The backing storage for the

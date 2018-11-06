@@ -11,8 +11,8 @@ use std::mem::size_of;
 
 use stickyimmix::{AllocHeader, AllocObject, AllocRaw, AllocTypeId, Mark, SizeClass, RawPtr};
 
-use heap::Heap;
-use primitives::{NumberObject, Pair, Symbol};
+use crate::heap::Heap;
+use crate::primitives::{NumberObject, Pair, Symbol};
 
 
 fn rawptr_from_tagged_bare<T>(object: *const T) -> RawPtr<T> {

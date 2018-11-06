@@ -3,7 +3,7 @@
 /// This isn't using any look-ahead yet and so always interprets
 /// (.symbol) as ( DOT SYMBOL )
 
-use error::{err_lexer, RuntimeError, SourcePos, spos};
+use crate::error::{err_lexer, RuntimeError, SourcePos, spos};
 
 
 // key characters

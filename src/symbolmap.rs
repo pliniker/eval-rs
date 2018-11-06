@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 use stickyimmix::{AllocRaw, RawPtr};
 
-use arena::Arena;
-use primitives::Symbol;
+use crate::arena::Arena;
+use crate::primitives::Symbol;
 
 
 /// A trait that describes the ability to look up a Symbol by it's name in a str
