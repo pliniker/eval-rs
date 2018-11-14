@@ -14,7 +14,7 @@ pub fn debug(value: FatPtr) -> String {
 }
 
 
-
+/// TODO unsafe inside
 /// Standard Display output should print out S-expressions.
 impl fmt::Display for FatPtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

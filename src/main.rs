@@ -23,7 +23,7 @@ mod error;
 mod heap;
 mod lexer;
 //mod memory;
-//mod parser;
+mod parser;
 mod primitives;
 mod printer;
 //mod rawptr;
