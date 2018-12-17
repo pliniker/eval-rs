@@ -8,6 +8,7 @@
 /// types which can be expanded from `TaggedPtr` and `ObjectHeader` combined.
 
 use std::mem::size_of;
+use std::ptr::NonNull;
 
 use stickyimmix::{AllocHeader, AllocObject, AllocRaw, AllocTypeId, Mark, SizeClass, RawPtr};
 
@@ -15,8 +16,24 @@ use crate::heap::Heap;
 use crate::primitives::{NumberObject, Pair, Symbol};
 
 
-fn rawptr_from_tagged_bare<T>(object: *const T) -> RawPtr<T> {
-    RawPtr::new((object as usize & TAG_MASK) as *const T)
+fn rawptr_from_tagged_bare<T>(object: NonNull<T>) -> RawPtr<T> {
+    RawPtr::new((object.as_ptr() as usize & TAG_MASK) as *const T)
+}
+
+
+trait Tagged<T> {
+    fn tag(self, tag: usize) -> NonNull<T>;
+    fn untag(from: NonNull<T>) -> RawPtr<T>;
+}
+
+impl<T> Tagged<T> for RawPtr<T> {
+    fn tag(self, tag: usize) -> NonNull<T> {
+        unsafe { NonNull::new_unchecked((self.as_word() | tag) as *mut T) }
+    }
+
+    fn untag(from: NonNull<T>) -> RawPtr<T> {
+        RawPtr::new((from.as_ptr() as usize & TAG_MASK) as *const T)
+    }
 }
 
 
@@ -62,9 +79,9 @@ impl PartialEq for FatPtr {
 pub union TaggedPtr {
     tag: usize,
     number: isize,
-    symbol: *const Symbol,
-    pair: *const Pair,
-    object: *const (),
+    symbol: NotNull<Symbol>,
+    pair: NotNull<Pair>,
+    object: NotNull<()>,
 }
 
 
@@ -85,22 +102,23 @@ impl TaggedPtr {
 
     fn object<T>(ptr: RawPtr<T>) -> TaggedPtr {
         TaggedPtr {
-            tag: (ptr.get() as usize) | TAG_OBJECT
+            tag: (ptr.as_word()) | TAG_OBJECT
         }
     }
 
     fn pair(ptr: RawPtr<Pair>) -> TaggedPtr {
         TaggedPtr {
-            tag: (ptr.get() as usize) | TAG_PAIR
+            tag: (ptr.as_word()) | TAG_PAIR
         }
     }
 
     fn symbol(ptr: RawPtr<Symbol>) -> TaggedPtr {
         TaggedPtr {
-            tag: (ptr.get() as usize) | TAG_SYMBOL
+            tag: (ptr.as_word()) | TAG_SYMBOL
         }
     }
 
+    // TODO deal with big numbers later
     fn number(value: isize) -> TaggedPtr {
         TaggedPtr {
             tag: ((value as usize) << 2) | TAG_NUMBER
@@ -122,7 +140,7 @@ impl TaggedPtr {
                     TAG_PAIR => FatPtr::Pair(rawptr_from_tagged_bare(self.pair)),
 
                     TAG_OBJECT => {
-                        let untyped_object_ptr = rawptr_from_tagged_bare(self.object).get();
+                        let untyped_object_ptr = rawptr_from_tagged_bare(self.object).as_untyped();
                         let header_ptr = Heap::get_header(untyped_object_ptr);
 
                         let header = &*header_ptr as &ObjectHeader;

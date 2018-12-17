@@ -2,6 +2,9 @@
 /// Currently implemented on top of stickyimmix without any gc which includes unnecessary
 /// overhead.
 
+
+use std::ptr::NonNull;
+
 use stickyimmix::{AllocError, AllocHeader, AllocObject, AllocRaw, Mark, RawPtr, SizeClass, StickyImmixHeap};
 
 use crate::taggedptr::TypeList;
@@ -59,11 +62,11 @@ impl AllocRaw for Arena {
         self.heap.alloc(object)
     }
 
-    fn get_header(_object: *const ()) -> *const Self::Header {
+    fn get_header(_object: NonNull<()>) -> NonNull<Self::Header> {
         unimplemented!()
     }
 
-    fn get_object(_header: *const Self::Header) -> *const () {
+    fn get_object(_header: NonNull<Self::Header>) -> NonNull<()> {
         unimplemented!()
     }
 }
