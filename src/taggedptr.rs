@@ -7,7 +7,6 @@
 /// Also defines a `FatPtr` type which is a safe-Rust enum version of all
 /// types which can be expanded from `TaggedPtr` and `ObjectHeader` combined.
 
-use std::mem::size_of;
 use std::ptr::NonNull;
 
 use stickyimmix::{AllocHeader, AllocObject, AllocRaw, AllocTypeId, Mark, SizeClass, RawPtr};
@@ -16,11 +15,15 @@ use crate::heap::Heap;
 use crate::primitives::{NumberObject, Pair, Symbol};
 
 
-fn rawptr_from_tagged_bare<T>(object: NonNull<T>) -> RawPtr<T> {
-    RawPtr::new((object.as_ptr() as usize & TAG_MASK) as *const T)
+/// For conversion of a reference to a NonNull<T>
+trait AsNonNull {
+    fn non_null_ptr(&self) -> NonNull<Self> {
+        unsafe { NonNull::new_unchecked(self as *const Self as *mut Self) }
+    }
 }
 
 
+/// Type tag ops on RawPtr<T>
 trait Tagged<T> {
     fn tag(self, tag: usize) -> NonNull<T>;
     fn untag(from: NonNull<T>) -> RawPtr<T>;
@@ -79,9 +82,9 @@ impl PartialEq for FatPtr {
 pub union TaggedPtr {
     tag: usize,
     number: isize,
-    symbol: NotNull<Symbol>,
-    pair: NotNull<Pair>,
-    object: NotNull<()>,
+    symbol: NonNull<Symbol>,
+    pair: NonNull<Pair>,
+    object: NonNull<()>,
 }
 
 
@@ -102,26 +105,26 @@ impl TaggedPtr {
 
     fn object<T>(ptr: RawPtr<T>) -> TaggedPtr {
         TaggedPtr {
-            tag: (ptr.as_word()) | TAG_OBJECT
+            object: ptr.tag(TAG_OBJECT).cast::<()>()
         }
     }
 
     fn pair(ptr: RawPtr<Pair>) -> TaggedPtr {
         TaggedPtr {
-            tag: (ptr.as_word()) | TAG_PAIR
+            pair: ptr.tag(TAG_PAIR)
         }
     }
 
     fn symbol(ptr: RawPtr<Symbol>) -> TaggedPtr {
         TaggedPtr {
-            tag: (ptr.as_word()) | TAG_SYMBOL
+            symbol: ptr.tag(TAG_SYMBOL)
         }
     }
 
     // TODO deal with big numbers later
     fn number(value: isize) -> TaggedPtr {
         TaggedPtr {
-            tag: ((value as usize) << 2) | TAG_NUMBER
+            number: (((value as usize) << 2) | TAG_NUMBER) as isize
         }
     }
 
@@ -136,15 +139,14 @@ impl TaggedPtr {
             } else {
                 match self.tag & TAG_MASK {
                     TAG_NUMBER => FatPtr::Number(self.number >> 2),
-                    TAG_SYMBOL => FatPtr::Symbol(rawptr_from_tagged_bare(self.symbol)),
-                    TAG_PAIR => FatPtr::Pair(rawptr_from_tagged_bare(self.pair)),
+                    TAG_SYMBOL => FatPtr::Symbol(RawPtr::untag(self.symbol)),
+                    TAG_PAIR => FatPtr::Pair(RawPtr::untag(self.pair)),
 
                     TAG_OBJECT => {
-                        let untyped_object_ptr = rawptr_from_tagged_bare(self.object).as_untyped();
+                        let untyped_object_ptr = RawPtr::untag(self.object).as_untyped();
                         let header_ptr = Heap::get_header(untyped_object_ptr);
 
-                        let header = &*header_ptr as &ObjectHeader;
-                        header.to_object_fatptr()
+                        header_ptr.as_ref().get_object_fatptr()
                     },
 
                     _ => panic!("Invalid TaggedPtr type tag!")
@@ -168,7 +170,7 @@ impl From<FatPtr> for TaggedPtr {
 }
 
 
-/// Simple idendity equality
+/// Simple identity equality
 impl PartialEq for TaggedPtr {
     fn eq(&self, other: &TaggedPtr) -> bool {
         unsafe {
@@ -201,16 +203,20 @@ pub struct ObjectHeader {
 }
 
 
+impl AsNonNull for ObjectHeader {}
+
+
 impl ObjectHeader {
     /// Convert the ObjectHeader address to a FatPtr pointing at the object itself
-    pub fn to_object_fatptr(&self) -> FatPtr {
-        let object_addr = Heap::get_object(self);
+    pub fn get_object_fatptr(&self) -> FatPtr {
+        let self_as_nonnull = self.non_null_ptr();
+        let object_addr = Heap::get_object(self_as_nonnull);
 
         // Only Object* types should be derived from the header.
         // Symbol, Pair and Number should have been derived from a pointer tag.
         match self.type_id {
             TypeList::NumberObject =>
-                FatPtr::NumberObject(RawPtr::new(object_addr as *const NumberObject)),
+                FatPtr::NumberObject(RawPtr::untag(object_addr.cast::<NumberObject>())),
 
             _ => panic!("Invalid ObjectHeader type tag!")
         }
