@@ -198,7 +198,7 @@ pub fn parse(input: &str, env: &Heap) -> Result<FatPtr, RuntimeError>
 mod test {
     use super::*;
     use crate::memory::Memory;
-    use crate::heap::Arena;
+    use crate::arena::Arena;
     use crate::printer::print;
 
     fn check(input: &str, expect: &str) {

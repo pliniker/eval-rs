@@ -1,4 +1,5 @@
 
+
 extern crate blockalloc;
 extern crate clap;
 extern crate rustyline;
@@ -16,19 +17,17 @@ use clap::{Arg, App};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-//#[macro_use] ???
 mod arena;
-//mod callables;
 mod error;
 mod heap;
 mod lexer;
-//mod memory;
-mod parser;
+mod outer_api;
+//mod parser;
 mod primitives;
 mod printer;
+//mod rooting;
 mod taggedptr;
 mod symbolmap;
-//mod types;
 
 //use memory::{Memory, eval};
 //use parser::parse;

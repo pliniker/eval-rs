@@ -1,11 +1,11 @@
 /// Defines a `TaggedPtr` type where the low bits of a pointer indicate the
 /// type of the object pointed to for certain types.
 ///
-/// Defines an `ObjectHeader` type to immediately preceed each heap allocated
-/// object, which also contains a type tag but with space for many more types.
-///
 /// Also defines a `FatPtr` type which is a safe-Rust enum version of all
 /// types which can be expanded from `TaggedPtr` and `ObjectHeader` combined.
+///
+/// Defines an `ObjectHeader` type to immediately preceed each heap allocated
+/// object, which also contains a type tag but with space for many more types.
 
 use std::ptr::NonNull;
 
