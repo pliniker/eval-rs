@@ -1,4 +1,4 @@
-use std::cell::UnsafeCell;
+use std::cell::Cell;
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem::forget;
@@ -24,9 +24,9 @@ pub struct Root<'guard, 'env: 'guard> {
 }
 
 impl<'guard, 'env> Root<'guard, 'env> {
-    pub fn new(_guard: &'guard mut RootScopeGuard<'env>, thing: FatPtr) -> Root<'guard, 'env> {
+    pub fn new(_guard: &'guard mut RootScopeGuard<'env>, ptr: FatPtr) -> Root<'guard, 'env> {
         Root {
-            root: thing,
+            root: ptr,
             _mkr: PhantomData,
         }
     }
@@ -59,7 +59,7 @@ impl<'guard, 'env> fmt::Display for Root<'guard, 'env> {
 
 // A GC managed mutable root pointer
 struct MutRoot<'guard, 'env: 'guard> {
-    root: NonNull<FatPtr>,
+    root: *const FatPtr,
     _mkr: PhantomData<&'guard mut RootScopeGuard<'env>>,
 }
 
@@ -175,7 +175,7 @@ macro_rules! match_root {
 
 // A minimal pretend GC environment
 struct Environment {
-    regs: UnsafeCell<Vec<FatPtr>>,
+    regs: Vec<Cell<FatPtr>>>,
 }
 
 impl Environment {
@@ -184,11 +184,11 @@ impl Environment {
 
         let mut regs = Vec::with_capacity(capacity);
         for _ in 0..capacity {
-            regs.push(FatPtr::Nil);
+            regs.push(Cell::new(FatPtr::Nil));
         }
 
         Environment {
-            regs: UnsafeCell::new(regs),
+            regs: regs,
         }
     }
 

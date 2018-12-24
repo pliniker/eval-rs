@@ -8,13 +8,6 @@ use stickyimmix::{AllocRaw, RawPtr};
 use crate::arena::Arena;
 use crate::primitives::Symbol;
 
-
-/// A trait that describes the ability to look up a Symbol by it's name in a str
-pub trait SymbolMapper {
-    fn lookup(&self, name: &str) -> RawPtr<Symbol>;
-}
-
-
 /// A mapping of symbol names (Strings) to Symbol pointers. Only one copy of the symbol
 /// name String is kept; a Symbol resides in managed memory with a raw pointer to the
 /// String. Thus the lifetime of the SymbolMap must be at least the lifetime of the
@@ -27,7 +20,6 @@ pub struct SymbolMap {
     arena: Arena,
 }
 
-
 impl SymbolMap {
     pub fn new() -> SymbolMap {
         SymbolMap {
@@ -35,11 +27,8 @@ impl SymbolMap {
             arena: Arena::new(),
         }
     }
-}
 
-
-impl SymbolMapper for SymbolMap {
-    fn lookup(&self, name: &str) -> RawPtr<Symbol> {
+    pub fn lookup(&self, name: &str) -> RawPtr<Symbol> {
         // Can't take a map.entry(name) without providing an owned String, i.e. cloning 'name'
         // Can't insert a new entry with just a reference without hashing twice, and cloning 'name'
         // The common case, lookups, should be fast, inserts can be slower.
