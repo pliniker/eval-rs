@@ -19,15 +19,16 @@ use rustyline::Editor;
 
 mod arena;
 mod error;
+mod headers;
 mod heap;
 mod lexer;
-mod outer_api;
 //mod parser;
 mod primitives;
 mod printer;
-//mod rooting;
-mod taggedptr;
+mod ptrops;
+mod safeptr;
 mod symbolmap;
+mod taggedptr;
 
 //use memory::{Memory, eval};
 //use parser::parse;

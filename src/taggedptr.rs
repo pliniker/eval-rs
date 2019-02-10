@@ -1,46 +1,38 @@
-/// Defines a `TaggedPtr` type where the low bits of a pointer indicate the
-/// type of the object pointed to for certain types.
+/// This file defines pointer abstractions.
+/// From high level to low, safest to unsafest:
+///  * Value > FatPtr > TaggedPtr
 ///
-/// Also defines a `FatPtr` type which is a safe-Rust enum version of all
+/// Defines a `Value` type which is a safe-Rust enum of references to object
+/// types.
+///
+/// Defines a `FatPtr` type which is a Rust tagged-union enum version of all
 /// types which can be expanded from `TaggedPtr` and `ObjectHeader` combined.
 ///
-/// Defines an `ObjectHeader` type to immediately preceed each heap allocated
-/// object, which also contains a type tag but with space for many more types.
+/// Defines a `TaggedPtr` type where the low bits of a pointer indicate the
+/// type of the object pointed to for certain types.
 
 use std::ptr::NonNull;
 
-use stickyimmix::{AllocHeader, AllocObject, AllocRaw, AllocTypeId, Mark, SizeClass, RawPtr};
+use stickyimmix::{AllocRaw, RawPtr};
 
 use crate::heap::Heap;
 use crate::primitives::{NumberObject, Pair, Symbol};
+use crate::ptrops::{get_tag, ScopedRef, Tagged, TAG_SYMBOL, TAG_PAIR, TAG_NUMBER, TAG_OBJECT};
 
-
-/// For conversion of a reference to a NonNull<T>
-trait AsNonNull {
-    fn non_null_ptr(&self) -> NonNull<Self> {
-        unsafe { NonNull::new_unchecked(self as *const Self as *mut Self) }
-    }
+/// A safe interface to GC-heap managed objects. The `'scope` lifetime must be a safe lifetime for
+/// the GC not to move or collect the referenced object.
+/// This should represent every type native to the runtime.
+#[derive(Copy, Clone)]
+pub enum Value<'scope> {
+    Nil,
+    Pair(&'scope Pair),
+    Symbol(&'scope Symbol),
+    Number(isize),
+    NumberObject(&'scope NumberObject),
 }
 
-
-/// Type tag ops on RawPtr<T>
-trait Tagged<T> {
-    fn tag(self, tag: usize) -> NonNull<T>;
-    fn untag(from: NonNull<T>) -> RawPtr<T>;
-}
-
-impl<T> Tagged<T> for RawPtr<T> {
-    fn tag(self, tag: usize) -> NonNull<T> {
-        unsafe { NonNull::new_unchecked((self.as_word() | tag) as *mut T) }
-    }
-
-    fn untag(from: NonNull<T>) -> RawPtr<T> {
-        RawPtr::new((from.as_ptr() as usize & TAG_MASK) as *const T)
-    }
-}
-
-
-/// An unpacked tagged Fat Pointer that carries the type information in the enum structure
+/// An unpacked tagged Fat Pointer that carries the type information in the enum structure.
+/// This should represent every type native to the runtime.
 #[derive(Copy, Clone)]
 pub enum FatPtr {
     Nil,
@@ -50,13 +42,42 @@ pub enum FatPtr {
     NumberObject(RawPtr<NumberObject>),
 }
 
+impl FatPtr {
+    /// Given a lifetime, convert to a `Value` type. Unsafe because anything can provide a lifetime
+    /// without any safety guarantee that it's valid.
+    /// TODO consider requiring a `MutatorScopeGuard` here.
+    pub unsafe fn as_value<'scope>(&self) -> Value<'scope> {
+        match self {
+            FatPtr::Nil => Value::Nil,
+            FatPtr::Pair(raw_ptr) => Value::Pair(raw_ptr.scoped_ref()),
+            FatPtr::Symbol(raw_ptr) => Value::Symbol(raw_ptr.scoped_ref()),
+            FatPtr::Number(num) => Value::Number(*num),
+            FatPtr::NumberObject(raw_ptr) => Value::NumberObject(raw_ptr.scoped_ref()),
+        }
+    }
+}
 
+/// Implement `From<RawPtr<T>> for FatPtr` for the given FatPtr discriminant and the given `T`
+macro_rules! fatptr_from_primitive {
+    ($F:tt, $T:ty) => {
+        impl From<RawPtr<$T>> for FatPtr {
+            fn from(ptr: RawPtr<$T>) -> FatPtr {
+                FatPtr::$F(ptr)
+            }
+        }
+    }
+}
+
+fatptr_from_primitive!(Pair, Pair);
+fatptr_from_primitive!(Symbol, Symbol);
+fatptr_from_primitive!(NumberObject, NumberObject);
+
+/// Conversion from a TaggedPtr type
 impl From<TaggedPtr> for FatPtr {
     fn from(ptr: TaggedPtr) -> FatPtr {
         ptr.into_fat_ptr()
     }
 }
-
 
 /// Identity comparison
 impl PartialEq for FatPtr {
@@ -75,9 +96,7 @@ impl PartialEq for FatPtr {
     }
 }
 
-
-/// An packed Tagged Pointer which carries type information in the pointers
-/// low bits
+/// An packed Tagged Pointer which carries type information in the pointers low 2 bits
 #[derive(Copy, Clone)]
 pub union TaggedPtr {
     tag: usize,
@@ -87,40 +106,36 @@ pub union TaggedPtr {
     object: NonNull<()>,
 }
 
-
-const TAG_MASK: usize = 0x3;
-const TAG_NUMBER: usize = 0x0;
-const TAG_SYMBOL: usize = 0x1;
-const TAG_PAIR: usize = 0x2;
-const TAG_OBJECT: usize = 0x3;
-const PTR_MASK: usize = !0x3;
-
-
 impl TaggedPtr {
+    /// Construct a nil TaggedPtr
     pub fn nil() -> TaggedPtr {
         TaggedPtr {
             tag: 0
         }
     }
 
+    /// Construct a generic object TaggedPtr
     fn object<T>(ptr: RawPtr<T>) -> TaggedPtr {
         TaggedPtr {
             object: ptr.tag(TAG_OBJECT).cast::<()>()
         }
     }
 
+    /// Construct a Pair TaggedPtr
     fn pair(ptr: RawPtr<Pair>) -> TaggedPtr {
         TaggedPtr {
             pair: ptr.tag(TAG_PAIR)
         }
     }
 
+    /// Construct a Symbol TaggedPtr
     fn symbol(ptr: RawPtr<Symbol>) -> TaggedPtr {
         TaggedPtr {
             symbol: ptr.tag(TAG_SYMBOL)
         }
     }
 
+    /// Construct an inline integer TaggedPtr
     // TODO deal with big numbers later
     fn number(value: isize) -> TaggedPtr {
         TaggedPtr {
@@ -128,16 +143,12 @@ impl TaggedPtr {
         }
     }
 
-    pub fn is_nil(&self) -> bool {
-        unsafe { self.tag == 0 }
-    }
-
     fn into_fat_ptr(&self) -> FatPtr {
         unsafe {
             if self.tag == 0 {
                 FatPtr::Nil
             } else {
-                match self.tag & TAG_MASK {
+                match get_tag(self.tag) {
                     TAG_NUMBER => FatPtr::Number(self.number >> 2),
                     TAG_SYMBOL => FatPtr::Symbol(RawPtr::untag(self.symbol)),
                     TAG_PAIR => FatPtr::Pair(RawPtr::untag(self.pair)),
@@ -156,7 +167,6 @@ impl TaggedPtr {
     }
 }
 
-
 impl From<FatPtr> for TaggedPtr {
     fn from(ptr: FatPtr) -> TaggedPtr {
         match ptr {
@@ -169,7 +179,6 @@ impl From<FatPtr> for TaggedPtr {
     }
 }
 
-
 /// Simple identity equality
 impl PartialEq for TaggedPtr {
     fn eq(&self, other: &TaggedPtr) -> bool {
@@ -177,94 +186,4 @@ impl PartialEq for TaggedPtr {
             self.tag == other.tag
         }
     }
-}
-
-// Defintions for heap allocated object header
-
-/// Recognized heap-allocated types
-#[repr(u16)]
-pub enum TypeList {
-    Pair,
-    Symbol,
-    NumberObject
-}
-
-
-// Mark this as a Stickyimmix type-identifier type
-impl AllocTypeId for TypeList {}
-
-
-/// A heap-allocated object header
-pub struct ObjectHeader {
-    mark: Mark,
-    size_class: SizeClass,
-    type_id: TypeList,
-    size_bytes: u32
-}
-
-
-impl AsNonNull for ObjectHeader {}
-
-
-impl ObjectHeader {
-    /// Convert the ObjectHeader address to a FatPtr pointing at the object itself
-    pub fn get_object_fatptr(&self) -> FatPtr {
-        let self_as_nonnull = self.non_null_ptr();
-        let object_addr = Heap::get_object(self_as_nonnull);
-
-        // Only Object* types should be derived from the header.
-        // Symbol, Pair and Number should have been derived from a pointer tag.
-        match self.type_id {
-            TypeList::NumberObject =>
-                FatPtr::NumberObject(RawPtr::untag(object_addr.cast::<NumberObject>())),
-
-            _ => panic!("Invalid ObjectHeader type tag!")
-        }
-    }
-}
-
-
-impl AllocHeader for ObjectHeader {
-    type TypeId = TypeList;
-
-    fn new<O: AllocObject<Self::TypeId>>(size: u32, size_class: SizeClass, mark: Mark) -> ObjectHeader {
-        ObjectHeader {
-            mark: mark,
-            size_class: size_class,
-            type_id: O::TYPE_ID,
-            size_bytes: size
-        }
-    }
-
-    fn mark(&mut self) {
-        self.mark = Mark::Marked;
-    }
-
-    fn is_marked(&self) -> bool {
-        self.mark == Mark::Marked
-    }
-
-    fn size_class(&self) -> SizeClass {
-        self.size_class
-    }
-
-    fn size(&self) -> u32 {
-        self.size_bytes
-    }
-}
-
-
-/// Symbols are managed by the Symbol Mapper, which is backed by an Arena
-impl AllocObject<TypeList> for Symbol {
-    const TYPE_ID: TypeList = TypeList::Symbol;
-}
-
-
-impl AllocObject<TypeList> for Pair {
-    const TYPE_ID: TypeList = TypeList::Pair;
-}
-
-
-impl AllocObject<TypeList> for NumberObject {
-    const TYPE_ID: TypeList = TypeList::NumberObject;
 }

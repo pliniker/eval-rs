@@ -7,7 +7,7 @@ use std::ptr::NonNull;
 
 use stickyimmix::{AllocError, AllocHeader, AllocObject, AllocRaw, Mark, RawPtr, SizeClass, StickyImmixHeap};
 
-use crate::taggedptr::TypeList;
+use crate::headers::TypeList;
 
 
 /// Allocation header for an Arena-allocated value

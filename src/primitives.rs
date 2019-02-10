@@ -1,16 +1,25 @@
-// TODO type system as ECS:
-//
-// an instance has a type
-// a type is an Entity
-// a type has a set of traits (Components)
+/// Native runtime types
 
-
+use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::slice;
 use std::str;
 
 use crate::error::SourcePos;
-use crate::taggedptr::TaggedPtr;
+use crate::taggedptr::{TaggedPtr, Value};
+
+
+impl<'scope> fmt::Display for Value<'scope> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Value::Nil => write!(f, "nil"),
+            Value::Pair(p) => write!(f, "{}", p),
+            Value::Symbol(s) => write!(f, "{}", s),
+            Value::Number(n) => write!(f, "{}", *n),
+            Value::NumberObject(n) => write!(f, "{}", n),
+        }
+    }
+}
 
 
 /// A Symbol is a unique object that has a unique name string. The backing storage for the
