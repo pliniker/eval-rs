@@ -1,11 +1,10 @@
 /// Defines an `ObjectHeader` type to immediately preceed each heap allocated
 /// object, which also contains a type tag but with space for many more types.
-
-use stickyimmix::{AllocHeader, AllocObject, AllocRaw, AllocTypeId, Mark, SizeClass, RawPtr};
+use stickyimmix::{AllocHeader, AllocObject, AllocRaw, AllocTypeId, Mark, RawPtr, SizeClass};
 
 use crate::heap::Heap;
-use crate::primitives::{NumberObject, Pair, Symbol};
 use crate::pointerops::{AsNonNull, Tagged};
+use crate::primitives::{NumberObject, Pair, Symbol};
 use crate::taggedptr::FatPtr;
 
 /// Recognized heap-allocated types.
@@ -14,7 +13,7 @@ use crate::taggedptr::FatPtr;
 pub enum TypeList {
     Pair,
     Symbol,
-    NumberObject
+    NumberObject,
 }
 
 // Mark this as a Stickyimmix type-identifier type
@@ -25,7 +24,7 @@ pub struct ObjectHeader {
     mark: Mark,
     size_class: SizeClass,
     type_id: TypeList,
-    size_bytes: u32
+    size_bytes: u32,
 }
 
 impl ObjectHeader {
@@ -37,10 +36,11 @@ impl ObjectHeader {
         // Only Object* types should be derived from the header.
         // Symbol, Pair and Number should have been derived from a pointer tag.
         match self.type_id {
-            TypeList::NumberObject =>
-                FatPtr::NumberObject(RawPtr::untag(object_addr.cast::<NumberObject>())),
+            TypeList::NumberObject => {
+                FatPtr::NumberObject(RawPtr::untag(object_addr.cast::<NumberObject>()))
+            }
 
-            _ => panic!("Invalid ObjectHeader type tag!")
+            _ => panic!("Invalid ObjectHeader type tag!"),
         }
     }
 }
@@ -50,12 +50,16 @@ impl AsNonNull for ObjectHeader {}
 impl AllocHeader for ObjectHeader {
     type TypeId = TypeList;
 
-    fn new<O: AllocObject<Self::TypeId>>(size: u32, size_class: SizeClass, mark: Mark) -> ObjectHeader {
+    fn new<O: AllocObject<Self::TypeId>>(
+        size: u32,
+        size_class: SizeClass,
+        mark: Mark,
+    ) -> ObjectHeader {
         ObjectHeader {
             mark: mark,
             size_class: size_class,
             type_id: O::TYPE_ID,
-            size_bytes: size
+            size_bytes: size,
         }
     }
 
@@ -82,7 +86,7 @@ macro_rules! declare_allocobject {
         impl AllocObject<TypeList> for $T {
             const TYPE_ID: TypeList = TypeList::$I;
         }
-    }
+    };
 }
 
 declare_allocobject!(Symbol, Symbol);

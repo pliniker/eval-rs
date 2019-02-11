@@ -2,9 +2,7 @@
 ///
 /// This isn't using any look-ahead yet and so always interprets
 /// (.symbol) as ( DOT SYMBOL )
-
-use crate::error::{err_lexer, RuntimeError, SourcePos, spos};
-
+use crate::error::{err_lexer, spos, RuntimeError, SourcePos};
 
 // key characters
 const OPEN_PAREN: char = '(';
@@ -15,7 +13,6 @@ const CR: char = '\r';
 const LF: char = '\n';
 const DOT: char = '.';
 
-
 #[derive(Debug, PartialEq)]
 pub enum TokenType {
     OpenParen,
@@ -24,13 +21,11 @@ pub enum TokenType {
     Dot,
 }
 
-
 #[derive(Debug, PartialEq)]
 pub struct Token {
     pub pos: SourcePos,
     pub token: TokenType,
 }
-
 
 impl Token {
     fn new(pos: SourcePos, token: TokenType) -> Token {
@@ -41,10 +36,8 @@ impl Token {
     }
 }
 
-
 // tokenize a String
 pub fn tokenize(input: &str) -> Result<Vec<Token>, RuntimeError> {
-
     use self::TokenType::*;
 
     // characters that terminate a symbol
@@ -64,7 +57,10 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, RuntimeError> {
     loop {
         match current {
             Some(TAB) => {
-                return Err(err_lexer(spos(lineno, charno), "tabs are not valid whitespace"))
+                return Err(err_lexer(
+                    spos(lineno, charno),
+                    "tabs are not valid whitespace",
+                ));
             }
 
             Some(SPACE) => current = chars.next(),
@@ -141,7 +137,6 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, RuntimeError> {
     Ok(tokens)
 }
 
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -160,9 +155,18 @@ mod test {
         if let Ok(tokens) = tokenize("(foo bar baz)") {
             assert!(tokens.len() == 5);
             assert_eq!(tokens[0], Token::new(spos(1, 0), TokenType::OpenParen));
-            assert_eq!(tokens[1], Token::new(spos(1, 1), TokenType::Symbol(String::from("foo"))));
-            assert_eq!(tokens[2], Token::new(spos(1, 5), TokenType::Symbol(String::from("bar"))));
-            assert_eq!(tokens[3], Token::new(spos(1, 9), TokenType::Symbol(String::from("baz"))));
+            assert_eq!(
+                tokens[1],
+                Token::new(spos(1, 1), TokenType::Symbol(String::from("foo")))
+            );
+            assert_eq!(
+                tokens[2],
+                Token::new(spos(1, 5), TokenType::Symbol(String::from("bar")))
+            );
+            assert_eq!(
+                tokens[3],
+                Token::new(spos(1, 9), TokenType::Symbol(String::from("baz")))
+            );
             assert_eq!(tokens[4], Token::new(spos(1, 12), TokenType::CloseParen));
         } else {
             assert!(false, "unexpected error");
@@ -174,9 +178,18 @@ mod test {
         if let Ok(tokens) = tokenize("( foo\nbar\nbaz\n)") {
             assert!(tokens.len() == 5);
             assert_eq!(tokens[0], Token::new(spos(1, 0), TokenType::OpenParen));
-            assert_eq!(tokens[1], Token::new(spos(1, 2), TokenType::Symbol(String::from("foo"))));
-            assert_eq!(tokens[2], Token::new(spos(2, 0), TokenType::Symbol(String::from("bar"))));
-            assert_eq!(tokens[3], Token::new(spos(3, 0), TokenType::Symbol(String::from("baz"))));
+            assert_eq!(
+                tokens[1],
+                Token::new(spos(1, 2), TokenType::Symbol(String::from("foo")))
+            );
+            assert_eq!(
+                tokens[2],
+                Token::new(spos(2, 0), TokenType::Symbol(String::from("bar")))
+            );
+            assert_eq!(
+                tokens[3],
+                Token::new(spos(3, 0), TokenType::Symbol(String::from("baz")))
+            );
             assert_eq!(tokens[4], Token::new(spos(4, 0), TokenType::CloseParen));
         } else {
             assert!(false, "unexpected error");

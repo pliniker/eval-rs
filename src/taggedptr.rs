@@ -10,14 +10,13 @@
 ///
 /// Defines a `TaggedPtr` type where the low bits of a pointer indicate the
 /// type of the object pointed to for certain types.
-
 use std::ptr::NonNull;
 
 use stickyimmix::{AllocRaw, RawPtr};
 
 use crate::heap::Heap;
+use crate::pointerops::{get_tag, ScopedRef, Tagged, TAG_NUMBER, TAG_OBJECT, TAG_PAIR, TAG_SYMBOL};
 use crate::primitives::{NumberObject, Pair, Symbol};
-use crate::pointerops::{get_tag, ScopedRef, Tagged, TAG_SYMBOL, TAG_PAIR, TAG_NUMBER, TAG_OBJECT};
 
 /// A safe interface to GC-heap managed objects. The `'scope` lifetime must be a safe lifetime for
 /// the GC not to move or collect the referenced object.
@@ -65,7 +64,7 @@ macro_rules! fatptr_from_primitive {
                 FatPtr::$F(ptr)
             }
         }
-    }
+    };
 }
 
 fatptr_from_primitive!(Pair, Pair);
@@ -82,7 +81,6 @@ impl From<TaggedPtr> for FatPtr {
 /// Identity comparison
 impl PartialEq for FatPtr {
     fn eq(&self, other: &FatPtr) -> bool {
-
         use self::FatPtr::*;
 
         match (*self, *other) {
@@ -90,8 +88,8 @@ impl PartialEq for FatPtr {
             (Pair(p), Pair(q)) => p == q,
             (Symbol(p), Symbol(q)) => p == q,
             (Number(i), Number(j)) => i == j,
-            (NumberObject(p), NumberObject(q)) => p ==q,
-            _ => false
+            (NumberObject(p), NumberObject(q)) => p == q,
+            _ => false,
         }
     }
 }
@@ -109,29 +107,27 @@ pub union TaggedPtr {
 impl TaggedPtr {
     /// Construct a nil TaggedPtr
     pub fn nil() -> TaggedPtr {
-        TaggedPtr {
-            tag: 0
-        }
+        TaggedPtr { tag: 0 }
     }
 
     /// Construct a generic object TaggedPtr
     fn object<T>(ptr: RawPtr<T>) -> TaggedPtr {
         TaggedPtr {
-            object: ptr.tag(TAG_OBJECT).cast::<()>()
+            object: ptr.tag(TAG_OBJECT).cast::<()>(),
         }
     }
 
     /// Construct a Pair TaggedPtr
     fn pair(ptr: RawPtr<Pair>) -> TaggedPtr {
         TaggedPtr {
-            pair: ptr.tag(TAG_PAIR)
+            pair: ptr.tag(TAG_PAIR),
         }
     }
 
     /// Construct a Symbol TaggedPtr
     fn symbol(ptr: RawPtr<Symbol>) -> TaggedPtr {
         TaggedPtr {
-            symbol: ptr.tag(TAG_SYMBOL)
+            symbol: ptr.tag(TAG_SYMBOL),
         }
     }
 
@@ -139,7 +135,7 @@ impl TaggedPtr {
     // TODO deal with big numbers later
     fn number(value: isize) -> TaggedPtr {
         TaggedPtr {
-            number: (((value as usize) << 2) | TAG_NUMBER) as isize
+            number: (((value as usize) << 2) | TAG_NUMBER) as isize,
         }
     }
 
@@ -158,9 +154,9 @@ impl TaggedPtr {
                         let header_ptr = Heap::get_header(untyped_object_ptr);
 
                         header_ptr.as_ref().get_object_fatptr()
-                    },
+                    }
 
-                    _ => panic!("Invalid TaggedPtr type tag!")
+                    _ => panic!("Invalid TaggedPtr type tag!"),
                 }
             }
         }
@@ -182,8 +178,6 @@ impl From<FatPtr> for TaggedPtr {
 /// Simple identity equality
 impl PartialEq for TaggedPtr {
     fn eq(&self, other: &TaggedPtr) -> bool {
-        unsafe {
-            self.tag == other.tag
-        }
+        unsafe { self.tag == other.tag }
     }
 }

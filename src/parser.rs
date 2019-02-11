@@ -1,21 +1,19 @@
 use std::iter::Peekable;
 
-use crate::error::{RuntimeError, SourcePos, spos, err_parser, err_parser_wpos};
-use crate::lexer::{tokenize, Token, TokenType};
+use crate::error::{err_parser, err_parser_wpos, spos, RuntimeError, SourcePos};
 use crate::heap::Heap;
-use crate::symbolmap::SymbolMapper;
+use crate::lexer::{tokenize, Token, TokenType};
 use crate::primitives::{Pair, Symbol};
+use crate::symbolmap::SymbolMapper;
 use crate::taggedptr::{FatPtr, TaggedPtr};
 
 use stickyimmix::{AllocRaw, RawPtr};
-
 
 // A linked list, internal to the parser to simplify the code and is not stored in managed memory
 struct PairList {
     head: Option<RawPtr<Pair>>,
     tail: Option<RawPtr<Pair>>,
 }
-
 
 impl PairList {
     /// Create a new empty list
@@ -27,8 +25,7 @@ impl PairList {
     }
 
     /// Move the given value to managed memory and append it to the list
-    fn push(&mut self, value: FatPtr, pos: SourcePos, heap: &Heap)
-    {
+    fn push(&mut self, value: FatPtr, pos: SourcePos, heap: &Heap) {
         if let Some(mut old_tail) = self.tail {
             let mut new_tail = old_tail.append(heap, value);
             self.tail = Some(new_tail);
@@ -63,7 +60,6 @@ impl PairList {
     }
 }
 
-
 //
 // A list is either
 // * empty
@@ -77,34 +73,47 @@ impl PairList {
 //  * a Dot, it must be followed by an s-expression and a CloseParen
 //
 fn parse_list<'i, I: 'i>(tokens: &mut Peekable<I>, env: &Heap) -> Result<FatPtr, RuntimeError>
-    where I: Iterator<Item = &'i Token>
+where
+    I: Iterator<Item = &'i Token>,
 {
     use self::TokenType::*;
 
     // peek at very first token after the open-paren
     match tokens.peek() {
-        Some(&&Token { token: CloseParen, pos: _ }) => {
+        Some(&&Token {
+            token: CloseParen,
+            pos: _,
+        }) => {
             tokens.next();
             return Ok(FatPtr::Nil);
-        },
+        }
 
         Some(&&Token { token: Dot, pos }) => {
-            return Err(err_parser_wpos(pos, "Unexpected '.' dot after open-parenthesis"));
-        },
+            return Err(err_parser_wpos(
+                pos,
+                "Unexpected '.' dot after open-parenthesis",
+            ));
+        }
 
-        _ => ()
+        _ => (),
     }
 
     // we have what looks like a valid list so far...
     let mut list = PairList::open();
     loop {
         match tokens.peek() {
-            Some(&&Token { token: OpenParen, pos }) => {
+            Some(&&Token {
+                token: OpenParen,
+                pos,
+            }) => {
                 tokens.next();
                 list.push(parse_list(tokens, env)?, pos, &env.heap);
             }
 
-            Some(&&Token { token: Symbol(ref name), pos }) => {
+            Some(&&Token {
+                token: Symbol(ref name),
+                pos,
+            }) => {
                 tokens.next();
                 let sym = env.syms.lookup(name);
                 list.push(FatPtr::Symbol(sym), pos, &env.heap);
@@ -116,17 +125,26 @@ fn parse_list<'i, I: 'i>(tokens: &mut Peekable<I>, env: &Heap) -> Result<FatPtr,
 
                 // the only valid sequence here on out is Dot s-expression CloseParen
                 match tokens.peek() {
-                    Some(&&Token { token: CloseParen, pos: _ }) => (),
+                    Some(&&Token {
+                        token: CloseParen,
+                        pos: _,
+                    }) => (),
 
                     Some(&&Token { token: _, pos }) => {
-                        return Err(err_parser_wpos(pos, "Dotted pair must be closed by a ')' close-parenthesis"))
-                    },
+                        return Err(err_parser_wpos(
+                            pos,
+                            "Dotted pair must be closed by a ')' close-parenthesis",
+                        ));
+                    }
 
                     None => return Err(err_parser("Unexpected end of code stream")),
                 }
             }
 
-            Some(&&Token { token: CloseParen, pos: _ }) => {
+            Some(&&Token {
+                token: CloseParen,
+                pos: _,
+            }) => {
                 tokens.next();
                 break;
             }
@@ -140,7 +158,6 @@ fn parse_list<'i, I: 'i>(tokens: &mut Peekable<I>, env: &Heap) -> Result<FatPtr,
     Ok(FatPtr::Pair(list.close()))
 }
 
-
 //
 // Parse a single s-expression
 //
@@ -149,29 +166,35 @@ fn parse_list<'i, I: 'i>(tokens: &mut Peekable<I>, env: &Heap) -> Result<FatPtr,
 //  * or a list
 //
 fn parse_sexpr<'i, I: 'i>(tokens: &mut Peekable<I>, env: &Heap) -> Result<FatPtr, RuntimeError>
-    where I: Iterator<Item = &'i Token>
+where
+    I: Iterator<Item = &'i Token>,
 {
     use self::TokenType::*;
 
     match tokens.peek() {
-        Some(&&Token { token: OpenParen, pos: _ }) => {
+        Some(&&Token {
+            token: OpenParen,
+            pos: _,
+        }) => {
             tokens.next();
             parse_list(tokens, env)
         }
 
-        Some(&&Token { token: Symbol(ref name), pos: _ }) => {
+        Some(&&Token {
+            token: Symbol(ref name),
+            pos: _,
+        }) => {
             tokens.next();
             let sym = env.syms.lookup(name);
             Ok(FatPtr::Symbol(sym))
         }
 
-        Some(&&Token { token: CloseParen, pos }) => {
-            Err(err_parser_wpos(pos, "Unmatched close parenthesis"))
-        }
+        Some(&&Token {
+            token: CloseParen,
+            pos,
+        }) => Err(err_parser_wpos(pos, "Unmatched close parenthesis")),
 
-        Some(&&Token { token: Dot, pos }) => {
-            Err(err_parser_wpos(pos, "Invalid symbol '.'"))
-        }
+        Some(&&Token { token: Dot, pos }) => Err(err_parser_wpos(pos, "Invalid symbol '.'")),
 
         None => {
             tokens.next();
@@ -180,35 +203,30 @@ fn parse_sexpr<'i, I: 'i>(tokens: &mut Peekable<I>, env: &Heap) -> Result<FatPtr
     }
 }
 
-
-fn parse_tokens(tokens: Vec<Token>, env: &Heap) -> Result<FatPtr, RuntimeError>
-{
+fn parse_tokens(tokens: Vec<Token>, env: &Heap) -> Result<FatPtr, RuntimeError> {
     let mut tokenstream = tokens.iter().peekable();
     parse_sexpr(&mut tokenstream, env)
 }
 
-
-pub fn parse(input: &str, env: &Heap) -> Result<FatPtr, RuntimeError>
-{
+pub fn parse(input: &str, env: &Heap) -> Result<FatPtr, RuntimeError> {
     parse_tokens(tokenize(input)?, env)
 }
-
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::memory::Memory;
     use crate::arena::Arena;
+    use crate::memory::Memory;
     use crate::printer::print;
 
     fn check(input: &str, expect: &str) {
         let heap = Arena::new(1024);
         let mut env = Memory::new(&heap);
         let ast = parse(input, &mut env).unwrap();
-        println!("expect: {}\n\tgot:    {}\n\tdebug:  {:?}",
-                 &expect,
-                 &ast,
-                 &ast);
+        println!(
+            "expect: {}\n\tgot:    {}\n\tdebug:  {:?}",
+            &expect, &ast, &ast
+        );
         assert!(print(&ast) == expect);
     }
 

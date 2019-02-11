@@ -1,5 +1,4 @@
 /// Implements str interning for mapping Symbol names to unique pointers
-
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -35,7 +34,7 @@ impl SymbolMap {
 
         {
             if let Some(ptr) = self.map.borrow().get(name) {
-                return *ptr
+                return *ptr;
             }
         }
 

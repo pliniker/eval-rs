@@ -1,5 +1,4 @@
 /// Native runtime types
-
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::slice;
@@ -7,7 +6,6 @@ use std::str;
 
 use crate::error::SourcePos;
 use crate::taggedptr::{TaggedPtr, Value};
-
 
 impl<'scope> fmt::Display for Value<'scope> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -21,7 +19,6 @@ impl<'scope> fmt::Display for Value<'scope> {
     }
 }
 
-
 /// A Symbol is a unique object that has a unique name string. The backing storage for the
 /// underlying str data must have a lifetime of at least that of the Symbol instance to
 /// prevent use-after-free.
@@ -31,7 +28,6 @@ pub struct Symbol {
     name_ptr: *const u8,
     name_len: usize,
 }
-
 
 impl Symbol {
     /// The originating &str must be owned by a SymbolMap hash table
@@ -49,7 +45,6 @@ impl Symbol {
     }
 }
 
-
 /// TODO since as_str() is unsafe, this should be too, but how can this be made to make sense?
 impl Hash for Symbol {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -57,16 +52,14 @@ impl Hash for Symbol {
     }
 }
 
-
 /// Redefine Pair from types.rs
 pub struct Pair {
     pub first: TaggedPtr,
     pub second: TaggedPtr,
     // Possible source code positions of the first and second values
     pub first_pos: Option<SourcePos>,
-    pub second_pos: Option<SourcePos>
+    pub second_pos: Option<SourcePos>,
 }
-
 
 impl Pair {
     pub fn new() -> Pair {
@@ -74,27 +67,26 @@ impl Pair {
             first: TaggedPtr::nil(),
             second: TaggedPtr::nil(),
             first_pos: None,
-            second_pos: None
+            second_pos: None,
         }
     }
-/*
-    /// Compare contents of one Pair to another
-    pub fn eq(&self, other: RawPtr<Pair>) -> bool {
-        self.first == other.first && self.second == other.second
-    }
+    /*
+        /// Compare contents of one Pair to another
+        pub fn eq(&self, other: RawPtr<Pair>) -> bool {
+            self.first == other.first && self.second == other.second
+        }
 
-    /// Set Pair.second to a new Pair with newPair.first set to the value
-    pub fn append(&mut self, allocator: &'heap A, value: Value<'heap, A>) -> Ptr<'heap, Pair<'heap, A>, A> {
-        let mut pair = allocator.alloc(Pair::new());
-        self.second = Value::Pair(pair);
-        pair.first = value;
-        pair
-    }
-*/
+        /// Set Pair.second to a new Pair with newPair.first set to the value
+        pub fn append(&mut self, allocator: &'heap A, value: Value<'heap, A>) -> Ptr<'heap, Pair<'heap, A>, A> {
+            let mut pair = allocator.alloc(Pair::new());
+            self.second = Value::Pair(pair);
+            pair.first = value;
+            pair
+        }
+    */
 }
-
 
 /// TODO A heap-allocated number
 pub struct NumberObject {
-    value: isize
+    value: isize,
 }

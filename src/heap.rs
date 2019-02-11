@@ -24,9 +24,7 @@ impl Environment {
             regs.push(Cell::new(FatPtr::Nil));
         }
 
-        Environment {
-            regs: regs
-        }
+        Environment { regs: regs }
     }
 
     pub fn get_reg(&self, reg: usize) -> FatPtr {
@@ -40,22 +38,25 @@ impl Environment {
     // Heap-allocate an unrooted object
     pub fn alloc<T>(&self, object: T) -> FatPtr
     where
-        FatPtr: From<RawPtr<T>>
+        FatPtr: From<RawPtr<T>>,
     {
-        FatPtr::from(RawPtr::new(object))
+        FatPtr::Nil //from(RawPtr::new(object))
     }
 
     // Allocate an object and store it's pointer into the specified register number
     pub fn alloc_into_reg<T>(&self, reg: usize, object: T) -> FatPtr
     where
-        FatPtr: From<RawPtr<T>>
+        FatPtr: From<RawPtr<T>>,
     {
-        let ptr = FatPtr::from(RawPtr::new(object));
+        let ptr = FatPtr::Nil; //from(RawPtr::new(object));
         self.regs[reg].set(ptr);
         ptr
     }
 
-    fn mutate<F>(&self, f: F) where F: Fn(&mut MutatorScopeGuard) {
+    fn mutate<F>(&self, f: F)
+    where
+        F: Fn(&mut MutatorScopeGuard),
+    {
         let mut guard = MutatorScopeGuard::new(self);
         f(&mut guard);
     }

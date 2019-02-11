@@ -1,5 +1,4 @@
 /// Miscelaneous pointer operations
-
 use std::ptr::NonNull;
 
 use stickyimmix::RawPtr;

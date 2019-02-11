@@ -1,18 +1,14 @@
-
 use std::fmt;
 
 use crate::taggedptr::FatPtr;
-
 
 pub fn print(value: FatPtr) -> String {
     format!("{}", value)
 }
 
-
 pub fn debug(value: FatPtr) -> String {
     format!("{:?}", value)
 }
-
 
 /// TODO unsafe inside
 /// Standard Display output should print out S-expressions.
@@ -45,26 +41,29 @@ impl fmt::Display for FatPtr {
                 }
 
                 write!(f, ")")
-            },
+            }
 
             _ => write!(f, "<UNKNOWN-TYPE!>"),
         }
     }
-
 }
-
 
 /// Debug printing will print Pairs as literally as possible, using dot notation everywhere.
 impl fmt::Debug for FatPtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             FatPtr::Nil => write!(f, "nil"),
-            FatPtr::Symbol(ptr) => write!(f, "{}", unsafe { ptr.as_ref().as_str() } ),
+            FatPtr::Symbol(ptr) => write!(f, "{}", unsafe { ptr.as_ref().as_str() }),
             FatPtr::Pair(ptr) => {
                 let pair = unsafe { ptr.as_ref() };
-                write!(f, "({:?} . {:?})", FatPtr::from(pair.first), FatPtr::from(pair.second))
-            },
-            _ => write!(f, "<UNKNOWN-TYPE!>")
+                write!(
+                    f,
+                    "({:?} . {:?})",
+                    FatPtr::from(pair.first),
+                    FatPtr::from(pair.second)
+                )
+            }
+            _ => write!(f, "<UNKNOWN-TYPE!>"),
         }
     }
 }

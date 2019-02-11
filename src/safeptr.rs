@@ -5,38 +5,38 @@ use std::ops::Deref;
 
 use stickyimmix::RawPtr;
 
-use crate::taggedptr::{Value, FatPtr, TaggedPtr};
 use crate::heap::Environment;
+use crate::taggedptr::{FatPtr, TaggedPtr, Value};
 
 // A thing to limit moveability and lifetime of ScopedPtr pointers; also the mutator's view into
 /// an allocation API
 pub struct MutatorScopeGuard<'env> {
-    env: &'env Environment
+    env: &'env Environment,
 }
 
 impl<'env> MutatorScopeGuard<'env> {
-    fn new(env: &'env Environment) -> MutatorScopeGuard {
+    pub fn new(env: &'env Environment) -> MutatorScopeGuard {
         MutatorScopeGuard { env }
     }
 
-    fn get_reg(&self, reg: usize) -> ScopedPtr<'_, 'env> {
+    pub fn get_reg(&self, reg: usize) -> ScopedPtr<'_, 'env> {
         ScopedPtr::new(self, self.env.get_reg(reg))
     }
 
-    fn set_reg(&self, reg: usize, ptr: ScopedPtr<'_, 'env>) {
+    pub fn set_reg(&self, reg: usize, ptr: ScopedPtr<'_, 'env>) {
         self.env.set_reg(reg, ptr.ptr);
     }
 
-    fn alloc<T>(&self, object: T) -> ScopedPtr<'_, 'env>
+    pub fn alloc<T>(&self, object: T) -> ScopedPtr<'_, 'env>
     where
-        FatPtr: From<RawPtr<T>>
+        FatPtr: From<RawPtr<T>>,
     {
         ScopedPtr::new(self, self.env.alloc(object))
     }
 
-    fn alloc_into_reg<T>(&self, reg: usize, object: T) -> ScopedPtr<'_, 'env>
+    pub fn alloc_into_reg<T>(&self, reg: usize, object: T) -> ScopedPtr<'_, 'env>
     where
-        FatPtr: From<RawPtr<T>>
+        FatPtr: From<RawPtr<T>>,
     {
         ScopedPtr::new(self, self.env.alloc_into_reg(reg, object))
     }
@@ -78,12 +78,15 @@ impl<'guard, 'env> fmt::Display for ScopedPtr<'guard, 'env> {
 /// A wrapper around `TaggedPtr` for storing pointers in data structures with interior mutability,
 /// allowing pointers to be updated to point at different target objects.
 pub struct CellPtr {
-    inner: Cell<TaggedPtr>
+    inner: Cell<TaggedPtr>,
 }
 
 impl CellPtr {
     /// Read the pointer into a `ScopedPtr` for safe access
-    pub fn get<'guard, 'env>(&self, _guard: &'guard MutatorScopeGuard<'env>) -> ScopedPtr<'guard, 'env> {
+    pub fn get<'guard, 'env>(
+        &self,
+        _guard: &'guard MutatorScopeGuard<'env>,
+    ) -> ScopedPtr<'guard, 'env> {
         let fat_ptr = FatPtr::from(self.inner.get());
 
         ScopedPtr {

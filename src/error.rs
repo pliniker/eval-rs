@@ -1,24 +1,20 @@
-
 use std::error::Error;
 use std::fmt;
 
 use blockalloc::BlockError;
 
-
 /// Source code position
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct SourcePos {
     pub line: u32,
-    pub column: u32
+    pub column: u32,
 }
-
 
 impl SourcePos {
     fn new(line: u32, column: u32) -> SourcePos {
         SourcePos { line, column }
     }
 }
-
 
 #[derive(Debug, PartialEq)]
 pub enum ErrorKind {
@@ -29,14 +25,12 @@ pub enum ErrorKind {
     OutOfMemory,
 }
 
-
 /// An Eval-rs runtime error type
 #[derive(Debug, PartialEq)]
 pub struct RuntimeError {
     kind: ErrorKind,
     pos: Option<SourcePos>,
 }
-
 
 impl RuntimeError {
     pub fn new(kind: ErrorKind) -> RuntimeError {
@@ -78,7 +72,6 @@ impl RuntimeError {
     }
 }
 
-
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.kind {
@@ -86,22 +79,22 @@ impl fmt::Display for RuntimeError {
             ErrorKind::ParseError(ref reason) => write!(f, "Parse error: {}", reason),
             ErrorKind::EvalError(ref reason) => write!(f, "Evaluation error: {}", reason),
             ErrorKind::OutOfMemory => write!(f, "Out of memory!"),
-            ErrorKind::BadAllocationRequest => write!(f, "An invalid memory size allocation was requested!"),
+            ErrorKind::BadAllocationRequest => {
+                write!(f, "An invalid memory size allocation was requested!")
+            }
         }
     }
 }
-
 
 /// Convert from BlockError
 impl From<BlockError> for RuntimeError {
     fn from(other: BlockError) -> RuntimeError {
         match other {
             BlockError::OOM => RuntimeError::new(ErrorKind::OutOfMemory),
-            BlockError::BadRequest => RuntimeError::new(ErrorKind::BadAllocationRequest)
+            BlockError::BadRequest => RuntimeError::new(ErrorKind::BadAllocationRequest),
         }
     }
 }
-
 
 impl Error for RuntimeError {
     fn description(&self) -> &str {
@@ -109,7 +102,7 @@ impl Error for RuntimeError {
             ErrorKind::LexerError(ref reason) => reason,
             ErrorKind::ParseError(ref reason) => reason,
             ErrorKind::EvalError(ref reason) => reason,
-            _ => ""
+            _ => "",
         }
     }
 
@@ -118,12 +111,10 @@ impl Error for RuntimeError {
     }
 }
 
-
 /// Convenience shorthand function for building a SourcePos
 pub fn spos(line: u32, column: u32) -> SourcePos {
     SourcePos::new(line, column)
 }
-
 
 /// Convenience shorthand function for building a lexer error
 pub fn err_lexer(pos: SourcePos, reason: &str) -> RuntimeError {
@@ -134,7 +125,6 @@ pub fn err_lexer(pos: SourcePos, reason: &str) -> RuntimeError {
 pub fn err_parser(reason: &str) -> RuntimeError {
     RuntimeError::new(ErrorKind::ParseError(String::from(reason)))
 }
-
 
 /// Convenience shorthand function for building a parser error including a source position
 pub fn err_parser_wpos(pos: SourcePos, reason: &str) -> RuntimeError {

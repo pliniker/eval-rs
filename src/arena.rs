@@ -1,63 +1,69 @@
 /// A memory arena implemented as an ever growing pool of blocks.
 /// Currently implemented on top of stickyimmix without any gc which includes unnecessary
 /// overhead.
-
-
 use std::ptr::NonNull;
 
-use stickyimmix::{AllocError, AllocHeader, AllocObject, AllocRaw, Mark, RawPtr, SizeClass, StickyImmixHeap};
+use stickyimmix::{
+    AllocError, AllocHeader, AllocObject, AllocRaw, Mark, RawPtr, SizeClass, StickyImmixHeap,
+};
 
 use crate::headers::TypeList;
-
 
 /// Allocation header for an Arena-allocated value
 pub struct ArenaHeader {
     // TODO
 }
 
-
 /// Since we're not using this functionality in an Arena, the impl is just
 /// a set of no-ops.
 impl AllocHeader for ArenaHeader {
     type TypeId = TypeList;
 
-    fn new<O: AllocObject<Self::TypeId>>(_size: u32, _size_class: SizeClass, _mark: Mark) -> ArenaHeader {
+    fn new<O: AllocObject<Self::TypeId>>(
+        _size: u32,
+        _size_class: SizeClass,
+        _mark: Mark,
+    ) -> ArenaHeader {
         ArenaHeader {}
     }
 
     fn mark(&mut self) {}
 
-    fn is_marked(&self) -> bool { true }
+    fn is_marked(&self) -> bool {
+        true
+    }
 
-    fn size_class(&self) -> SizeClass { SizeClass::Small }
+    fn size_class(&self) -> SizeClass {
+        SizeClass::Small
+    }
 
-    fn size(&self) -> u32 { 1 }
+    fn size(&self) -> u32 {
+        1
+    }
 }
-
 
 /// A non-garbage-collected pool of memory blocks for interned values.
 /// These values are not dropped on Arena deallocation.
 /// Values must be "atomic", that is, not composed of other object
 /// pointers that need to be traced.
 pub struct Arena {
-    heap: StickyImmixHeap<ArenaHeader>
+    heap: StickyImmixHeap<ArenaHeader>,
 }
-
 
 impl Arena {
     pub fn new() -> Arena {
         Arena {
-            heap: StickyImmixHeap::new()
+            heap: StickyImmixHeap::new(),
         }
     }
 }
-
 
 impl AllocRaw for Arena {
     type Header = ArenaHeader;
 
     fn alloc<T>(&self, object: T) -> Result<RawPtr<T>, AllocError>
-        where T: AllocObject<TypeList>
+    where
+        T: AllocObject<TypeList>,
     {
         self.heap.alloc(object)
     }

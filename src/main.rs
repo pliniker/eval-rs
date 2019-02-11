@@ -1,18 +1,15 @@
-
-
 extern crate blockalloc;
 extern crate clap;
 extern crate rustyline;
 extern crate stickyimmix;
 
-
 use std::env;
+use std::fs::File;
 use std::io;
 use std::io::prelude::*;
-use std::fs::File;
 use std::process;
 
-use clap::{Arg, App};
+use clap::{App, Arg};
 
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
@@ -23,9 +20,9 @@ mod headers;
 mod heap;
 mod lexer;
 //mod parser;
+mod pointerops;
 mod primitives;
 mod printer;
-mod pointerops;
 mod safeptr;
 mod symbolmap;
 mod taggedptr;
@@ -134,7 +131,8 @@ fn read_print_loop() -> Result<(), ReadlineError> {
 }
 */
 
-fn main() { /*
+fn main() {
+    /*
     // parse command line argument, an optional filename
     let matches = App::new("Eval-R-Us")
         .about("Evaluate the expressions!")
