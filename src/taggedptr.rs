@@ -17,7 +17,7 @@ use stickyimmix::{AllocRaw, RawPtr};
 
 use crate::heap::Heap;
 use crate::primitives::{NumberObject, Pair, Symbol};
-use crate::ptrops::{get_tag, ScopedRef, Tagged, TAG_SYMBOL, TAG_PAIR, TAG_NUMBER, TAG_OBJECT};
+use crate::pointerops::{get_tag, ScopedRef, Tagged, TAG_SYMBOL, TAG_PAIR, TAG_NUMBER, TAG_OBJECT};
 
 /// A safe interface to GC-heap managed objects. The `'scope` lifetime must be a safe lifetime for
 /// the GC not to move or collect the referenced object.

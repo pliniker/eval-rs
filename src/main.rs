@@ -25,7 +25,7 @@ mod lexer;
 //mod parser;
 mod primitives;
 mod printer;
-mod ptrops;
+mod pointerops;
 mod safeptr;
 mod symbolmap;
 mod taggedptr;

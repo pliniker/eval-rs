@@ -5,7 +5,7 @@ use stickyimmix::{AllocHeader, AllocObject, AllocRaw, AllocTypeId, Mark, SizeCla
 
 use crate::heap::Heap;
 use crate::primitives::{NumberObject, Pair, Symbol};
-use crate::ptrops::{AsNonNull, Tagged};
+use crate::pointerops::{AsNonNull, Tagged};
 use crate::taggedptr::FatPtr;
 
 /// Recognized heap-allocated types.
