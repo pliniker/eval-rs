@@ -8,8 +8,13 @@ use stickyimmix::RawPtr;
 use crate::heap::Environment;
 use crate::taggedptr::{FatPtr, TaggedPtr, Value};
 
-// A thing to limit moveability and lifetime of ScopedPtr pointers; also the mutator's view into
-/// an allocation API
+/// Type that provides a generic anchor for mutator timeslice lifetimes
+pub trait MutatorScope {}
+
+/// A thing to limit moveability and lifetime of ScopedPtr pointers; also the mutator's view into
+/// an allocation API. The lifetime of an instance of this type must be shared via the
+/// `MutatorScope` trait as `guard: &'scope MutatorScope`. This parameter exists soley to enforce
+/// the lifetime limit on accessing GC-managed objects and should be optimized out.
 pub struct MutatorScopeGuard<'env> {
     env: &'env Environment,
 }
@@ -19,22 +24,22 @@ impl<'env> MutatorScopeGuard<'env> {
         MutatorScopeGuard { env }
     }
 
-    pub fn get_reg(&self, reg: usize) -> ScopedPtr<'_, 'env> {
+    pub fn get_reg(&self, reg: usize) -> ScopedPtr<'_> {
         ScopedPtr::new(self, self.env.get_reg(reg))
     }
 
-    pub fn set_reg(&self, reg: usize, ptr: ScopedPtr<'_, 'env>) {
+    pub fn set_reg(&self, reg: usize, ptr: ScopedPtr<'_>) {
         self.env.set_reg(reg, ptr.ptr);
     }
 
-    pub fn alloc<T>(&self, object: T) -> ScopedPtr<'_, 'env>
+    pub fn alloc<T>(&self, object: T) -> ScopedPtr<'_>
     where
         FatPtr: From<RawPtr<T>>,
     {
         ScopedPtr::new(self, self.env.alloc(object))
     }
 
-    pub fn alloc_into_reg<T>(&self, reg: usize, object: T) -> ScopedPtr<'_, 'env>
+    pub fn alloc_into_reg<T>(&self, reg: usize, object: T) -> ScopedPtr<'_>
     where
         FatPtr: From<RawPtr<T>>,
     {
@@ -42,17 +47,20 @@ impl<'env> MutatorScopeGuard<'env> {
     }
 }
 
+impl<'env> MutatorScope for MutatorScopeGuard<'env> {}
+
 /// A pointer type encapsulating `FatPtr` with scope limited by `MutatorScopeGuard` such that a
-/// `Value` instance can safely be derived and accessed.
+/// `Value` instance can safely be derived and accessed. This type is neccessary to derive
+/// `Value`s from
 #[derive(Copy, Clone)]
-pub struct ScopedPtr<'guard, 'env: 'guard> {
+pub struct ScopedPtr<'guard> {
     ptr: FatPtr,
     value: Value<'guard>,
-    _mkr: PhantomData<&'guard MutatorScopeGuard<'env>>,
+    _mkr: PhantomData<&'guard MutatorScope>,
 }
 
-impl<'guard, 'env> ScopedPtr<'guard, 'env> {
-    pub fn new(_guard: &'guard MutatorScopeGuard<'env>, thing: FatPtr) -> ScopedPtr<'guard, 'env> {
+impl<'guard> ScopedPtr<'guard> {
+    pub fn new(_guard: &'guard MutatorScope, thing: FatPtr) -> ScopedPtr<'guard> {
         ScopedPtr {
             ptr: thing,
             value: unsafe { thing.as_value() },
@@ -61,7 +69,7 @@ impl<'guard, 'env> ScopedPtr<'guard, 'env> {
     }
 }
 
-impl<'guard, 'env> Deref for ScopedPtr<'guard, 'env> {
+impl<'guard> Deref for ScopedPtr<'guard> {
     type Target = Value<'guard>;
 
     fn deref(&self) -> &Value<'guard> {
@@ -69,7 +77,7 @@ impl<'guard, 'env> Deref for ScopedPtr<'guard, 'env> {
     }
 }
 
-impl<'guard, 'env> fmt::Display for ScopedPtr<'guard, 'env> {
+impl<'guard> fmt::Display for ScopedPtr<'guard> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.value.fmt(f)
     }
@@ -82,18 +90,18 @@ pub struct CellPtr {
 }
 
 impl CellPtr {
-    /// Read the pointer into a `ScopedPtr` for safe access
-    pub fn get<'guard, 'env>(
-        &self,
-        _guard: &'guard MutatorScopeGuard<'env>,
-    ) -> ScopedPtr<'guard, 'env> {
-        let fat_ptr = FatPtr::from(self.inner.get());
-
-        ScopedPtr {
-            ptr: fat_ptr,
-            value: unsafe { fat_ptr.as_value() },
-            _mkr: PhantomData,
+    /// Construct a new Nil CellPtr instance
+    pub fn new_nil() -> CellPtr {
+        CellPtr {
+            inner: Cell::new(TaggedPtr::nil())
         }
+    }
+
+    /// This gets the pointer as a `Value` type, providing the enclosing `Value` instance as the
+    /// lifetime guard
+    pub fn get<'scope>(&self, _guard: &'scope MutatorScope) -> Value<'scope> {
+        let fat_ptr = FatPtr::from(self.inner.get());
+        unsafe { fat_ptr.as_value() }
     }
 
     /// Set this pointer to point at the same object as a given `ScopedPtr` instance

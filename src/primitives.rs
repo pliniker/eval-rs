@@ -5,19 +5,25 @@ use std::slice;
 use std::str;
 
 use crate::error::SourcePos;
+use crate::printer::Print;
+use crate::safeptr::{CellPtr, MutatorScope};
 use crate::taggedptr::{TaggedPtr, Value};
 
+/// `Value` can have a safe `Display` implementation
 impl<'scope> fmt::Display for Value<'scope> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Value::Nil => write!(f, "nil"),
-            Value::Pair(p) => write!(f, "{}", p),
-            Value::Symbol(s) => write!(f, "{}", s),
+//            Value::Pair(p) => write!(f, "{}", p),
+            Value::Symbol(s) => s.print(self, f),
             Value::Number(n) => write!(f, "{}", *n),
-            Value::NumberObject(n) => write!(f, "{}", n),
+//            Value::NumberObject(n) => write!(f, "{}", n),
+            _ => write!(f, "unimplemented")
         }
     }
 }
+
+impl<'scope> MutatorScope for Value<'scope> {}
 
 /// A Symbol is a unique object that has a unique name string. The backing storage for the
 /// underlying str data must have a lifetime of at least that of the Symbol instance to
@@ -45,17 +51,23 @@ impl Symbol {
     }
 }
 
-/// TODO since as_str() is unsafe, this should be too, but how can this be made to make sense?
-impl Hash for Symbol {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        unsafe { self.as_str() }.hash(state);
+impl Print for Symbol {
+    fn print<'scope>(&self, _guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", unsafe { self.as_str() })
     }
 }
 
-/// Redefine Pair from types.rs
+/// TODO since as_str() is unsafe, this should be too, but how can this be made to make sense?
+//impl Hash for Symbol {
+//    fn hash<H: Hasher>(&self, state: &mut H) {
+//        unsafe { self.as_str() }.hash(state);
+//    }
+//}
+
+/// A Pair of pointers, like a Cons cell of old
 pub struct Pair {
-    pub first: TaggedPtr,
-    pub second: TaggedPtr,
+    pub first: CellPtr,
+    pub second: CellPtr,
     // Possible source code positions of the first and second values
     pub first_pos: Option<SourcePos>,
     pub second_pos: Option<SourcePos>,
@@ -64,8 +76,8 @@ pub struct Pair {
 impl Pair {
     pub fn new() -> Pair {
         Pair {
-            first: TaggedPtr::nil(),
-            second: TaggedPtr::nil(),
+            first: CellPtr::new_nil(),
+            second: CellPtr::new_nil(),
             first_pos: None,
             second_pos: None,
         }
@@ -84,6 +96,17 @@ impl Pair {
             pair
         }
     */
+}
+
+impl Print for Pair {
+    fn print<'scope>(&self, guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+        let second = self.second.get(guard);
+
+        match second {
+            Value::Nil => write!(f, "({})", self.first.get(guard)),
+            _ => write!(f, "({} {})", self.first.get(guard), second),
+        }
+    }
 }
 
 /// TODO A heap-allocated number

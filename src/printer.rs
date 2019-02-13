@@ -1,6 +1,12 @@
 use std::fmt;
 
-use crate::taggedptr::FatPtr;
+use crate::safeptr::MutatorScope;
+use crate::taggedptr::{FatPtr, Value};
+
+/// Trait for using a `Value` lifted pointer in the `Display` trait
+pub trait Print {
+    fn print<'scope>(&self, _guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result;
+}
 
 pub fn print(value: FatPtr) -> String {
     format!("{}", value)
@@ -15,6 +21,7 @@ pub fn debug(value: FatPtr) -> String {
 impl fmt::Display for FatPtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            /*
             FatPtr::Nil => write!(f, "()"),
 
             FatPtr::Symbol(sym) => write!(f, "{}", unsafe { sym.as_ref().as_str() }),
@@ -42,7 +49,7 @@ impl fmt::Display for FatPtr {
 
                 write!(f, ")")
             }
-
+            */
             _ => write!(f, "<UNKNOWN-TYPE!>"),
         }
     }
@@ -52,6 +59,7 @@ impl fmt::Display for FatPtr {
 impl fmt::Debug for FatPtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            /*
             FatPtr::Nil => write!(f, "nil"),
             FatPtr::Symbol(ptr) => write!(f, "{}", unsafe { ptr.as_ref().as_str() }),
             FatPtr::Pair(ptr) => {
@@ -63,6 +71,7 @@ impl fmt::Debug for FatPtr {
                     FatPtr::from(pair.second)
                 )
             }
+            */
             _ => write!(f, "<UNKNOWN-TYPE!>"),
         }
     }
