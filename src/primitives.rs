@@ -1,13 +1,12 @@
 /// Native runtime types
 use std::fmt;
-use std::hash::{Hash, Hasher};
 use std::slice;
 use std::str;
 
 use crate::error::SourcePos;
 use crate::printer::Print;
 use crate::safeptr::{CellPtr, MutatorScope};
-use crate::taggedptr::{TaggedPtr, Value};
+use crate::taggedptr::Value;
 
 /// `Value` can have a safe `Display` implementation
 impl<'scope> fmt::Display for Value<'scope> {
@@ -18,7 +17,7 @@ impl<'scope> fmt::Display for Value<'scope> {
             Value::Symbol(s) => s.print(self, f),
             Value::Number(n) => write!(f, "{}", *n),
 //            Value::NumberObject(n) => write!(f, "{}", n),
-            _ => write!(f, "unimplemented")
+            _ => write!(f, "cannot display unknown object type")
         }
     }
 }
@@ -29,7 +28,6 @@ impl<'scope> MutatorScope for Value<'scope> {}
 /// underlying str data must have a lifetime of at least that of the Symbol instance to
 /// prevent use-after-free.
 /// See `SymbolMap`
-/// TODO is there a way to formalize this relationship?
 pub struct Symbol {
     name_ptr: *const u8,
     name_len: usize,
@@ -52,17 +50,11 @@ impl Symbol {
 }
 
 impl Print for Symbol {
+    /// Safe because the lifetime of `MutatorScope` defines a safe-access window
     fn print<'scope>(&self, _guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", unsafe { self.as_str() })
     }
 }
-
-/// TODO since as_str() is unsafe, this should be too, but how can this be made to make sense?
-//impl Hash for Symbol {
-//    fn hash<H: Hasher>(&self, state: &mut H) {
-//        unsafe { self.as_str() }.hash(state);
-//    }
-//}
 
 /// A Pair of pointers, like a Cons cell of old
 pub struct Pair {
@@ -100,7 +92,7 @@ impl Pair {
 
 impl Print for Pair {
     fn print<'scope>(&self, guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
-        let second = self.second.get(guard);
+        let second = self.second.get_value(guard);
 
         match second {
             Value::Nil => write!(f, "({})", self.first.get(guard)),

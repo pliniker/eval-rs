@@ -3,6 +3,8 @@ use std::ptr::NonNull;
 
 use stickyimmix::RawPtr;
 
+use crate::safeptr::MutatorScope;
+
 /// For conversion of a reference to a NonNull<T>
 pub trait AsNonNull {
     fn non_null_ptr(&self) -> NonNull<Self> {
@@ -41,11 +43,11 @@ impl<T> Tagged<T> for RawPtr<T> {
 
 /// For accessing a pointer target, given a lifetime
 pub trait ScopedRef<T> {
-    unsafe fn scoped_ref<'scope>(&self) -> &'scope T;
+    fn scoped_ref<'scope>(&self, guard: &'scope MutatorScope) -> &'scope T;
 }
 
 impl<T> ScopedRef<T> for RawPtr<T> {
-    unsafe fn scoped_ref<'scope>(&self) -> &'scope T {
-        &*self.as_ptr()
+    fn scoped_ref<'scope>(&self, _guard: &'scope MutatorScope) -> &'scope T {
+        unsafe { &*self.as_ptr() }
     }
 }

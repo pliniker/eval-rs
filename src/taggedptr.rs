@@ -9,7 +9,8 @@
 /// types which can be expanded from `TaggedPtr` and `ObjectHeader` combined.
 ///
 /// Defines a `TaggedPtr` type where the low bits of a pointer indicate the
-/// type of the object pointed to for certain types.
+/// type of the object pointed to for certain types, but the object header is
+/// required to provide most object type ids.
 use std::ptr::NonNull;
 
 use stickyimmix::{AllocRaw, RawPtr};
@@ -17,6 +18,7 @@ use stickyimmix::{AllocRaw, RawPtr};
 use crate::heap::Heap;
 use crate::pointerops::{get_tag, ScopedRef, Tagged, TAG_NUMBER, TAG_OBJECT, TAG_PAIR, TAG_SYMBOL};
 use crate::primitives::{NumberObject, Pair, Symbol};
+use crate::safeptr::MutatorScope;
 
 /// A safe interface to GC-heap managed objects. The `'scope` lifetime must be a safe lifetime for
 /// the GC not to move or collect the referenced object.
@@ -45,13 +47,13 @@ impl FatPtr {
     /// Given a lifetime, convert to a `Value` type. Unsafe because anything can provide a lifetime
     /// without any safety guarantee that it's valid.
     /// TODO consider requiring a `MutatorScopeGuard` here.
-    pub unsafe fn as_value<'scope>(&self) -> Value<'scope> {
+    pub fn as_value<'scope>(&self, guard: &'scope MutatorScope) -> Value<'scope> {
         match self {
             FatPtr::Nil => Value::Nil,
-            FatPtr::Pair(raw_ptr) => Value::Pair(raw_ptr.scoped_ref()),
-            FatPtr::Symbol(raw_ptr) => Value::Symbol(raw_ptr.scoped_ref()),
+            FatPtr::Pair(raw_ptr) => Value::Pair(raw_ptr.scoped_ref(guard)),
+            FatPtr::Symbol(raw_ptr) => Value::Symbol(raw_ptr.scoped_ref(guard)),
             FatPtr::Number(num) => Value::Number(*num),
-            FatPtr::NumberObject(raw_ptr) => Value::NumberObject(raw_ptr.scoped_ref()),
+            FatPtr::NumberObject(raw_ptr) => Value::NumberObject(raw_ptr.scoped_ref(guard)),
         }
     }
 }

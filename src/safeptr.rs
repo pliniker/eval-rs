@@ -1,10 +1,10 @@
 use std::cell::Cell;
 use std::fmt;
-use std::marker::PhantomData;
 use std::ops::Deref;
 
-use stickyimmix::RawPtr;
+use stickyimmix::{AllocObject, RawPtr};
 
+use crate::headers::TypeList;
 use crate::heap::Environment;
 use crate::taggedptr::{FatPtr, TaggedPtr, Value};
 
@@ -17,33 +17,42 @@ pub trait MutatorScope {}
 /// the lifetime limit on accessing GC-managed objects and should be optimized out.
 pub struct MutatorScopeGuard<'env> {
     env: &'env Environment,
+    regs: Vec<CellPtr>,
 }
 
 impl<'env> MutatorScopeGuard<'env> {
     pub fn new(env: &'env Environment) -> MutatorScopeGuard {
-        MutatorScopeGuard { env }
+        let capacity = 256;
+
+        let mut regs = Vec::with_capacity(capacity);
+        for _ in 0..capacity {
+            regs.push(CellPtr::new_nil());
+        }
+
+        MutatorScopeGuard {
+            env,
+            regs
+        }
     }
 
     pub fn get_reg(&self, reg: usize) -> ScopedPtr<'_> {
-        ScopedPtr::new(self, self.env.get_reg(reg))
+        self.regs[reg].get(self)
     }
 
     pub fn set_reg(&self, reg: usize, ptr: ScopedPtr<'_>) {
-        self.env.set_reg(reg, ptr.ptr);
+        self.regs[reg].set(ptr);
     }
 
     pub fn alloc<T>(&self, object: T) -> ScopedPtr<'_>
     where
         FatPtr: From<RawPtr<T>>,
+        T: AllocObject<TypeList>
     {
         ScopedPtr::new(self, self.env.alloc(object))
     }
 
-    pub fn alloc_into_reg<T>(&self, reg: usize, object: T) -> ScopedPtr<'_>
-    where
-        FatPtr: From<RawPtr<T>>,
-    {
-        ScopedPtr::new(self, self.env.alloc_into_reg(reg, object))
+    pub fn lookup_sym(&self, name: &str) -> Value<'_> {
+        self.env.lookup_sym(name).as_value(self)
     }
 }
 
@@ -54,18 +63,20 @@ impl<'env> MutatorScope for MutatorScopeGuard<'env> {}
 /// `Value`s from
 #[derive(Copy, Clone)]
 pub struct ScopedPtr<'guard> {
-    ptr: FatPtr,
+    ptr: TaggedPtr,
     value: Value<'guard>,
-    _mkr: PhantomData<&'guard MutatorScope>,
 }
 
 impl<'guard> ScopedPtr<'guard> {
-    pub fn new(_guard: &'guard MutatorScope, thing: FatPtr) -> ScopedPtr<'guard> {
+    pub fn new(guard: &'guard MutatorScope, ptr: TaggedPtr) -> ScopedPtr<'guard> {
         ScopedPtr {
-            ptr: thing,
-            value: unsafe { thing.as_value() },
-            _mkr: PhantomData,
+            ptr: ptr,
+            value: FatPtr::from(ptr).as_value(guard),
         }
+    }
+
+    pub fn value(&self) -> Value<'guard> {
+        self.value
     }
 }
 
@@ -97,15 +108,19 @@ impl CellPtr {
         }
     }
 
-    /// This gets the pointer as a `Value` type, providing the enclosing `Value` instance as the
-    /// lifetime guard
-    pub fn get<'scope>(&self, _guard: &'scope MutatorScope) -> Value<'scope> {
-        let fat_ptr = FatPtr::from(self.inner.get());
-        unsafe { fat_ptr.as_value() }
+    /// Return the pointer as a `ScopedPtr` type that carries a copy of the `TaggedPtr` and
+    /// a `Value` type for both copying and access convenience
+    pub fn get<'scope>(&self, guard: &'scope MutatorScope) -> ScopedPtr<'scope> {
+        ScopedPtr::new(guard, self.inner.get())
+    }
+
+    /// This returns the pointer as a `Value` type, given a mutator scope for safety
+    pub fn get_value<'scope>(&self, guard: &'scope MutatorScope) -> Value<'scope> {
+        FatPtr::from(self.inner.get()).as_value(guard)
     }
 
     /// Set this pointer to point at the same object as a given `ScopedPtr` instance
-    pub fn set(&self, source: &ScopedPtr) {
+    pub fn set(&self, source: ScopedPtr) {
         self.inner.set(TaggedPtr::from(source.ptr))
     }
 
