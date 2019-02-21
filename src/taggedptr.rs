@@ -46,7 +46,6 @@ pub enum FatPtr {
 impl FatPtr {
     /// Given a lifetime, convert to a `Value` type. Unsafe because anything can provide a lifetime
     /// without any safety guarantee that it's valid.
-    /// TODO consider requiring a `MutatorScopeGuard` here.
     pub fn as_value<'scope>(&self, guard: &'scope MutatorScope) -> Value<'scope> {
         match self {
             FatPtr::Nil => Value::Nil,

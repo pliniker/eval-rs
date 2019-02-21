@@ -19,6 +19,7 @@ mod error;
 mod headers;
 mod heap;
 mod lexer;
+mod memory;
 //mod parser;
 mod pointerops;
 mod primitives;

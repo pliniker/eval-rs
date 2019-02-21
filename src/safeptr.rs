@@ -2,61 +2,10 @@ use std::cell::Cell;
 use std::fmt;
 use std::ops::Deref;
 
-use stickyimmix::{AllocObject, RawPtr};
-
-use crate::headers::TypeList;
-use crate::heap::Environment;
 use crate::taggedptr::{FatPtr, TaggedPtr, Value};
 
 /// Type that provides a generic anchor for mutator timeslice lifetimes
 pub trait MutatorScope {}
-
-/// A thing to limit moveability and lifetime of ScopedPtr pointers; also the mutator's view into
-/// an allocation API. The lifetime of an instance of this type must be shared via the
-/// `MutatorScope` trait as `guard: &'scope MutatorScope`. This parameter exists soley to enforce
-/// the lifetime limit on accessing GC-managed objects and should be optimized out.
-pub struct MutatorScopeGuard<'env> {
-    env: &'env Environment,
-    regs: Vec<CellPtr>,
-}
-
-impl<'env> MutatorScopeGuard<'env> {
-    pub fn new(env: &'env Environment) -> MutatorScopeGuard {
-        let capacity = 256;
-
-        let mut regs = Vec::with_capacity(capacity);
-        for _ in 0..capacity {
-            regs.push(CellPtr::new_nil());
-        }
-
-        MutatorScopeGuard {
-            env,
-            regs
-        }
-    }
-
-    pub fn get_reg(&self, reg: usize) -> ScopedPtr<'_> {
-        self.regs[reg].get(self)
-    }
-
-    pub fn set_reg(&self, reg: usize, ptr: ScopedPtr<'_>) {
-        self.regs[reg].set(ptr);
-    }
-
-    pub fn alloc<T>(&self, object: T) -> ScopedPtr<'_>
-    where
-        FatPtr: From<RawPtr<T>>,
-        T: AllocObject<TypeList>
-    {
-        ScopedPtr::new(self, self.env.alloc(object))
-    }
-
-    pub fn lookup_sym(&self, name: &str) -> Value<'_> {
-        self.env.lookup_sym(name).as_value(self)
-    }
-}
-
-impl<'env> MutatorScope for MutatorScopeGuard<'env> {}
 
 /// A pointer type encapsulating `FatPtr` with scope limited by `MutatorScopeGuard` such that a
 /// `Value` instance can safely be derived and accessed. This type is neccessary to derive
