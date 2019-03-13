@@ -126,7 +126,7 @@ impl TaggedPtr {
     }
 
     /// Construct a Symbol TaggedPtr
-    fn symbol(ptr: RawPtr<Symbol>) -> TaggedPtr {
+    pub fn symbol(ptr: RawPtr<Symbol>) -> TaggedPtr {
         TaggedPtr {
             symbol: ptr.tag(TAG_SYMBOL),
         }
