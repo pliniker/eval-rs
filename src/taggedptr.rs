@@ -15,7 +15,7 @@ use std::ptr::NonNull;
 
 use stickyimmix::{AllocRaw, RawPtr};
 
-use crate::heap::Heap;
+use crate::memory::HeapStorage;
 use crate::pointerops::{get_tag, ScopedRef, Tagged, TAG_NUMBER, TAG_OBJECT, TAG_PAIR, TAG_SYMBOL};
 use crate::primitives::{NumberObject, Pair, Symbol};
 use crate::safeptr::MutatorScope;
@@ -152,7 +152,7 @@ impl TaggedPtr {
 
                     TAG_OBJECT => {
                         let untyped_object_ptr = RawPtr::untag(self.object).as_untyped();
-                        let header_ptr = Heap::get_header(untyped_object_ptr);
+                        let header_ptr = HeapStorage::get_header(untyped_object_ptr);
 
                         header_ptr.as_ref().get_object_fatptr()
                     }

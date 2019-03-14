@@ -17,7 +17,6 @@ use rustyline::Editor;
 mod arena;
 mod error;
 mod headers;
-mod heap;
 mod lexer;
 mod memory;
 //mod parser;

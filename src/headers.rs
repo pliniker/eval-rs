@@ -2,7 +2,7 @@
 /// object, which also contains a type tag but with space for many more types.
 use stickyimmix::{AllocHeader, AllocObject, AllocRaw, AllocTypeId, Mark, RawPtr, SizeClass};
 
-use crate::heap::Heap;
+use crate::memory::HeapStorage;
 use crate::pointerops::{AsNonNull, Tagged};
 use crate::primitives::{NumberObject, Pair, Symbol};
 use crate::taggedptr::FatPtr;
@@ -31,7 +31,7 @@ impl ObjectHeader {
     /// Convert the ObjectHeader address to a FatPtr pointing at the object itself
     pub fn get_object_fatptr(&self) -> FatPtr {
         let ptr_to_self = self.non_null_ptr();
-        let object_addr = Heap::get_object(ptr_to_self);
+        let object_addr = HeapStorage::get_object(ptr_to_self);
 
         // Only Object* types should be derived from the header.
         // Symbol, Pair and Number should have been derived from a pointer tag.

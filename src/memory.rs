@@ -1,15 +1,20 @@
 /// VM-level memory abstraction
+///
+/// Defines Stack, Heap and Memory types, and a MemoryView type that gives a mutator a safe
+/// view into the stack and heap.
 use std::ops::Deref;
 use std::rc::Rc;
 
-use stickyimmix::{AllocObject, AllocRaw, RawPtr};
+use stickyimmix::{AllocObject, AllocRaw, RawPtr, StickyImmixHeap};
 
-use crate::heap::Heap;
 use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
 
-use crate::headers::TypeList;
+use crate::headers::{ObjectHeader, TypeList};
 use crate::symbolmap::SymbolMap;
 use crate::taggedptr::{FatPtr, TaggedPtr};
+
+/// The heap implementation
+pub type HeapStorage = StickyImmixHeap<ObjectHeader>;
 
 /// A stack (well, a Vec of registers for now). Each register is a `CellPtr` with getters and
 /// setters that require a MutatorScope lifetime'd guard.
@@ -43,24 +48,27 @@ impl Stack {
     }
 }
 
-// Heap memory types. Needs a better name.
-struct Memory {
-    heap: Heap,
+// Heap memory types.
+struct Heap {
+    heap: HeapStorage,
     syms: SymbolMap,
 }
 
-impl Memory {
-    fn new() -> Memory {
-        Memory {
-            heap: Heap::new(),
+impl Heap {
+    fn new() -> Heap {
+        Heap {
+            heap: HeapStorage::new(),
             syms: SymbolMap::new(),
         }
     }
 
+    /// Get a Symbol pointer from its name
     fn lookup_sym(&self, name: &str) -> TaggedPtr {
         TaggedPtr::symbol(self.syms.lookup(name))
     }
 
+    /// Write an object into the heapn and return the pointer to it
+    /// TODO implement error handling
     fn alloc<T>(&self, object: T) -> TaggedPtr
     where
         FatPtr: From<RawPtr<T>>,
@@ -79,48 +87,52 @@ impl Memory {
 /// It implements `MutatorScope` such that any `ScopedPtr` or `Value` instances must be lifetime-
 /// limited to the lifetime of this instance using `&'scope MutatorScope`;
 pub struct MutatorView<'guard> {
-    mem: &'guard Memory,
+    heap: &'guard Heap,
     stack: &'guard Stack,
 }
 
 impl<'guard> MutatorView<'guard> {
-    fn new(foo: &'guard System) -> MutatorView<'guard> {
+    fn new(foo: &'guard Memory) -> MutatorView<'guard> {
         MutatorView {
-            mem: &foo.mem,
+            heap: &foo.heap,
             stack: &foo.stack,
         }
     }
 
+    /// Get the copy of the pointer for the given register
     pub fn get_reg(&self, reg: usize) -> ScopedPtr<'_> {
         self.stack.get_reg(reg, self)
     }
 
+    /// Write a pointer into the specified register
     pub fn set_reg(&self, reg: usize, ptr: ScopedPtr<'_>) {
         self.stack.set_reg(reg, ptr);
     }
 
+    /// Get a Symbol pointer from its name
+    pub fn lookup_sym(&self, name: &str) -> ScopedPtr<'_> {
+        ScopedPtr::new(self, self.heap.lookup_sym(name))
+    }
+
+    /// Write an object into the heap and return the pointer to it
     pub fn alloc<T>(&self, object: T) -> ScopedPtr<'_>
     where
         FatPtr: From<RawPtr<T>>,
         T: AllocObject<TypeList>
     {
-        ScopedPtr::new(self, self.mem.alloc(object))
-    }
-
-    pub fn lookup_sym(&self, name: &str) -> ScopedPtr<'_> {
-        ScopedPtr::new(self, self.mem.lookup_sym(name))
+        ScopedPtr::new(self, self.heap.alloc(object))
     }
 }
 
 impl<'guard> MutatorScope for MutatorView<'guard> {}
 
-// Heam and stack. Needs a better name.
-pub struct System {
-    mem: Memory,
+// Composed of a Heap and a Stack instance
+pub struct Memory {
+    heap: Heap,
     stack: Stack
 }
 
-impl System {
+impl Memory {
     /// Run a mutator process
     pub fn mutate<F>(&self, f: F)
     where
@@ -130,5 +142,5 @@ impl System {
         f(&mut guard);
     }
 
-    // pub fn collect()
+    // TODO pub fn collect()
 }
