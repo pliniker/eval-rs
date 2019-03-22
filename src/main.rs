@@ -1,5 +1,6 @@
 extern crate blockalloc;
 extern crate clap;
+extern crate dirs;
 extern crate rustyline;
 extern crate stickyimmix;
 
@@ -19,7 +20,7 @@ mod error;
 mod headers;
 mod lexer;
 mod memory;
-//mod parser;
+mod parser;
 mod pointerops;
 mod primitives;
 mod printer;
@@ -27,8 +28,8 @@ mod safeptr;
 mod symbolmap;
 mod taggedptr;
 
-//use memory::{Memory, eval};
-//use parser::parse;
+use memory::Memory;
+use parser::parse;
 
 /*
 /// Read a file into a String
@@ -39,7 +40,6 @@ fn load_file(filename: &str) -> Result<String, io::Error> {
 
     Ok(contents)
 }
-
 
 /// Read an entire file
 /// TODO handle errors out of here more consistently
@@ -61,13 +61,12 @@ fn read_file(filename: &str) -> Result<(), ()> {
 
     Ok(())
 }
-
-
+*/
+/*
 /// Read a line at a time, printing the input back out
 fn read_print_loop() -> Result<(), ReadlineError> {
-
     // establish a repl input history file path
-    let history_file = match env::home_dir() {
+    let history_file = match dirs::home_dir() {
         Some(mut path) => {
             path.push(".evalrus_history");
             Some(String::from(path.to_str().unwrap()))
@@ -83,13 +82,8 @@ fn read_print_loop() -> Result<(), ReadlineError> {
         if let Err(_) = reader.load_history(&path) { /* ignore absence or unreadability */ }
     }
 
-    let heap = Arena::new(65536);
-    let mut mem = Memory::with_heap(&heap);
+    let mut mem = Memory::new();
 
-    mem.mutate_with(|heap, syms| {
-
-
-    });
     // repl
     let mut input_counter = 1;
     loop {
@@ -102,17 +96,19 @@ fn read_print_loop() -> Result<(), ReadlineError> {
                 reader.add_history_entry(&line);
 
                 // parse/"read"
-                match parse(&line, &mem) {
+                match mem.mutate(|view| parse(view, &line)) {
                     Ok(value) => {
+                        /*
                         // eval
                         match eval(value, &mem) {
                             // print
                             Ok(result) => println!("{}", printer::print(&result)),
                             Err(e) => e.print_with_source(&line),
-                        }
-                    },
+                        } */
+                        println!("{}", printer::print(value));
+                    }
 
-                    Err(e) => e.print_with_source(&line)
+                    Err(e) => e.print_with_source(&line),
                 }
             }
 
@@ -130,7 +126,6 @@ fn read_print_loop() -> Result<(), ReadlineError> {
     }
 }
 */
-
 fn main() {
     /*
     // parse command line argument, an optional filename
@@ -153,5 +148,9 @@ fn main() {
             println!("exited because: {}", err);
             process::exit(0);
         });
-    } */
+    }
+    read_print_loop().unwrap_or_else(|err| {
+        println!("exited because: {}", err);
+        process::exit(0);
+    });*/
 }

@@ -4,8 +4,9 @@ use std::slice;
 use std::str;
 
 use crate::error::SourcePos;
+use crate::memory::MutatorView;
 use crate::printer::Print;
-use crate::safeptr::{CellPtr, MutatorScope};
+use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
 use crate::taggedptr::Value;
 
 /// `Value` can have a safe `Display` implementation
@@ -13,11 +14,22 @@ impl<'scope> fmt::Display for Value<'scope> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Value::Nil => write!(f, "nil"),
-//            Value::Pair(p) => write!(f, "{}", p),
+            Value::Pair(p) => p.print(self, f),
             Value::Symbol(s) => s.print(self, f),
             Value::Number(n) => write!(f, "{}", *n),
-//            Value::NumberObject(n) => write!(f, "{}", n),
-            _ => write!(f, "cannot display unknown object type")
+            _ => write!(f, "cannot display unknown object type"),
+        }
+    }
+}
+
+impl<'scope> fmt::Debug for Value<'scope> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Value::Nil => write!(f, "nil"),
+            Value::Pair(p) => p.debug(self, f),
+            Value::Symbol(s) => s.debug(self, f),
+            Value::Number(n) => write!(f, "{}", *n),
+            _ => write!(f, "Cannot display unknown object type"),
         }
     }
 }
@@ -74,20 +86,26 @@ impl Pair {
             second_pos: None,
         }
     }
-    /*
-        /// Compare contents of one Pair to another
-        pub fn eq(&self, other: RawPtr<Pair>) -> bool {
-            self.first == other.first && self.second == other.second
-        }
 
-        /// Set Pair.second to a new Pair with newPair.first set to the value
-        pub fn append(&mut self, allocator: &'heap A, value: Value<'heap, A>) -> Ptr<'heap, Pair<'heap, A>, A> {
-            let mut pair = allocator.alloc(Pair::new());
-            self.second = Value::Pair(pair);
-            pair.first = value;
-            pair
-        }
-    */
+    /// Set Pair.second to a new Pair with newPair.first set to the value
+    pub fn append<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        value: ScopedPtr<'guard>,
+    ) -> ScopedPtr<'guard> {
+        let mut pair = Pair::new();
+        pair.first.set(value);
+
+        let pair = mem.alloc(pair);
+        self.second.set(pair);
+
+        pair
+    }
+
+    /// Set Pair.second to the given value
+    pub fn dot<'guard>(&self, value: ScopedPtr<'guard>) {
+        self.second.set(value);
+    }
 }
 
 impl Print for Pair {
@@ -99,9 +117,20 @@ impl Print for Pair {
             _ => write!(f, "({} {})", self.first.get(guard), second),
         }
     }
+
+    // In debug print, use dot notation
+    fn debug<'scope>(&self, guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({} . {})", self.first.get(guard), self.second.get(guard))
+    }
 }
 
 /// TODO A heap-allocated number
 pub struct NumberObject {
     value: isize,
+}
+
+impl Print for NumberObject {
+    fn print<'scope>(&self, guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
 }

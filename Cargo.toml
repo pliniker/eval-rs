@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 clap = "2.20.3"
+dirs = "1.0"
 rustyline = "1.0.0"
 # stickyimmix = { git = "https://github.com/rust-hosted-langs/book/" }
 stickyimmix = { path = "/home/pliniker/src/rust-hosted-langs/book/stickyimmix" }

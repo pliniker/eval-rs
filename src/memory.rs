@@ -2,14 +2,11 @@
 ///
 /// Defines Stack, Heap and Memory types, and a MemoryView type that gives a mutator a safe
 /// view into the stack and heap.
-use std::ops::Deref;
-use std::rc::Rc;
-
 use stickyimmix::{AllocObject, AllocRaw, RawPtr, StickyImmixHeap};
 
-use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
-
+use crate::error::RuntimeError;
 use crate::headers::{ObjectHeader, TypeList};
+use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
 use crate::symbolmap::SymbolMap;
 use crate::taggedptr::{FatPtr, TaggedPtr};
 
@@ -32,9 +29,7 @@ impl Stack {
             regs.push(CellPtr::new_nil());
         }
 
-        Stack {
-            regs
-        }
+        Stack { regs }
     }
 
     /// Get the copy of the pointer for the given register as a ScopedPtr
@@ -72,7 +67,7 @@ impl Heap {
     fn alloc<T>(&self, object: T) -> TaggedPtr
     where
         FatPtr: From<RawPtr<T>>,
-        T: AllocObject<TypeList>
+        T: AllocObject<TypeList>,
     {
         if let Ok(rawptr) = self.heap.alloc(object) {
             TaggedPtr::from(FatPtr::from(rawptr))
@@ -86,13 +81,13 @@ impl Heap {
 ///
 /// It implements `MutatorScope` such that any `ScopedPtr` or `Value` instances must be lifetime-
 /// limited to the lifetime of this instance using `&'scope MutatorScope`;
-pub struct MutatorView<'guard> {
-    heap: &'guard Heap,
-    stack: &'guard Stack,
+pub struct MutatorView<'memory> {
+    heap: &'memory Heap,
+    stack: &'memory Stack,
 }
 
-impl<'guard> MutatorView<'guard> {
-    fn new(foo: &'guard Memory) -> MutatorView<'guard> {
+impl<'memory> MutatorView<'memory> {
+    fn new(foo: &'memory Memory) -> MutatorView<'memory> {
         MutatorView {
             heap: &foo.heap,
             stack: &foo.stack,
@@ -118,9 +113,13 @@ impl<'guard> MutatorView<'guard> {
     pub fn alloc<T>(&self, object: T) -> ScopedPtr<'_>
     where
         FatPtr: From<RawPtr<T>>,
-        T: AllocObject<TypeList>
+        T: AllocObject<TypeList>,
     {
         ScopedPtr::new(self, self.heap.alloc(object))
+    }
+
+    pub fn nil(&self) -> ScopedPtr<'_> {
+        ScopedPtr::new(self, TaggedPtr::nil())
     }
 }
 
@@ -129,17 +128,25 @@ impl<'guard> MutatorScope for MutatorView<'guard> {}
 // Composed of a Heap and a Stack instance
 pub struct Memory {
     heap: Heap,
-    stack: Stack
+    stack: Stack,
 }
 
 impl Memory {
+    /// Instantiate a new memory environment
+    pub fn new() -> Memory {
+        Memory {
+            heap: Heap::new(),
+            stack: Stack::new(),
+        }
+    }
+
     /// Run a mutator process
-    pub fn mutate<F>(&self, f: F)
+    pub fn mutate<F>(&self, f: F) -> Result<(), RuntimeError>
     where
-        F: Fn(&MutatorView),
+        F: Fn(&MutatorView) -> Result<(), RuntimeError>,
     {
         let mut guard = MutatorView::new(self);
-        f(&mut guard);
+        f(&mut guard)
     }
 
     // TODO pub fn collect()

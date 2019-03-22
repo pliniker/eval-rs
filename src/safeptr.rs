@@ -53,7 +53,7 @@ impl CellPtr {
     /// Construct a new Nil CellPtr instance
     pub fn new_nil() -> CellPtr {
         CellPtr {
-            inner: Cell::new(TaggedPtr::nil())
+            inner: Cell::new(TaggedPtr::nil()),
         }
     }
 

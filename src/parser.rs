@@ -1,62 +1,67 @@
 use std::iter::Peekable;
+use std::marker::PhantomData;
 
-use crate::error::{err_parser, err_parser_wpos, spos, RuntimeError, SourcePos};
-use crate::heap::Heap;
+use crate::error::{err_parser, err_parser_wpos, RuntimeError, SourcePos};
 use crate::lexer::{tokenize, Token, TokenType};
-use crate::primitives::{Pair, Symbol};
-use crate::symbolmap::SymbolMapper;
-use crate::taggedptr::{FatPtr, TaggedPtr};
+use crate::memory::MutatorView;
+use crate::primitives::Pair;
+use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
+use crate::taggedptr::Value;
 
-use stickyimmix::{AllocRaw, RawPtr};
+use stickyimmix::AllocRaw;
 
-// A linked list, internal to the parser to simplify the code and is not stored in managed memory
-struct PairList {
-    head: Option<RawPtr<Pair>>,
-    tail: Option<RawPtr<Pair>>,
+// A linked list, internal to the parser to simplify the code and is stored on the Rust stack
+struct PairList<'guard> {
+    head: CellPtr,
+    tail: CellPtr,
+    _guard: PhantomData<&'guard MutatorScope>,
 }
 
-impl PairList {
+impl<'guard> PairList<'guard> {
     /// Create a new empty list
-    fn open() -> PairList {
+    fn open(_guard: &'guard MutatorScope) -> PairList {
         PairList {
-            head: None,
-            tail: None,
+            head: CellPtr::new_nil(),
+            tail: CellPtr::new_nil(),
+            _guard: PhantomData,
         }
     }
 
     /// Move the given value to managed memory and append it to the list
-    fn push(&mut self, value: FatPtr, pos: SourcePos, heap: &Heap) {
-        if let Some(mut old_tail) = self.tail {
-            let mut new_tail = old_tail.append(heap, value);
-            self.tail = Some(new_tail);
-            // set source code line/char
-            new_tail.set_first_source_pos(pos);
-            old_tail.set_second_source_pos(pos);
+    fn push(&mut self, mem: &'guard MutatorView, value: ScopedPtr<'guard>, pos: SourcePos) {
+        if let Value::Pair(old_tail) = *self.tail.get(mem) {
+            let mut new_tail = old_tail.append(mem, value);
+            self.tail.set(new_tail);
+
+        // set source code line/char
+        //new_tail.set_first_source_pos(pos);
+        //old_tail.set_second_source_pos(pos);
         } else {
-            let mut pair = heap.alloc(Pair::new());
-            pair.set(value);
-            self.head = Some(pair);
-            self.tail = self.head;
+            let mut pair = Pair::new();
+            pair.first.set(value);
+
+            self.head.set(mem.alloc(pair));
+            self.tail.copy_from(&self.head);
+
             // set source code line/char
-            pair.set_first_source_pos(pos);
-            pair.set_second_source_pos(pos);
+            //pair.set_first_source_pos(pos);
+            //pair.set_second_source_pos(pos);
         }
     }
 
     /// Apply dot-notation to set the second value of the last pair of the list
-    fn dot(&mut self, value: FatPtr, pos: SourcePos) {
-        if let Some(mut old_tail) = self.tail {
-            old_tail.dot(value);
-            // set source code line/char
-            old_tail.set_second_source_pos(pos);
+    fn dot(&mut self, guard: &'guard MutatorScope, value: ScopedPtr<'guard>, pos: SourcePos) {
+        if let Value::Pair(pair) = *self.tail.get(guard) {
+            pair.dot(value);
+        //pair.set_second_source_pos(pos);
         } else {
-            panic!("cannot dot an empty PairList!")
+            panic!("Cannot dot an empty PairList::tail!")
         }
     }
 
     /// Consume the list and return the pair at the head
-    fn close(self) -> RawPtr<Pair> {
-        self.head.expect("cannot close empty PairList!")
+    fn close(self, guard: &'guard MutatorScope) -> ScopedPtr<'guard> {
+        self.head.get(guard)
     }
 }
 
@@ -72,7 +77,10 @@ impl PairList {
 // If a list token is:
 //  * a Dot, it must be followed by an s-expression and a CloseParen
 //
-fn parse_list<'i, I: 'i>(tokens: &mut Peekable<I>, env: &Heap) -> Result<FatPtr, RuntimeError>
+fn parse_list<'guard, 'i, I: 'i>(
+    mem: &'guard MutatorView,
+    tokens: &mut Peekable<I>,
+) -> Result<ScopedPtr<'guard>, RuntimeError>
 where
     I: Iterator<Item = &'i Token>,
 {
@@ -85,7 +93,7 @@ where
             pos: _,
         }) => {
             tokens.next();
-            return Ok(FatPtr::Nil);
+            return Ok(mem.nil());
         }
 
         Some(&&Token { token: Dot, pos }) => {
@@ -99,7 +107,7 @@ where
     }
 
     // we have what looks like a valid list so far...
-    let mut list = PairList::open();
+    let mut list = PairList::open(mem);
     loop {
         match tokens.peek() {
             Some(&&Token {
@@ -107,7 +115,7 @@ where
                 pos,
             }) => {
                 tokens.next();
-                list.push(parse_list(tokens, env)?, pos, &env.heap);
+                list.push(mem, parse_list(mem, tokens)?, pos);
             }
 
             Some(&&Token {
@@ -115,13 +123,13 @@ where
                 pos,
             }) => {
                 tokens.next();
-                let sym = env.syms.lookup(name);
-                list.push(FatPtr::Symbol(sym), pos, &env.heap);
+                let sym = mem.lookup_sym(name);
+                list.push(mem, sym, pos);
             }
 
             Some(&&Token { token: Dot, pos }) => {
                 tokens.next();
-                list.dot(parse_sexpr(tokens, env)?, pos);
+                list.dot(mem, parse_sexpr(mem, tokens)?, pos);
 
                 // the only valid sequence here on out is Dot s-expression CloseParen
                 match tokens.peek() {
@@ -155,7 +163,7 @@ where
         }
     }
 
-    Ok(FatPtr::Pair(list.close()))
+    Ok(list.close(mem))
 }
 
 //
@@ -165,7 +173,10 @@ where
 //  * symbol
 //  * or a list
 //
-fn parse_sexpr<'i, I: 'i>(tokens: &mut Peekable<I>, env: &Heap) -> Result<FatPtr, RuntimeError>
+fn parse_sexpr<'guard, 'i, I: 'i>(
+    mem: &'guard MutatorView,
+    tokens: &mut Peekable<I>,
+) -> Result<ScopedPtr<'guard>, RuntimeError>
 where
     I: Iterator<Item = &'i Token>,
 {
@@ -177,7 +188,7 @@ where
             pos: _,
         }) => {
             tokens.next();
-            parse_list(tokens, env)
+            parse_list(mem, tokens)
         }
 
         Some(&&Token {
@@ -185,8 +196,7 @@ where
             pos: _,
         }) => {
             tokens.next();
-            let sym = env.syms.lookup(name);
-            Ok(FatPtr::Symbol(sym))
+            Ok(mem.lookup_sym(name))
         }
 
         Some(&&Token {
@@ -198,36 +208,45 @@ where
 
         None => {
             tokens.next();
-            Ok(FatPtr::Nil)
+            Ok(mem.nil())
         }
     }
 }
 
-fn parse_tokens(tokens: Vec<Token>, env: &Heap) -> Result<FatPtr, RuntimeError> {
+fn parse_tokens<'guard>(
+    mem: &'guard MutatorView,
+    tokens: Vec<Token>,
+) -> Result<ScopedPtr<'guard>, RuntimeError> {
     let mut tokenstream = tokens.iter().peekable();
-    parse_sexpr(&mut tokenstream, env)
+    parse_sexpr(mem, &mut tokenstream)
 }
 
-pub fn parse(input: &str, env: &Heap) -> Result<FatPtr, RuntimeError> {
-    parse_tokens(tokenize(input)?, env)
+pub fn parse<'guard>(
+    mem: &'guard MutatorView,
+    input: &str,
+) -> Result<ScopedPtr<'guard>, RuntimeError> {
+    parse_tokens(mem, tokenize(input)?)
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::arena::Arena;
     use crate::memory::Memory;
     use crate::printer::print;
 
     fn check(input: &str, expect: &str) {
-        let heap = Arena::new(1024);
-        let mut env = Memory::new(&heap);
-        let ast = parse(input, &mut env).unwrap();
-        println!(
-            "expect: {}\n\tgot:    {}\n\tdebug:  {:?}",
-            &expect, &ast, &ast
-        );
-        assert!(print(&ast) == expect);
+        let mut mem = Memory::new();
+
+        mem.mutate(|view| {
+            let ast = parse(view, input)?;
+            println!(
+                "expect: {}\n\tgot:    {}\n\tdebug:  {:?}",
+                &expect, &ast, *ast
+            );
+            assert!(print(*ast) == expect);
+
+            Ok(())
+        });
     }
 
     #[test]
