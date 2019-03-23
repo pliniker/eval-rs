@@ -13,11 +13,11 @@ use crate::taggedptr::Value;
 impl<'scope> fmt::Display for Value<'scope> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Value::Nil => write!(f, "nil"),
+            Value::Nil => write!(f, "()"),
             Value::Pair(p) => p.print(self, f),
             Value::Symbol(s) => s.print(self, f),
             Value::Number(n) => write!(f, "{}", *n),
-            _ => write!(f, "cannot display unknown object type"),
+            _ => write!(f, "<unidentified-object-type>"),
         }
     }
 }
@@ -25,11 +25,11 @@ impl<'scope> fmt::Display for Value<'scope> {
 impl<'scope> fmt::Debug for Value<'scope> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Value::Nil => write!(f, "nil"),
+            Value::Nil => write!(f, "()"),
             Value::Pair(p) => p.debug(self, f),
             Value::Symbol(s) => s.debug(self, f),
             Value::Number(n) => write!(f, "{}", *n),
-            _ => write!(f, "Cannot display unknown object type"),
+            _ => write!(f, "<unidentified-object-type>"),
         }
     }
 }
@@ -55,16 +55,20 @@ impl Symbol {
     }
 
     /// Unsafe because Symbol does not own the &str
-    pub unsafe fn as_str(&self) -> &str {
+    pub unsafe fn unguarded_as_str(&self) -> &str {
         let slice = slice::from_raw_parts(self.name_ptr, self.name_len);
         str::from_utf8(slice).unwrap()
+    }
+
+    pub fn as_str<'guard>(&self, _guard: &'guard MutatorScope) -> &str {
+        unsafe { self.unguarded_as_str() }
     }
 }
 
 impl Print for Symbol {
     /// Safe because the lifetime of `MutatorScope` defines a safe-access window
-    fn print<'scope>(&self, _guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", unsafe { self.as_str() })
+    fn print<'scope>(&self, guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.as_str(guard))
     }
 }
 
@@ -110,17 +114,24 @@ impl Pair {
 
 impl Print for Pair {
     fn print<'scope>(&self, guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
-        let second = self.second.get_value(guard);
+        let mut tail = self;
+        write!(f, "({}", tail.first.get(guard))?;
 
-        match second {
-            Value::Nil => write!(f, "({})", self.first.get(guard)),
-            _ => write!(f, "({} {})", self.first.get(guard), second),
+        while let Value::Pair(next) = *tail.second.get(guard) {
+            tail = next;
+            write!(f, " {}", tail.first.get(guard))?;
         }
+
+        if let Value::Symbol(ptr) = *tail.second.get(guard) {
+            write!(f, " . {}", ptr.as_str(guard))?;
+        }
+
+        write!(f, ")")
     }
 
     // In debug print, use dot notation
     fn debug<'scope>(&self, guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({} . {})", self.first.get(guard), self.second.get(guard))
+        write!(f, "({:?} . {:?})", self.first.get(guard), self.second.get(guard))
     }
 }
 

@@ -235,18 +235,18 @@ mod test {
     use crate::printer::print;
 
     fn check(input: &str, expect: &str) {
-        let mut mem = Memory::new();
+        let mem = Memory::new();
 
         mem.mutate(|view| {
             let ast = parse(view, input)?;
             println!(
-                "expect: {}\n\tgot:    {}\n\tdebug:  {:?}",
+                "expect: {}\ngot:    {}\ndebug:  {:?}",
                 &expect, &ast, *ast
             );
             assert!(print(*ast) == expect);
 
             Ok(())
-        });
+        }).unwrap();
     }
 
     #[test]

@@ -43,6 +43,12 @@ impl<'guard> fmt::Display for ScopedPtr<'guard> {
     }
 }
 
+impl<'guard> fmt::Debug for ScopedPtr<'guard> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.value.fmt(f)
+    }
+}
+
 /// A wrapper around `TaggedPtr` for storing pointers in data structures with interior mutability,
 /// allowing pointers to be updated to point at different target objects.
 pub struct CellPtr {
