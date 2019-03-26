@@ -131,7 +131,12 @@ impl Print for Pair {
 
     // In debug print, use dot notation
     fn debug<'scope>(&self, guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({:?} . {:?})", self.first.get(guard), self.second.get(guard))
+        write!(
+            f,
+            "({:?} . {:?})",
+            self.first.get(guard),
+            self.second.get(guard)
+        )
     }
 }
 

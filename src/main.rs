@@ -4,7 +4,6 @@ extern crate dirs;
 extern crate rustyline;
 extern crate stickyimmix;
 
-use std::env;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
@@ -31,7 +30,6 @@ mod taggedptr;
 use memory::Memory;
 use parser::parse;
 
-/*
 /// Read a file into a String
 fn load_file(filename: &str) -> Result<String, io::Error> {
     let mut contents = String::new();
@@ -49,19 +47,21 @@ fn read_file(filename: &str) -> Result<(), ()> {
         process::exit(1);
     });
 
-    let heap = Arena::new(65536);
-    let env = Memory::with_heap(&heap);
+    let mem = Memory::new();
 
-    match parser::parse(&contents, &env) {
-        Ok(ast) => println!("{}", printer::print(&ast)),
+    mem.mutate(|view| match parse(view, &contents) {
+        Ok(ast) => {
+            println!("{}", printer::print(*ast));
+            Ok(())
+        }
         Err(e) => {
             e.print_with_source(&contents);
+            Err(e)
         }
-    }
+    });
 
     Ok(())
 }
-*/
 
 /// Read a line at a time, printing the input back out
 fn read_print_loop() -> Result<(), ReadlineError> {
@@ -100,20 +100,20 @@ fn read_print_loop() -> Result<(), ReadlineError> {
                     match parse(view, &line) {
                         Ok(value) => {
                             /*
-                            // eval
-                            match eval(value, &mem) {
-                            // print
-                            Ok(result) => println!("{}", printer::print(&result)),
-                            Err(e) => e.print_with_source(&line),
-                        } */
+                                // eval
+                                match eval(value, &mem) {
+                                // print
+                                Ok(result) => println!("{}", printer::print(&result)),
+                                Err(e) => e.print_with_source(&line),
+                            } */
                             println!("{}", printer::print(*value));
                             Ok(())
-                        },
+                        }
 
                         Err(e) => {
                             e.print_with_source(&line);
                             Err(e)
-                        },
+                        }
                     }
                 });
             }
@@ -133,13 +133,14 @@ fn read_print_loop() -> Result<(), ReadlineError> {
 }
 
 fn main() {
-    /*
     // parse command line argument, an optional filename
     let matches = App::new("Eval-R-Us")
         .about("Evaluate the expressions!")
-        .arg(Arg::with_name("filename")
-            .help("Optional filename to read in")
-            .index(1))
+        .arg(
+            Arg::with_name("filename")
+                .help("Optional filename to read in")
+                .index(1),
+        )
         .get_matches();
 
     if let Some(filename) = matches.value_of("filename") {
@@ -154,9 +155,5 @@ fn main() {
             println!("exited because: {}", err);
             process::exit(0);
         });
-    }*/
-    read_print_loop().unwrap_or_else(|err| {
-        println!("exited because: {}", err);
-        process::exit(0);
-    });
+    }
 }

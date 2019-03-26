@@ -239,14 +239,12 @@ mod test {
 
         mem.mutate(|view| {
             let ast = parse(view, input)?;
-            println!(
-                "expect: {}\ngot:    {}\ndebug:  {:?}",
-                &expect, &ast, *ast
-            );
+            println!("expect: {}\ngot:    {}\ndebug:  {:?}", &expect, &ast, *ast);
             assert!(print(*ast) == expect);
 
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
