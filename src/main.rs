@@ -62,7 +62,7 @@ fn read_file(filename: &str) -> Result<(), ()> {
     Ok(())
 }
 */
-/*
+
 /// Read a line at a time, printing the input back out
 fn read_print_loop() -> Result<(), ReadlineError> {
     // establish a repl input history file path
@@ -82,7 +82,7 @@ fn read_print_loop() -> Result<(), ReadlineError> {
         if let Err(_) = reader.load_history(&path) { /* ignore absence or unreadability */ }
     }
 
-    let mut mem = Memory::new();
+    let mem = Memory::new();
 
     // repl
     let mut input_counter = 1;
@@ -96,20 +96,26 @@ fn read_print_loop() -> Result<(), ReadlineError> {
                 reader.add_history_entry(&line);
 
                 // parse/"read"
-                match mem.mutate(|view| parse(view, &line)) {
-                    Ok(value) => {
-                        /*
-                        // eval
-                        match eval(value, &mem) {
+                mem.mutate(|view| {
+                    match parse(view, &line) {
+                        Ok(value) => {
+                            /*
+                            // eval
+                            match eval(value, &mem) {
                             // print
                             Ok(result) => println!("{}", printer::print(&result)),
                             Err(e) => e.print_with_source(&line),
                         } */
-                        println!("{}", printer::print(value));
-                    }
+                            println!("{}", printer::print(*value));
+                            Ok(())
+                        },
 
-                    Err(e) => e.print_with_source(&line),
-                }
+                        Err(e) => {
+                            e.print_with_source(&line);
+                            Err(e)
+                        },
+                    }
+                });
             }
 
             // some kind of program termination condition
@@ -125,7 +131,7 @@ fn read_print_loop() -> Result<(), ReadlineError> {
         }
     }
 }
-*/
+
 fn main() {
     /*
     // parse command line argument, an optional filename
@@ -148,9 +154,9 @@ fn main() {
             println!("exited because: {}", err);
             process::exit(0);
         });
-    }
+    }*/
     read_print_loop().unwrap_or_else(|err| {
         println!("exited because: {}", err);
         process::exit(0);
-    });*/
+    });
 }
