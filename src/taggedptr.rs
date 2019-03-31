@@ -11,6 +11,7 @@
 /// Defines a `TaggedPtr` type where the low bits of a pointer indicate the
 /// type of the object pointed to for certain types, but the object header is
 /// required to provide most object type ids.
+use std::fmt;
 use std::ptr::NonNull;
 
 use stickyimmix::{AllocRaw, RawPtr};
@@ -18,6 +19,7 @@ use stickyimmix::{AllocRaw, RawPtr};
 use crate::memory::HeapStorage;
 use crate::pointerops::{get_tag, ScopedRef, Tagged, TAG_NUMBER, TAG_OBJECT, TAG_PAIR, TAG_SYMBOL};
 use crate::primitives::{NumberObject, Pair, Symbol};
+use crate::printer::Print;
 use crate::safeptr::MutatorScope;
 
 /// A safe interface to GC-heap managed objects. The `'scope` lifetime must be a safe lifetime for
@@ -31,6 +33,33 @@ pub enum Value<'scope> {
     Number(isize),
     NumberObject(&'scope NumberObject),
 }
+
+/// `Value` can have a safe `Display` implementation
+impl<'scope> fmt::Display for Value<'scope> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Value::Nil => write!(f, "()"),
+            Value::Pair(p) => p.print(self, f),
+            Value::Symbol(s) => s.print(self, f),
+            Value::Number(n) => write!(f, "{}", *n),
+            _ => write!(f, "<unidentified-object-type>"),
+        }
+    }
+}
+
+impl<'scope> fmt::Debug for Value<'scope> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Value::Nil => write!(f, "()"),
+            Value::Pair(p) => p.debug(self, f),
+            Value::Symbol(s) => s.debug(self, f),
+            Value::Number(n) => write!(f, "{}", *n),
+            _ => write!(f, "<unidentified-object-type>"),
+        }
+    }
+}
+
+impl<'scope> MutatorScope for Value<'scope> {}
 
 /// An unpacked tagged Fat Pointer that carries the type information in the enum structure.
 /// This should represent every type native to the runtime.

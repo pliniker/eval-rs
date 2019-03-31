@@ -9,33 +9,6 @@ use crate::printer::Print;
 use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
 use crate::taggedptr::Value;
 
-/// `Value` can have a safe `Display` implementation
-impl<'scope> fmt::Display for Value<'scope> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Value::Nil => write!(f, "()"),
-            Value::Pair(p) => p.print(self, f),
-            Value::Symbol(s) => s.print(self, f),
-            Value::Number(n) => write!(f, "{}", *n),
-            _ => write!(f, "<unidentified-object-type>"),
-        }
-    }
-}
-
-impl<'scope> fmt::Debug for Value<'scope> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Value::Nil => write!(f, "()"),
-            Value::Pair(p) => p.debug(self, f),
-            Value::Symbol(s) => s.debug(self, f),
-            Value::Number(n) => write!(f, "{}", *n),
-            _ => write!(f, "<unidentified-object-type>"),
-        }
-    }
-}
-
-impl<'scope> MutatorScope for Value<'scope> {}
-
 /// A Symbol is a unique object that has a unique name string. The backing storage for the
 /// underlying str data must have a lifetime of at least that of the Symbol instance to
 /// prevent use-after-free.
