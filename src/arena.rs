@@ -27,6 +27,10 @@ impl AllocHeader for ArenaHeader {
         ArenaHeader {}
     }
 
+    fn new_array(_size: u32, _size_class: SizeClass, _mark: Mark) -> ArenaHeader {
+        ArenaHeader {}
+    }
+
     fn mark(&mut self) {}
 
     fn is_marked(&self) -> bool {
@@ -66,6 +70,10 @@ impl AllocRaw for Arena {
         T: AllocObject<TypeList>,
     {
         self.heap.alloc(object)
+    }
+
+    fn alloc_array(&self, _size_bytes: u32) -> Result<RawPtr<u8>, AllocError> {
+        unimplemented!()
     }
 
     fn get_header(_object: NonNull<()>) -> NonNull<Self::Header> {

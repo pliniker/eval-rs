@@ -14,6 +14,7 @@ pub enum TypeList {
     Pair,
     Symbol,
     NumberObject,
+    Array,
 }
 
 // Mark this as a Stickyimmix type-identifier type
@@ -59,6 +60,15 @@ impl AllocHeader for ObjectHeader {
             mark: mark,
             size_class: size_class,
             type_id: O::TYPE_ID,
+            size_bytes: size,
+        }
+    }
+
+    fn new_array(size: u32, size_class: SizeClass, mark: Mark) -> ObjectHeader {
+        ObjectHeader {
+            mark: mark,
+            size_class: size_class,
+            type_id: TypeList::Array,
             size_bytes: size,
         }
     }
