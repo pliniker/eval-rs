@@ -8,8 +8,6 @@ use crate::primitives::Pair;
 use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
 use crate::taggedptr::Value;
 
-use stickyimmix::AllocRaw;
-
 // A linked list, internal to the parser to simplify the code and is stored on the Rust stack
 struct PairList<'guard> {
     head: CellPtr,
@@ -28,29 +26,36 @@ impl<'guard> PairList<'guard> {
     }
 
     /// Move the given value to managed memory and append it to the list
-    fn push(&mut self, mem: &'guard MutatorView, value: ScopedPtr<'guard>, pos: SourcePos) {
+    fn push(
+        &mut self,
+        mem: &'guard MutatorView,
+        value: ScopedPtr<'guard>,
+        _pos: SourcePos,
+    ) -> Result<(), RuntimeError> {
         if let Value::Pair(old_tail) = *self.tail.get(mem) {
-            let mut new_tail = old_tail.append(mem, value);
+            let new_tail = old_tail.append(mem, value)?;
             self.tail.set(new_tail);
 
         // set source code line/char
         //new_tail.set_first_source_pos(pos);
         //old_tail.set_second_source_pos(pos);
         } else {
-            let mut pair = Pair::new();
+            let pair = Pair::new();
             pair.first.set(value);
 
-            self.head.set(mem.alloc(pair));
+            self.head.set(mem.alloc(pair)?);
             self.tail.copy_from(&self.head);
 
             // set source code line/char
             //pair.set_first_source_pos(pos);
             //pair.set_second_source_pos(pos);
         }
+
+        Ok(())
     }
 
     /// Apply dot-notation to set the second value of the last pair of the list
-    fn dot(&mut self, guard: &'guard MutatorScope, value: ScopedPtr<'guard>, pos: SourcePos) {
+    fn dot(&mut self, guard: &'guard MutatorScope, value: ScopedPtr<'guard>, _pos: SourcePos) {
         if let Value::Pair(pair) = *self.tail.get(guard) {
             pair.dot(value);
         //pair.set_second_source_pos(pos);
@@ -115,7 +120,7 @@ where
                 pos,
             }) => {
                 tokens.next();
-                list.push(mem, parse_list(mem, tokens)?, pos);
+                list.push(mem, parse_list(mem, tokens)?, pos)?;
             }
 
             Some(&&Token {
@@ -124,7 +129,7 @@ where
             }) => {
                 tokens.next();
                 let sym = mem.lookup_sym(name);
-                list.push(mem, sym, pos);
+                list.push(mem, sym, pos)?;
             }
 
             Some(&&Token { token: Dot, pos }) => {

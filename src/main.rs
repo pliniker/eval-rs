@@ -15,6 +15,8 @@ use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 mod arena;
+mod array;
+mod containers;
 mod error;
 mod headers;
 mod lexer;
@@ -27,8 +29,9 @@ mod safeptr;
 mod symbolmap;
 mod taggedptr;
 
-use memory::Memory;
-use parser::parse;
+use crate::error::{ErrorKind, RuntimeError};
+use crate::memory::Memory;
+use crate::parser::parse;
 
 /// Read a file into a String
 fn load_file(filename: &str) -> Result<String, io::Error> {
@@ -39,13 +42,9 @@ fn load_file(filename: &str) -> Result<String, io::Error> {
     Ok(contents)
 }
 
-/// Read an entire file
-/// TODO handle errors out of here more consistently
-fn read_file(filename: &str) -> Result<(), ()> {
-    let contents = load_file(&filename).unwrap_or_else(|err| {
-        println!("failed to read file {}: {}", &filename, err);
-        process::exit(1);
-    });
+/// Read and evaluate an entire file
+fn read_file(filename: &str) -> Result<(), RuntimeError> {
+    let contents = load_file(&filename)?;
 
     let mem = Memory::new();
 
@@ -58,13 +57,13 @@ fn read_file(filename: &str) -> Result<(), ()> {
             e.print_with_source(&contents);
             Err(e)
         }
-    });
+    })?;
 
     Ok(())
 }
 
 /// Read a line at a time, printing the input back out
-fn read_print_loop() -> Result<(), ReadlineError> {
+fn read_print_loop() -> Result<(), RuntimeError> {
     // establish a repl input history file path
     let history_file = match dirs::home_dir() {
         Some(mut path) => {
@@ -74,12 +73,14 @@ fn read_print_loop() -> Result<(), ReadlineError> {
         None => None,
     };
 
-    // () means no completion support
+    // () means no completion support (TODO)
     let mut reader = Editor::<()>::new();
 
-    // try to load the history file, failing silently if it can't be read
+    // Try to load the repl history file
     if let Some(ref path) = history_file {
-        if let Err(_) = reader.load_history(&path) { /* ignore absence or unreadability */ }
+        if let Err(err) = reader.load_history(&path) {
+            eprintln!("Could not read history: {}", err);
+        }
     }
 
     let mem = Memory::new();
@@ -99,7 +100,7 @@ fn read_print_loop() -> Result<(), ReadlineError> {
                 mem.mutate(|view| {
                     match parse(view, &line) {
                         Ok(value) => {
-                            /*
+                            /* TODO
                                 // eval
                                 match eval(value, &mem) {
                                 // print
@@ -111,22 +112,32 @@ fn read_print_loop() -> Result<(), ReadlineError> {
                         }
 
                         Err(e) => {
-                            e.print_with_source(&line);
-                            Err(e)
+                            match e.error_kind() {
+                                ErrorKind::LexerError(_) => e.print_with_source(&line),
+                                ErrorKind::ParseError(_) => e.print_with_source(&line),
+                                ErrorKind::EvalError(_) => e.print_with_source(&line),
+                                _ => return Err(e)
+                            }
+                            Ok(())
                         }
                     }
-                });
+                })?;
             }
 
             // some kind of program termination condition
             Err(e) => {
                 if let Some(ref path) = history_file {
                     reader.save_history(&path).unwrap_or_else(|err| {
-                        println!("could not save input history in {}: {}", path, err);
+                        eprintln!("could not save input history in {}: {}", path, err);
                     });
                 }
 
-                return Err(e);
+                // EOF is fine
+                if let ReadlineError::Eof = e {
+                    return Ok(());
+                } else {
+                    return Err(RuntimeError::from(e));
+                }
             }
         }
     }
@@ -145,15 +156,15 @@ fn main() {
 
     if let Some(filename) = matches.value_of("filename") {
         // if a filename was specified, read it into a String
-        read_file(filename).unwrap_or_else(|_err| {
-            println!("Error...");
+        read_file(filename).unwrap_or_else(|err| {
+            eprintln!("Terminated: {}", err);
             process::exit(1);
         });
     } else {
         // otherwise begin a repl
         read_print_loop().unwrap_or_else(|err| {
-            println!("exited because: {}", err);
-            process::exit(0);
+            eprintln!("Terminated: {}", err);
+            process::exit(1);
         });
     }
 }

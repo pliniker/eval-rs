@@ -2,7 +2,7 @@
 ///
 /// Defines Stack, Heap and Memory types, and a MemoryView type that gives a mutator a safe
 /// view into the stack and heap.
-use stickyimmix::{AllocObject, AllocRaw, RawPtr, StickyImmixHeap};
+use stickyimmix::{AllocObject, AllocRaw, ArraySize, RawPtr, StickyImmixHeap};
 
 use crate::error::RuntimeError;
 use crate::headers::{ObjectHeader, TypeList};
@@ -63,17 +63,16 @@ impl Heap {
     }
 
     /// Write an object into the heapn and return the pointer to it
-    /// TODO implement error handling
-    fn alloc<T>(&self, object: T) -> TaggedPtr
+    fn alloc<T>(&self, object: T) -> Result<TaggedPtr, RuntimeError>
     where
         FatPtr: From<RawPtr<T>>,
         T: AllocObject<TypeList>,
     {
-        if let Ok(rawptr) = self.heap.alloc(object) {
-            TaggedPtr::from(FatPtr::from(rawptr))
-        } else {
-            TaggedPtr::nil()
-        }
+        Ok(TaggedPtr::from(FatPtr::from(self.heap.alloc(object)?)))
+    }
+
+    fn alloc_array(&self, capacity: ArraySize) -> Result<RawPtr<u8>, RuntimeError> {
+        Ok(self.heap.alloc_array(capacity)?)
     }
 }
 
@@ -110,12 +109,17 @@ impl<'memory> MutatorView<'memory> {
     }
 
     /// Write an object into the heap and return the pointer to it
-    pub fn alloc<T>(&self, object: T) -> ScopedPtr<'_>
+    pub fn alloc<T>(&self, object: T) -> Result<ScopedPtr<'_>, RuntimeError>
     where
         FatPtr: From<RawPtr<T>>,
         T: AllocObject<TypeList>,
     {
-        ScopedPtr::new(self, self.heap.alloc(object))
+        Ok(ScopedPtr::new(self, self.heap.alloc(object)?))
+    }
+
+    /// Make space for an array of bytes
+    pub fn alloc_array(&self, capacity: ArraySize) -> Result<RawPtr<u8>, RuntimeError> {
+        self.heap.alloc_array(capacity)
     }
 
     pub fn nil(&self) -> ScopedPtr<'_> {

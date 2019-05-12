@@ -3,7 +3,7 @@ use std::fmt;
 use std::slice;
 use std::str;
 
-use crate::error::SourcePos;
+use crate::error::{RuntimeError, SourcePos};
 use crate::memory::MutatorView;
 use crate::printer::Print;
 use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
@@ -69,14 +69,14 @@ impl Pair {
         &self,
         mem: &'guard MutatorView,
         value: ScopedPtr<'guard>,
-    ) -> ScopedPtr<'guard> {
-        let mut pair = Pair::new();
+    ) -> Result<ScopedPtr<'guard>, RuntimeError> {
+        let pair = Pair::new();
         pair.first.set(value);
 
-        let pair = mem.alloc(pair);
+        let pair = mem.alloc(pair)?;
         self.second.set(pair);
 
-        pair
+        Ok(pair)
     }
 
     /// Set Pair.second to the given value
@@ -119,7 +119,7 @@ pub struct NumberObject {
 }
 
 impl Print for NumberObject {
-    fn print<'scope>(&self, guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+    fn print<'scope>(&self, _guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.value)
     }
 }

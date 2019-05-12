@@ -1,7 +1,11 @@
 use std::error::Error;
 use std::fmt;
+use std::io;
+
+use rustyline::error::ReadlineError;
 
 use blockalloc::BlockError;
+use stickyimmix::AllocError;
 
 /// Source code position
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -18,6 +22,7 @@ impl SourcePos {
 
 #[derive(Debug, PartialEq)]
 pub enum ErrorKind {
+    IOError(String),
     LexerError(String),
     ParseError(String),
     EvalError(String),
@@ -45,6 +50,10 @@ impl RuntimeError {
             kind: kind,
             pos: Some(pos),
         }
+    }
+
+    pub fn error_kind(&self) -> &ErrorKind {
+        &self.kind
     }
 
     pub fn error_pos(&self) -> Option<SourcePos> {
@@ -75,6 +84,7 @@ impl RuntimeError {
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.kind {
+            ErrorKind::IOError(ref reason) => write!(f, "IO Error: {}", reason),
             ErrorKind::LexerError(ref reason) => write!(f, "Parse error: {}", reason),
             ErrorKind::ParseError(ref reason) => write!(f, "Parse error: {}", reason),
             ErrorKind::EvalError(ref reason) => write!(f, "Evaluation error: {}", reason),
@@ -86,12 +96,36 @@ impl fmt::Display for RuntimeError {
     }
 }
 
+/// Convert from io::Error
+impl From<io::Error> for RuntimeError {
+    fn from(other: io::Error) -> RuntimeError {
+        RuntimeError::new(ErrorKind::IOError(format!("{}", other)))
+    }
+}
+
+/// Convert from ReadlineError
+impl From<ReadlineError> for RuntimeError {
+    fn from(other: ReadlineError) -> RuntimeError {
+        RuntimeError::new(ErrorKind::IOError(format!("{}", other)))
+    }
+}
+
 /// Convert from BlockError
 impl From<BlockError> for RuntimeError {
     fn from(other: BlockError) -> RuntimeError {
         match other {
             BlockError::OOM => RuntimeError::new(ErrorKind::OutOfMemory),
             BlockError::BadRequest => RuntimeError::new(ErrorKind::BadAllocationRequest),
+        }
+    }
+}
+
+/// Convert from AllocError
+impl From<AllocError> for RuntimeError {
+    fn from(other: AllocError) -> RuntimeError {
+        match other {
+            AllocError::OOM => RuntimeError::new(ErrorKind::OutOfMemory),
+            AllocError::BadRequest => RuntimeError::new(ErrorKind::BadAllocationRequest),
         }
     }
 }
