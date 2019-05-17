@@ -15,7 +15,6 @@ use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 mod arena;
-mod array;
 mod containers;
 mod error;
 mod headers;
@@ -25,6 +24,7 @@ mod parser;
 mod pointerops;
 mod primitives;
 mod printer;
+mod rawarray;
 mod safeptr;
 mod symbolmap;
 mod taggedptr;
@@ -113,10 +113,11 @@ fn read_print_loop() -> Result<(), RuntimeError> {
 
                         Err(e) => {
                             match e.error_kind() {
+                                // non-fatal repl errors
                                 ErrorKind::LexerError(_) => e.print_with_source(&line),
                                 ErrorKind::ParseError(_) => e.print_with_source(&line),
                                 ErrorKind::EvalError(_) => e.print_with_source(&line),
-                                _ => return Err(e)
+                                _ => return Err(e),
                             }
                             Ok(())
                         }

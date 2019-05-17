@@ -62,7 +62,7 @@ impl Heap {
         TaggedPtr::symbol(self.syms.lookup(name))
     }
 
-    /// Write an object into the heapn and return the pointer to it
+    /// Write an object into the heap and return the pointer to it
     fn alloc<T>(&self, object: T) -> Result<TaggedPtr, RuntimeError>
     where
         FatPtr: From<RawPtr<T>>,
