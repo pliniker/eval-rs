@@ -28,6 +28,7 @@ pub enum ErrorKind {
     EvalError(String),
     BadAllocationRequest,
     OutOfMemory,
+    BoundsError,
 }
 
 /// An Eval-rs runtime error type

@@ -1,17 +1,42 @@
+use std::mem::size_of;
 use std::ptr::NonNull;
 use std::slice::from_raw_parts_mut;
 
 use stickyimmix::ArraySize;
 
-use crate::error::RuntimeError;
+use crate::error::{ErrorKind, RuntimeError};
 use crate::memory::MutatorView;
+
+/// Arrays start out at this size by default
+pub const DEFAULT_ARRAY_SIZE: ArraySize = 8;
+
+/// Arrays grow at this rate by default
+pub fn default_array_growth(capacity: ArraySize) -> Result<ArraySize, RuntimeError> {
+    capacity.checked_add(capacity / 2)
+        .ok_or(RuntimeError::new(ErrorKind::BadAllocationRequest))
+}
 
 /// Fundamental array type on which other variable-length types are built.
 /// Analagous to RawVec.
 pub struct RawArray<T: Sized> {
+    /// Count of T-sized objects that can fit in the array
     capacity: ArraySize,
     ptr: Option<NonNull<T>>,
 }
+
+/// Since this base array type needs to be used in an interior-mutable way by the containers
+/// built on top of it, the Copy+Clone traits need to be implemented for it so that it can
+/// be used in a Cell
+impl<T: Sized> Clone for RawArray<T> {
+    fn clone(&self) -> Self {
+        RawArray {
+            capacity: self.capacity,
+            ptr: self.ptr,
+        }
+    }
+}
+
+impl<T: Sized> Copy for RawArray<T> {}
 
 impl<T: Sized> RawArray<T> {
     /// Return a RawArray of capacity 0 with no array bytes allocated
@@ -22,19 +47,19 @@ impl<T: Sized> RawArray<T> {
         }
     }
 
-    /// Return the capacity of the array in bytes
-    pub fn capacity(&self) -> ArraySize {
-        self.capacity
-    }
-
     /// Return a RawArray of the given capacity number of bytes allocated
     pub fn with_capacity<'scope>(
         mem: &'scope MutatorView,
         capacity: u32,
     ) -> Result<RawArray<T>, RuntimeError> {
+        // convert to bytes, checking for possible overflow of ArraySize limit
+        let capacity_bytes = capacity
+            .checked_mul(size_of::<T>() as ArraySize)
+            .ok_or(RuntimeError::new(ErrorKind::BadAllocationRequest))?;
+
         Ok(RawArray {
             capacity: capacity,
-            ptr: NonNull::new(mem.alloc_array(capacity)?.as_ptr() as *mut T),
+            ptr: NonNull::new(mem.alloc_array(capacity_bytes)?.as_ptr() as *mut T),
         })
     }
 
@@ -46,7 +71,6 @@ impl<T: Sized> RawArray<T> {
         mem: &'scope MutatorView,
         new_capacity: u32,
     ) -> Result<(), RuntimeError> {
-
         // If we're reducing the capacity to 0, simply detach the array pointer
         if new_capacity == 0 {
             self.capacity = 0;
@@ -58,17 +82,27 @@ impl<T: Sized> RawArray<T> {
             // If we have capacity, create new capacity and copy over all bytes from the old
             // to the new array
             Some(old_ptr) => {
+                // Convert existing capacity to bytes
+                let old_capacity_bytes = size_of::<T>() as ArraySize * self.capacity;
                 let old_ptr = old_ptr.as_ptr();
-                let new_ptr = mem.alloc_array(new_capacity)?.as_ptr() as *mut T;
 
+                // Convert new capacity to bytes but check that the number of bytes isn't
+                // outside of ArraySize range
+                let new_capacity_bytes = new_capacity
+                    .checked_mul(size_of::<T>() as ArraySize)
+                    .ok_or(RuntimeError::new(ErrorKind::BadAllocationRequest))?;
+
+                let new_ptr = mem.alloc_array(new_capacity_bytes)?.as_ptr() as *mut T;
+
+                // create a pair of slices from the raw pointers and byte sizes
                 let (old_slice, new_slice) = unsafe {
                     (
-                        from_raw_parts_mut(old_ptr as *mut u8, self.capacity as usize),
-                        from_raw_parts_mut(new_ptr as *mut u8, new_capacity as usize),
+                        from_raw_parts_mut(old_ptr as *mut u8, old_capacity_bytes as usize),
+                        from_raw_parts_mut(new_ptr as *mut u8, new_capacity_bytes as usize),
                     )
                 };
 
-                // copy content from old to new array
+                // Copy content from old to new array
                 for (src, dest) in old_slice.iter().zip(new_slice) {
                     *dest = *src;
                 }
@@ -77,7 +111,7 @@ impl<T: Sized> RawArray<T> {
                 self.capacity = new_capacity;
 
                 Ok(())
-            },
+            }
 
             // If we have no capacity, create new blank capacity
             None => {
@@ -85,6 +119,11 @@ impl<T: Sized> RawArray<T> {
                 Ok(())
             }
         }
+    }
+
+    /// Return the capacity of the array in bytes
+    pub fn capacity(&self) -> ArraySize {
+        self.capacity
     }
 
     /// Return a pointer to the array
