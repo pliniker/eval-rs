@@ -12,7 +12,8 @@ pub const DEFAULT_ARRAY_SIZE: ArraySize = 8;
 
 /// Arrays grow at this rate by default
 pub fn default_array_growth(capacity: ArraySize) -> Result<ArraySize, RuntimeError> {
-    capacity.checked_add(capacity / 2)
+    capacity
+        .checked_add(capacity / 2)
         .ok_or(RuntimeError::new(ErrorKind::BadAllocationRequest))
 }
 

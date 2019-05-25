@@ -1,6 +1,6 @@
 /// Defines an `ObjectHeader` type to immediately preceed each heap allocated
 /// object, which also contains a type tag but with space for many more types.
-use stickyimmix::{AllocHeader, AllocObject, AllocRaw, AllocTypeId, Mark, RawPtr, SizeClass};
+use stickyimmix::{AllocHeader, AllocObject, AllocRaw, AllocTypeId, ArraySize, Mark, RawPtr, SizeClass};
 
 use crate::memory::HeapStorage;
 use crate::pointerops::{AsNonNull, Tagged};
@@ -64,12 +64,12 @@ impl AllocHeader for ObjectHeader {
         }
     }
 
-    fn new_array(size: u32, size_class: SizeClass, mark: Mark) -> ObjectHeader {
+    fn new_array(size: ArraySize, size_class: SizeClass, mark: Mark) -> ObjectHeader {
         ObjectHeader {
             mark: mark,
             size_class: size_class,
             type_id: TypeList::Array,
-            size_bytes: size,
+            size_bytes: size as u32,
         }
     }
 

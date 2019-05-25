@@ -4,7 +4,7 @@
 use std::ptr::NonNull;
 
 use stickyimmix::{
-    AllocError, AllocHeader, AllocObject, AllocRaw, Mark, RawPtr, SizeClass, StickyImmixHeap,
+    AllocError, AllocHeader, AllocObject, AllocRaw, ArraySize, Mark, RawPtr, SizeClass, StickyImmixHeap,
 };
 
 use crate::headers::TypeList;
@@ -27,7 +27,7 @@ impl AllocHeader for ArenaHeader {
         ArenaHeader {}
     }
 
-    fn new_array(_size: u32, _size_class: SizeClass, _mark: Mark) -> ArenaHeader {
+    fn new_array(_size: ArraySize, _size_class: SizeClass, _mark: Mark) -> ArenaHeader {
         ArenaHeader {}
     }
 
@@ -72,7 +72,7 @@ impl AllocRaw for Arena {
         self.heap.alloc(object)
     }
 
-    fn alloc_array(&self, _size_bytes: u32) -> Result<RawPtr<u8>, AllocError> {
+    fn alloc_array(&self, _size_bytes: ArraySize) -> Result<RawPtr<u8>, AllocError> {
         unimplemented!()
     }
 

@@ -93,6 +93,7 @@ impl fmt::Display for RuntimeError {
             ErrorKind::BadAllocationRequest => {
                 write!(f, "An invalid memory size allocation was requested!")
             }
+            ErrorKind::BoundsError => write!(f, "Indexing bounds error"),
         }
     }
 }
