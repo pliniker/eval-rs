@@ -1,6 +1,8 @@
 /// Defines an `ObjectHeader` type to immediately preceed each heap allocated
 /// object, which also contains a type tag but with space for many more types.
-use stickyimmix::{AllocHeader, AllocObject, AllocRaw, AllocTypeId, ArraySize, Mark, RawPtr, SizeClass};
+use stickyimmix::{
+    AllocHeader, AllocObject, AllocRaw, AllocTypeId, ArraySize, Mark, RawPtr, SizeClass,
+};
 
 use crate::memory::HeapStorage;
 use crate::pointerops::{AsNonNull, Tagged};

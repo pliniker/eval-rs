@@ -4,7 +4,8 @@
 use std::ptr::NonNull;
 
 use stickyimmix::{
-    AllocError, AllocHeader, AllocObject, AllocRaw, ArraySize, Mark, RawPtr, SizeClass, StickyImmixHeap,
+    AllocError, AllocHeader, AllocObject, AllocRaw, ArraySize, Mark, RawPtr, SizeClass,
+    StickyImmixHeap,
 };
 
 use crate::headers::TypeList;

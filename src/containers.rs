@@ -1,5 +1,6 @@
 use std::cell::Cell;
 use std::ptr::{read, write};
+use std::slice::from_raw_parts;
 
 use stickyimmix::ArraySize;
 
@@ -14,15 +15,15 @@ use crate::safeptr::MutatorScope;
 /// Because there are no compile-time mutable aliasing guarantees, there can be no references
 /// into arrays at all, unless there can be a guarantee that the array memory will not be
 /// reallocated.
-pub trait Container<T: Sized> {
+pub trait Container<T: Sized + Copy> {
     /// Create a new, empty container instance.
     fn new() -> Self;
 }
 
 /// If implemented, the container can function as a stack
-pub trait StackContainer<T: Sized>: Container<T> {
+pub trait StackContainer<T: Sized + Copy>: Container<T> {
     /// Push can trigger an underlying array resize, hence it requires the ability to allocate
-    fn push<'guard>(&self, mem: &'guard MutatorView, item: T) -> Result<&'guard T, RuntimeError>;
+    fn push<'guard>(&self, mem: &'guard MutatorView, item: T) -> Result<(), RuntimeError>;
 
     /// Pop returns None if the container is empty, otherwise moves the last item of the array
     /// out to the caller.
@@ -30,25 +31,38 @@ pub trait StackContainer<T: Sized>: Container<T> {
 }
 
 /// If implemented, the container can function as an indexable vector
-pub trait IndexedContainer<T: Sized>: Container<T> {
-    /// Return a reference to the object at the given index. Bounds-checked.
-    fn get<'guard>(&self, _guard: &'guard MutatorScope, index: ArraySize) -> &'guard T;
+pub trait IndexedContainer<T: Sized + Copy>: Container<T> {
+    /// Return a copy of the object at the given index. Bounds-checked.
+    fn get<'guard>(
+        &self,
+        _guard: &'guard MutatorScope,
+        index: ArraySize,
+    ) -> Result<T, RuntimeError>;
 
-    /// Write an object into the array at the given index. Bounds-checked.
-    fn set<'guard>(&self, _guard: &'guard MutatorScope, index: ArraySize, item: T) -> &'guard T;
+    /// Move an object into the array at the given index. Bounds-checked.
+    fn set<'guard>(
+        &self,
+        _guard: &'guard MutatorScope,
+        index: ArraySize,
+        item: T,
+    ) -> Result<(), RuntimeError>;
 
-    // Return a mutator-lifetime-limited slice
-    // probably not possible because interior mutability
-    //fn as_slice<'guard>(&self, _guard: &'guard MutatorScope) -> &'guard [T];
+    /// Experimental
+    /// Give a closure a view of the container as a slice.
+    /// Restricting to `Fn` means interior mutability rules can be maintained. The closure cannot
+    /// safely escape a reference to an object inside the array.
+    fn slice_apply<'guard, F>(&self, _guard: &'guard MutatorScope, op: F)
+    where
+        F: Fn(&[T]);
 }
 
 /// An array, like Vec
-pub struct Array<T: Sized> {
+pub struct Array<T: Sized + Copy> {
     length: Cell<ArraySize>,
     data: Cell<RawArray<T>>,
 }
 
-impl<T: Sized> Array<T> {
+impl<T: Sized + Copy> Array<T> {
     /// Return a bounds-checked pointer to the object at the given index
     fn get_offset(&self, index: ArraySize) -> Result<*mut T, RuntimeError> {
         if index < 0 || index >= self.length.get() {
@@ -60,9 +74,9 @@ impl<T: Sized> Array<T> {
                 .as_ptr()
                 .ok_or(RuntimeError::new(ErrorKind::BoundsError))?;
 
-            let dest_ref = unsafe { ptr.offset(index as isize) as *mut T };
+            let dest_ptr = unsafe { ptr.offset(index as isize) as *mut T };
 
-            Ok(dest_ref)
+            Ok(dest_ptr)
         }
     }
 
@@ -72,7 +86,7 @@ impl<T: Sized> Array<T> {
         _guard: &'guard MutatorScope,
         index: ArraySize,
         item: T,
-    ) -> Result<&'guard T, RuntimeError> {
+    ) -> Result<&T, RuntimeError> {
         unsafe {
             let dest = self.get_offset(index)?;
             write(dest, item);
@@ -105,7 +119,7 @@ impl<T: Sized> Array<T> {
     }
 }
 
-impl<T: Sized> Container<T> for Array<T> {
+impl<T: Sized + Copy> Container<T> for Array<T> {
     fn new() -> Array<T> {
         Array {
             length: Cell::new(0),
@@ -114,10 +128,11 @@ impl<T: Sized> Container<T> for Array<T> {
     }
 }
 
-impl<T: Sized> StackContainer<T> for Array<T> {
-    fn push<'guard>(&self, mem: &'guard MutatorView, item: T) -> Result<&'guard T, RuntimeError> {
+impl<T: Sized + Copy> StackContainer<T> for Array<T> {
+    /// Push can trigger an underlying array resize, hence it requires the ability to allocate
+    fn push<'guard>(&self, mem: &'guard MutatorView, item: T) -> Result<(), RuntimeError> {
         let length = self.length.get();
-        let mut array = self.data.get();  // Takes a copy
+        let mut array = self.data.get(); // Takes a copy
 
         let capacity = array.capacity();
 
@@ -132,9 +147,12 @@ impl<T: Sized> StackContainer<T> for Array<T> {
         }
 
         self.length.set(length + 1);
-        Ok(self.write(mem, length, item)?)
+        self.write(mem, length, item)?;
+        Ok(())
     }
 
+    /// Pop returns None if the container is empty, otherwise moves the last item of the array
+    /// out to the caller.
     fn pop<'guard>(&self, _guard: &'guard MutatorScope) -> Result<T, RuntimeError> {
         let length = self.length.get();
 
@@ -149,11 +167,50 @@ impl<T: Sized> StackContainer<T> for Array<T> {
     }
 }
 
+impl<T: Sized + Copy> IndexedContainer<T> for Array<T> {
+    /// Return a copy of the object at the given index. Bounds-checked.
+    fn get<'guard>(
+        &self,
+        _guard: &'guard MutatorScope,
+        index: ArraySize,
+    ) -> Result<T, RuntimeError> {
+        self.read(_guard, index)
+    }
+
+    /// Move an object into the array at the given index. Bounds-checked.
+    fn set<'guard>(
+        &self,
+        _guard: &'guard MutatorScope,
+        index: ArraySize,
+        item: T,
+    ) -> Result<(), RuntimeError> {
+        self.write(_guard, index, item)?;
+        Ok(())
+    }
+
+    /// Experimental
+    /// Give a closure a view of the container as a slice.
+    /// Restricting to `Fn` means interior mutability rules can be maintained. The closure cannot
+    /// safely escape a reference to an object inside the array.
+    fn slice_apply<'guard, F>(&self, _guard: &'guard MutatorScope, op: F)
+    where
+        F: Fn(&[T]),
+    {
+        if let Some(ptr) = self.data.get().as_ptr() {
+            let as_slice = unsafe {
+                from_raw_parts(ptr, self.length.get() as usize)
+            };
+
+            op(as_slice);
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use super::{Array, Container, StackContainer};
+    use super::{Array, Container, StackContainer, IndexedContainer};
+    use crate::error::ErrorKind;
     use crate::memory::Memory;
-    use crate::printer::print;
 
     #[test]
     fn array_push_and_pop() {
@@ -162,7 +219,8 @@ mod test {
         mem.mutate(|view| {
             let array: Array<i64> = Array::new();
 
-            // XXX StickyImmixHeap will only allocate up to 32k at time of writing
+            // TODO StickyImmixHeap will only allocate up to 32k at time of writing
+            // test some big array sizes
             for i in 0..1000 {
                 array.push(view, i)?;
             }
@@ -172,6 +230,55 @@ mod test {
             }
 
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn array_indexing() {
+        let mem = Memory::new();
+
+        mem.mutate(|view| {
+            let array: Array<i64> = Array::new();
+
+            for i in 0..12 {
+                array.push(view, i)?;
+            }
+
+            assert!(array.get(view, 0) == Ok(0));
+            assert!(array.get(view, 4) == Ok(4));
+
+            for i in 12..1000 {
+                match array.get(view, i) {
+                    Ok(_) => panic!("Array index should have been out of bounds!"),
+                    Err(e) => assert!(*e.error_kind() == ErrorKind::BoundsError)
+                }
+            }
+
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn array_slice_apply() {
+        let mem = Memory::new();
+
+        mem.mutate(|view| {
+            let array: Array<i64> = Array::new();
+
+            for i in 0..12 {
+                array.push(view, i)?;
+            }
+
+            array.slice_apply(view, |items| {
+                for (i, value) in items.iter().enumerate() {
+                    assert!(i as i64 == *value);
+                }
+            });
+
+            Ok(())
+        })
+        .unwrap()
     }
 }
