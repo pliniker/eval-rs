@@ -45,6 +45,10 @@ impl AllocHeader for ArenaHeader {
     fn size(&self) -> u32 {
         1
     }
+
+    fn type_id(&self) -> TypeList {
+        TypeList::Symbol
+    }
 }
 
 /// A non-garbage-collected pool of memory blocks for interned values.

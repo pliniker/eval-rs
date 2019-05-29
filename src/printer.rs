@@ -1,4 +1,5 @@
 use std::fmt;
+use std::io;
 
 use crate::safeptr::MutatorScope;
 use crate::taggedptr::Value;
@@ -10,6 +11,14 @@ pub trait Print {
     fn debug<'guard>(&self, _guard: &'guard MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
         self.print(_guard, f)
     }
+
+    //fn repr<'guard, F: fmt::Write>(&self, _guard: &'guard MutatorScope, f: &mut F) -> fmt::Result;
+
+    //fn output<'guard, F: io::Write>(
+    //    &self,
+    //    _guard: &'guard MutatorScope,
+    //    f: &mut F,
+    //) -> io::Result<()>;
 }
 
 pub fn print(value: Value) -> String {

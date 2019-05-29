@@ -6,17 +6,19 @@ use stickyimmix::{
 
 use crate::memory::HeapStorage;
 use crate::pointerops::{AsNonNull, Tagged};
-use crate::primitives::{NumberObject, Pair, Symbol};
+use crate::primitives::{ArrayAny, NumberObject, Pair, Symbol};
 use crate::taggedptr::FatPtr;
 
 /// Recognized heap-allocated types.
 /// This should represent every type native to the runtime with the exception of tagged pointer inline value types.
 #[repr(u16)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum TypeList {
     Pair,
     Symbol,
     NumberObject,
-    Array,
+    Array, // type id for array backing bytes
+    ArrayAny,
 }
 
 // Mark this as a Stickyimmix type-identifier type
@@ -42,8 +44,9 @@ impl ObjectHeader {
             TypeList::NumberObject => {
                 FatPtr::NumberObject(RawPtr::untag(object_addr.cast::<NumberObject>()))
             }
+            TypeList::ArrayAny => FatPtr::ArrayAny(RawPtr::untag(object_addr.cast::<ArrayAny>())),
 
-            _ => panic!("Invalid ObjectHeader type tag!"),
+            _ => panic!("Invalid ObjectHeader type tag {:?}!", self.type_id),
         }
     }
 }
@@ -90,6 +93,10 @@ impl AllocHeader for ObjectHeader {
     fn size(&self) -> u32 {
         self.size_bytes
     }
+
+    fn type_id(&self) -> TypeList {
+        self.type_id
+    }
 }
 
 /// Apply the type ID to each native type
@@ -104,3 +111,4 @@ macro_rules! declare_allocobject {
 declare_allocobject!(Symbol, Symbol);
 declare_allocobject!(Pair, Pair);
 declare_allocobject!(NumberObject, NumberObject);
+declare_allocobject!(ArrayAny, ArrayAny);

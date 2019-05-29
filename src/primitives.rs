@@ -3,6 +3,7 @@ use std::fmt;
 use std::slice;
 use std::str;
 
+use crate::containers::{Array, IndexedContainer};
 use crate::error::{RuntimeError, SourcePos};
 use crate::memory::MutatorView;
 use crate::printer::Print;
@@ -121,5 +122,16 @@ pub struct NumberObject {
 impl Print for NumberObject {
     fn print<'scope>(&self, _guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.value)
+    }
+}
+
+/// Array type that can contain any other object
+pub type ArrayAny = Array<CellPtr>;
+
+impl Print for ArrayAny {
+    fn print<'scope>(&self, _guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+        self.slice_apply(_guard, |items| {});
+        // TODO
+        write!(f, "[{}]", "unknown")
     }
 }

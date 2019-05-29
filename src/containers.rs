@@ -15,13 +15,15 @@ use crate::safeptr::MutatorScope;
 /// Because there are no compile-time mutable aliasing guarantees, there can be no references
 /// into arrays at all, unless there can be a guarantee that the array memory will not be
 /// reallocated.
-pub trait Container<T: Sized + Copy> {
+///
+/// `T` cannot be restricted to `Copy` because of the use of `Cell` for interior mutability.
+pub trait Container<T: Sized + Clone> {
     /// Create a new, empty container instance.
     fn new() -> Self;
 }
 
 /// If implemented, the container can function as a stack
-pub trait StackContainer<T: Sized + Copy>: Container<T> {
+pub trait StackContainer<T: Sized + Clone>: Container<T> {
     /// Push can trigger an underlying array resize, hence it requires the ability to allocate
     fn push<'guard>(&self, mem: &'guard MutatorView, item: T) -> Result<(), RuntimeError>;
 
@@ -31,7 +33,7 @@ pub trait StackContainer<T: Sized + Copy>: Container<T> {
 }
 
 /// If implemented, the container can function as an indexable vector
-pub trait IndexedContainer<T: Sized + Copy>: Container<T> {
+pub trait IndexedContainer<T: Sized + Clone>: Container<T> {
     /// Return a copy of the object at the given index. Bounds-checked.
     fn get<'guard>(
         &self,
@@ -57,12 +59,12 @@ pub trait IndexedContainer<T: Sized + Copy>: Container<T> {
 }
 
 /// An array, like Vec
-pub struct Array<T: Sized + Copy> {
+pub struct Array<T: Sized + Clone> {
     length: Cell<ArraySize>,
     data: Cell<RawArray<T>>,
 }
 
-impl<T: Sized + Copy> Array<T> {
+impl<T: Sized + Clone> Array<T> {
     /// Return a bounds-checked pointer to the object at the given index
     fn get_offset(&self, index: ArraySize) -> Result<*mut T, RuntimeError> {
         if index < 0 || index >= self.length.get() {
@@ -119,7 +121,7 @@ impl<T: Sized + Copy> Array<T> {
     }
 }
 
-impl<T: Sized + Copy> Container<T> for Array<T> {
+impl<T: Sized + Clone> Container<T> for Array<T> {
     fn new() -> Array<T> {
         Array {
             length: Cell::new(0),
@@ -128,7 +130,7 @@ impl<T: Sized + Copy> Container<T> for Array<T> {
     }
 }
 
-impl<T: Sized + Copy> StackContainer<T> for Array<T> {
+impl<T: Sized + Clone> StackContainer<T> for Array<T> {
     /// Push can trigger an underlying array resize, hence it requires the ability to allocate
     fn push<'guard>(&self, mem: &'guard MutatorView, item: T) -> Result<(), RuntimeError> {
         let length = self.length.get();
@@ -167,7 +169,7 @@ impl<T: Sized + Copy> StackContainer<T> for Array<T> {
     }
 }
 
-impl<T: Sized + Copy> IndexedContainer<T> for Array<T> {
+impl<T: Sized + Clone> IndexedContainer<T> for Array<T> {
     /// Return a copy of the object at the given index. Bounds-checked.
     fn get<'guard>(
         &self,
@@ -197,9 +199,7 @@ impl<T: Sized + Copy> IndexedContainer<T> for Array<T> {
         F: Fn(&[T]),
     {
         if let Some(ptr) = self.data.get().as_ptr() {
-            let as_slice = unsafe {
-                from_raw_parts(ptr, self.length.get() as usize)
-            };
+            let as_slice = unsafe { from_raw_parts(ptr, self.length.get() as usize) };
 
             op(as_slice);
         }
@@ -208,9 +208,12 @@ impl<T: Sized + Copy> IndexedContainer<T> for Array<T> {
 
 #[cfg(test)]
 mod test {
-    use super::{Array, Container, StackContainer, IndexedContainer};
+    use super::{Array, Container, IndexedContainer, StackContainer};
     use crate::error::ErrorKind;
     use crate::memory::Memory;
+    use crate::primitives::ArrayAny;
+    use crate::safeptr::CellPtr;
+    use crate::taggedptr::Value;
 
     #[test]
     fn array_push_and_pop() {
@@ -251,7 +254,7 @@ mod test {
             for i in 12..1000 {
                 match array.get(view, i) {
                     Ok(_) => panic!("Array index should have been out of bounds!"),
-                    Err(e) => assert!(*e.error_kind() == ErrorKind::BoundsError)
+                    Err(e) => assert!(*e.error_kind() == ErrorKind::BoundsError),
                 }
             }
 
@@ -279,6 +282,29 @@ mod test {
 
             Ok(())
         })
-        .unwrap()
+        .unwrap();
+    }
+
+    #[test]
+    fn array_of_tagged_pointers() {
+        let mem = Memory::new();
+
+        mem.mutate(|view| {
+            let array: ArrayAny = Array::new();
+
+            let ptr = view.alloc(array)?;
+
+            match *ptr {
+                Value::ArrayAny(array) => {
+                    for _ in 0..12 {
+                        array.push(view, CellPtr::new_nil())?;
+                    }
+                }
+                _ => panic!("Expected ArrayAny type!"),
+            }
+
+            Ok(())
+        })
+        .unwrap();
     }
 }

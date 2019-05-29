@@ -18,7 +18,7 @@ use stickyimmix::{AllocRaw, RawPtr};
 
 use crate::memory::HeapStorage;
 use crate::pointerops::{get_tag, ScopedRef, Tagged, TAG_NUMBER, TAG_OBJECT, TAG_PAIR, TAG_SYMBOL};
-use crate::primitives::{NumberObject, Pair, Symbol};
+use crate::primitives::{ArrayAny, NumberObject, Pair, Symbol};
 use crate::printer::Print;
 use crate::safeptr::MutatorScope;
 
@@ -32,6 +32,7 @@ pub enum Value<'scope> {
     Symbol(&'scope Symbol),
     Number(isize),
     NumberObject(&'scope NumberObject),
+    ArrayAny(&'scope ArrayAny),
 }
 
 /// `Value` can have a safe `Display` implementation
@@ -42,6 +43,7 @@ impl<'scope> fmt::Display for Value<'scope> {
             Value::Pair(p) => p.print(self, f),
             Value::Symbol(s) => s.print(self, f),
             Value::Number(n) => write!(f, "{}", *n),
+            Value::ArrayAny(a) => a.print(self, f),
             _ => write!(f, "<unidentified-object-type>"),
         }
     }
@@ -54,6 +56,7 @@ impl<'scope> fmt::Debug for Value<'scope> {
             Value::Pair(p) => p.debug(self, f),
             Value::Symbol(s) => s.debug(self, f),
             Value::Number(n) => write!(f, "{}", *n),
+            Value::ArrayAny(a) => a.debug(self, f),
             _ => write!(f, "<unidentified-object-type>"),
         }
     }
@@ -70,6 +73,7 @@ pub enum FatPtr {
     Symbol(RawPtr<Symbol>),
     Number(isize),
     NumberObject(RawPtr<NumberObject>),
+    ArrayAny(RawPtr<ArrayAny>),
 }
 
 impl FatPtr {
@@ -82,6 +86,7 @@ impl FatPtr {
             FatPtr::Symbol(raw_ptr) => Value::Symbol(raw_ptr.scoped_ref(guard)),
             FatPtr::Number(num) => Value::Number(*num),
             FatPtr::NumberObject(raw_ptr) => Value::NumberObject(raw_ptr.scoped_ref(guard)),
+            FatPtr::ArrayAny(raw_ptr) => Value::ArrayAny(raw_ptr.scoped_ref(guard)),
         }
     }
 }
@@ -100,6 +105,7 @@ macro_rules! fatptr_from_primitive {
 fatptr_from_primitive!(Pair, Pair);
 fatptr_from_primitive!(Symbol, Symbol);
 fatptr_from_primitive!(NumberObject, NumberObject);
+fatptr_from_primitive!(ArrayAny, ArrayAny);
 
 /// Conversion from a TaggedPtr type
 impl From<TaggedPtr> for FatPtr {
@@ -201,6 +207,7 @@ impl From<FatPtr> for TaggedPtr {
             FatPtr::Symbol(raw) => TaggedPtr::symbol(raw),
             FatPtr::Pair(raw) => TaggedPtr::pair(raw),
             FatPtr::NumberObject(raw) => TaggedPtr::object(raw),
+            FatPtr::ArrayAny(raw) => TaggedPtr::object(raw),
         }
     }
 }

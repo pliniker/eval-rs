@@ -51,6 +51,7 @@ impl<'guard> fmt::Debug for ScopedPtr<'guard> {
 
 /// A wrapper around `TaggedPtr` for storing pointers in data structures with interior mutability,
 /// allowing pointers to be updated to point at different target objects.
+#[derive(Clone)]
 pub struct CellPtr {
     inner: Cell<TaggedPtr>,
 }
