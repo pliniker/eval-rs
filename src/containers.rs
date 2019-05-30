@@ -17,9 +17,14 @@ use crate::safeptr::MutatorScope;
 /// reallocated.
 ///
 /// `T` cannot be restricted to `Copy` because of the use of `Cell` for interior mutability.
-pub trait Container<T: Sized + Clone> {
+pub trait Container<T: Sized + Clone>: Sized {
     /// Create a new, empty container instance.
     fn new() -> Self;
+    /// Create a new container instance with the given capacity.
+    fn with_capacity<'guard>(
+        mem: &'guard MutatorView,
+        capacity: ArraySize,
+    ) -> Result<Self, RuntimeError>;
 }
 
 /// If implemented, the container can function as a stack
@@ -59,6 +64,7 @@ pub trait IndexedContainer<T: Sized + Clone>: Container<T> {
 }
 
 /// An array, like Vec
+#[derive(Clone)]
 pub struct Array<T: Sized + Clone> {
     length: Cell<ArraySize>,
     data: Cell<RawArray<T>>,
@@ -127,6 +133,16 @@ impl<T: Sized + Clone> Container<T> for Array<T> {
             length: Cell::new(0),
             data: Cell::new(RawArray::new()),
         }
+    }
+
+    fn with_capacity<'guard>(
+        mem: &'guard MutatorView,
+        capacity: ArraySize,
+    ) -> Result<Array<T>, RuntimeError> {
+        Ok(Array {
+            length: Cell::new(0),
+            data: Cell::new(RawArray::with_capacity(mem, capacity)?),
+        })
     }
 }
 
@@ -286,7 +302,7 @@ mod test {
     }
 
     #[test]
-    fn array_of_tagged_pointers() {
+    fn allocd_array_of_tagged_pointers() {
         let mem = Memory::new();
 
         mem.mutate(|view| {
@@ -302,6 +318,38 @@ mod test {
                 }
                 _ => panic!("Expected ArrayAny type!"),
             }
+
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn array_with_capacity() {
+        let mem = Memory::new();
+
+        mem.mutate(|view| {
+            let array: ArrayAny = Array::with_capacity(view, 256)?;
+
+            let ptr_before = array.data.get().as_ptr();
+
+            // fill to capacity
+            for _ in 0..256 {
+                array.push(view, CellPtr::new_nil())?;
+            }
+
+            let ptr_after = array.data.get().as_ptr();
+
+            // array storage shouldn't have been reallocated
+            assert!(ptr_before == ptr_after);
+
+            // overflow capacity, requiring reallocation
+            array.push(view, CellPtr::new_nil())?;
+
+            let ptr_realloc = array.data.get().as_ptr();
+
+            // array storage should have been reallocated
+            assert!(ptr_before != ptr_realloc);
 
             Ok(())
         })
