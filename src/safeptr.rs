@@ -64,6 +64,13 @@ impl CellPtr {
         }
     }
 
+    /// Construct a new CellPtr from a ScopedPtr
+    pub fn new_with(source: ScopedPtr) -> CellPtr {
+        CellPtr {
+            inner: Cell::new(TaggedPtr::from(source.ptr)),
+        }
+    }
+
     /// Return the pointer as a `ScopedPtr` type that carries a copy of the `TaggedPtr` and
     /// a `Value` type for both copying and access convenience
     pub fn get<'scope>(&self, guard: &'scope MutatorScope) -> ScopedPtr<'scope> {

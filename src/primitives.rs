@@ -3,7 +3,8 @@ use std::fmt;
 use std::slice;
 use std::str;
 
-use crate::containers::{Array, IndexedContainer};
+use crate::array::Array;
+use crate::containers::IndexedContainer;
 use crate::error::{RuntimeError, SourcePos};
 use crate::memory::MutatorView;
 use crate::printer::Print;
@@ -130,8 +131,7 @@ pub type ArrayAny = Array<CellPtr>;
 
 impl Print for ArrayAny {
     fn print<'scope>(&self, _guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
-        self.slice_apply(_guard, |items| {});
         // TODO
-        write!(f, "[{}]", "unknown")
+        write!(f, "[{}]", "array of things")
     }
 }

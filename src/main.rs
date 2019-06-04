@@ -15,6 +15,7 @@ use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 mod arena;
+mod array;
 mod containers;
 mod error;
 mod headers;
