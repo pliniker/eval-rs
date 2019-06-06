@@ -1,4 +1,7 @@
-/// Basic mutable array
+/// Basic mutable array type:
+///
+///  Array<T>
+///  ArrayAny = Array<CellPtr> (see primitives)
 use std::cell::Cell;
 use std::ptr::{read, write};
 
@@ -94,6 +97,10 @@ impl<T: Sized + Clone> Container<T> for Array<T> {
             length: Cell::new(0),
             data: Cell::new(RawArray::with_capacity(mem, capacity)?),
         })
+    }
+
+    fn length(&self) -> ArraySize {
+        self.length.get()
     }
 }
 

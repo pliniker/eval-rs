@@ -23,6 +23,9 @@ pub trait Container<T: Sized + Clone>: Sized {
         mem: &'guard MutatorView,
         capacity: ArraySize,
     ) -> Result<Self, RuntimeError>;
+
+    /// Count of items in the container
+    fn length(&self) -> ArraySize;
 }
 
 /// Generic stack trait. If implemented, the container can function as a stack

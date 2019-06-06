@@ -4,7 +4,7 @@ use std::slice;
 use std::str;
 
 use crate::array::Array;
-use crate::containers::IndexedContainer;
+use crate::containers::{Container, IndexedAnyContainer};
 use crate::error::{RuntimeError, SourcePos};
 use crate::memory::MutatorView;
 use crate::printer::Print;
@@ -117,12 +117,13 @@ impl Print for Pair {
 
 /// TODO A heap-allocated number
 pub struct NumberObject {
-    value: isize,
+    value: Array<u64>,
 }
 
 impl Print for NumberObject {
     fn print<'scope>(&self, _guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.value)
+        // TODO
+        write!(f, "NumberObject(nan)")
     }
 }
 
@@ -130,8 +131,20 @@ impl Print for NumberObject {
 pub type ArrayAny = Array<CellPtr>;
 
 impl Print for ArrayAny {
-    fn print<'scope>(&self, _guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO
-        write!(f, "[{}]", "array of things")
+    fn print<'scope>(&self, guard: &'scope MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[")?;
+
+        for i in 0..self.length() {
+            if i > 1 {
+                write!(f, ", ")?;
+            }
+
+            let ptr =
+                IndexedAnyContainer::get(self, guard, i).expect("Failed to read ptr from array");
+
+            fmt::Display::fmt(&ptr.value(), f)?;
+        }
+
+        write!(f, "]")
     }
 }
