@@ -12,6 +12,59 @@ use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
 use crate::symbolmap::SymbolMap;
 use crate::taggedptr::{FatPtr, TaggedPtr};
 
+/// This type describes the mutator's view into memory - the heap and symbol name/ptr lookup.
+///
+/// It implements `MutatorScope` such that any `ScopedPtr` or `Value` instances must be lifetime-
+/// limited to the lifetime of this instance using `&'scope MutatorScope`;
+pub struct MutatorView<'memory> {
+    heap: &'memory Heap,
+    stack: &'memory Stack,
+}
+
+impl<'memory> MutatorView<'memory> {
+    fn new(foo: &'memory Memory) -> MutatorView<'memory> {
+        MutatorView {
+            heap: &foo.heap,
+            stack: &foo.stack,
+        }
+    }
+
+    /// Get the copy of the pointer for the given register
+    pub fn get_reg(&self, reg: ArraySize) -> ScopedPtr<'_> {
+        self.stack.get_reg(self, reg)
+    }
+
+    /// Write a pointer into the specified register
+    pub fn set_reg(&self, reg: ArraySize, ptr: ScopedPtr<'_>) {
+        self.stack.set_reg(reg, ptr);
+    }
+
+    /// Get a Symbol pointer from its name
+    pub fn lookup_sym(&self, name: &str) -> ScopedPtr<'_> {
+        ScopedPtr::new(self, self.heap.lookup_sym(name))
+    }
+
+    /// Write an object into the heap and return the pointer to it
+    pub fn alloc<T>(&self, object: T) -> Result<ScopedPtr<'_>, RuntimeError>
+    where
+        FatPtr: From<RawPtr<T>>,
+        T: AllocObject<TypeList>,
+    {
+        Ok(ScopedPtr::new(self, self.heap.alloc(object)?))
+    }
+
+    /// Make space for an array of bytes
+    pub fn alloc_array(&self, capacity: ArraySize) -> Result<RawPtr<u8>, RuntimeError> {
+        self.heap.alloc_array(capacity)
+    }
+
+    pub fn nil(&self) -> ScopedPtr<'_> {
+        ScopedPtr::new(self, TaggedPtr::nil())
+    }
+}
+
+impl<'guard> MutatorScope for MutatorView<'guard> {}
+
 /// The heap implementation
 pub type HeapStorage = StickyImmixHeap<ObjectHeader>;
 
@@ -35,13 +88,13 @@ impl Stack {
     }
 
     /// Get the copy of the pointer for the given register as a ScopedPtr
-    fn get_reg<'guard>(&self, reg: usize, guard: &'guard MutatorScope) -> ScopedPtr<'guard> {
-        self.regs[reg].get(guard)
+    fn get_reg<'guard>(&self, guard: &'guard MutatorScope, reg: ArraySize) -> ScopedPtr<'guard> {
+        self.regs[reg as usize].get(guard)
     }
 
     /// Write a pointer into the specified register
-    fn set_reg(&self, reg: usize, ptr: ScopedPtr<'_>) {
-        self.regs[reg].set(ptr);
+    fn set_reg(&self, reg: ArraySize, ptr: ScopedPtr<'_>) {
+        self.regs[reg as usize].set(ptr);
     }
 }
 
@@ -78,59 +131,6 @@ impl Heap {
     }
 }
 
-/// This type describes the mutator's view into memory - the heap and symbol name/ptr lookup.
-///
-/// It implements `MutatorScope` such that any `ScopedPtr` or `Value` instances must be lifetime-
-/// limited to the lifetime of this instance using `&'scope MutatorScope`;
-pub struct MutatorView<'memory> {
-    heap: &'memory Heap,
-    stack: &'memory Stack,
-}
-
-impl<'memory> MutatorView<'memory> {
-    fn new(foo: &'memory Memory) -> MutatorView<'memory> {
-        MutatorView {
-            heap: &foo.heap,
-            stack: &foo.stack,
-        }
-    }
-
-    /// Get the copy of the pointer for the given register
-    pub fn get_reg(&self, reg: usize) -> ScopedPtr<'_> {
-        self.stack.get_reg(reg, self)
-    }
-
-    /// Write a pointer into the specified register
-    pub fn set_reg(&self, reg: usize, ptr: ScopedPtr<'_>) {
-        self.stack.set_reg(reg, ptr);
-    }
-
-    /// Get a Symbol pointer from its name
-    pub fn lookup_sym(&self, name: &str) -> ScopedPtr<'_> {
-        ScopedPtr::new(self, self.heap.lookup_sym(name))
-    }
-
-    /// Write an object into the heap and return the pointer to it
-    pub fn alloc<T>(&self, object: T) -> Result<ScopedPtr<'_>, RuntimeError>
-    where
-        FatPtr: From<RawPtr<T>>,
-        T: AllocObject<TypeList>,
-    {
-        Ok(ScopedPtr::new(self, self.heap.alloc(object)?))
-    }
-
-    /// Make space for an array of bytes
-    pub fn alloc_array(&self, capacity: ArraySize) -> Result<RawPtr<u8>, RuntimeError> {
-        self.heap.alloc_array(capacity)
-    }
-
-    pub fn nil(&self) -> ScopedPtr<'_> {
-        ScopedPtr::new(self, TaggedPtr::nil())
-    }
-}
-
-impl<'guard> MutatorScope for MutatorView<'guard> {}
-
 // Composed of a Heap and a Stack instance
 pub struct Memory {
     heap: Heap,
@@ -156,4 +156,37 @@ impl Memory {
     }
 
     // TODO pub fn collect()
+}
+
+struct Mutator {
+    stack: ArrayAny,
+}
+
+impl Mutator {
+    fn new() -> Mutator {
+        Mutator {
+            stack: ArrayAny::new()
+        }
+    }
+
+    // Pad the stack out to 256 entries from the current top of the stack
+    fn pad_stack<'guard>(
+        &self,
+        view: &'guard MutatorView,
+        top: ArraySize,
+    ) -> Result<(), RuntimeError> {
+        let pad = self.stack.length() - top;
+        if pad < 256 {
+            for _ in pad..256 {
+                self.stack.push(view, view.nil())?;
+            }
+        }
+        Ok(())
+    }
+
+    // TODO fn push_frame(&self, callee, param_count);
+
+    fn push_main<'guard>(&self, view: &'guard MutatorView) -> Result<(), RuntimeError> {
+        self.pad_stack(view, 0)
+    }
 }
