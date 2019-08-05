@@ -158,35 +158,46 @@ impl Memory {
     // TODO pub fn collect()
 }
 
-struct Mutator {
-    stack: ArrayAny,
+/// This represents a pointer to a window of registers on the stack
+struct ActivationFramePtr {
+    regs: [CellPtr; 256]
 }
 
-impl Mutator {
-    fn new() -> Mutator {
-        Mutator {
-            stack: ArrayAny::new()
+struct RegisterStack {
+    regs: ArrayAny,
+    base: ArraySize,
+}
+
+impl RegisterStack {
+    fn new() -> RegisterStack {
+        RegisterStack {
+            regs: ArrayAny::new(),
+            base: 0
         }
     }
 
+    // fn current_frame(&self) -> ArraySlice {}
+
     // Pad the stack out to 256 entries from the current top of the stack
-    fn pad_stack<'guard>(
+    fn pad<'guard>(
         &self,
         view: &'guard MutatorView,
-        top: ArraySize,
+        pad_base: ArraySize,
+        pad_length: ArraySize
     ) -> Result<(), RuntimeError> {
-        let pad = self.stack.length() - top;
-        if pad < 256 {
-            for _ in pad..256 {
-                self.stack.push(view, view.nil())?;
+        let pad = self.regs.length() - pad_base;
+        if pad < pad_length {
+            for _ in pad..pad_length {
+                self.regs.push(view, view.nil())?;
             }
         }
         Ok(())
     }
 
-    // TODO fn push_frame(&self, callee, param_count);
+    // TODO fn push_activation_record(&self, callee, param_count);
+    // TODO fn alloc_activation_record()
 
     fn push_main<'guard>(&self, view: &'guard MutatorView) -> Result<(), RuntimeError> {
-        self.pad_stack(view, 0)
+        self.pad(view, 0, 256)
     }
 }
