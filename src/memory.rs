@@ -7,8 +7,7 @@ use stickyimmix::{AllocObject, AllocRaw, ArraySize, RawPtr, StickyImmixHeap};
 use crate::containers::{Container, IndexedAnyContainer, StackAnyContainer};
 use crate::error::RuntimeError;
 use crate::headers::{ObjectHeader, TypeList};
-use crate::primitives::ArrayAny;
-use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
+use crate::safeptr::{MutatorScope, ScopedPtr};
 use crate::symbolmap::SymbolMap;
 use crate::taggedptr::{FatPtr, TaggedPtr};
 
@@ -18,25 +17,11 @@ use crate::taggedptr::{FatPtr, TaggedPtr};
 /// limited to the lifetime of this instance using `&'scope MutatorScope`;
 pub struct MutatorView<'memory> {
     heap: &'memory Heap,
-    stack: &'memory Stack,
 }
 
 impl<'memory> MutatorView<'memory> {
-    fn new(foo: &'memory Memory) -> MutatorView<'memory> {
-        MutatorView {
-            heap: &foo.heap,
-            stack: &foo.stack,
-        }
-    }
-
-    /// Get the copy of the pointer for the given register
-    pub fn get_reg(&self, reg: ArraySize) -> ScopedPtr<'_> {
-        self.stack.get_reg(self, reg)
-    }
-
-    /// Write a pointer into the specified register
-    pub fn set_reg(&self, reg: ArraySize, ptr: ScopedPtr<'_>) {
-        self.stack.set_reg(reg, ptr);
+    fn new(mem: &'memory Memory) -> MutatorView<'memory> {
+        MutatorView { heap: &mem.heap }
     }
 
     /// Get a Symbol pointer from its name
@@ -63,40 +48,10 @@ impl<'memory> MutatorView<'memory> {
     }
 }
 
-impl<'guard> MutatorScope for MutatorView<'guard> {}
+impl<'memory> MutatorScope for MutatorView<'memory> {}
 
 /// The heap implementation
 pub type HeapStorage = StickyImmixHeap<ObjectHeader>;
-
-/// A stack (well, a Vec of registers for now). Each register is a `CellPtr` with getters and
-/// setters that require a MutatorScope lifetime'd guard.
-struct Stack {
-    regs: Vec<CellPtr>,
-}
-
-impl Stack {
-    /// Return a Stack instance with all registers initialized to nil
-    fn new() -> Stack {
-        let capacity = 256;
-
-        let mut regs = Vec::with_capacity(capacity);
-        for _ in 0..capacity {
-            regs.push(CellPtr::new_nil());
-        }
-
-        Stack { regs }
-    }
-
-    /// Get the copy of the pointer for the given register as a ScopedPtr
-    fn get_reg<'guard>(&self, guard: &'guard MutatorScope, reg: ArraySize) -> ScopedPtr<'guard> {
-        self.regs[reg as usize].get(guard)
-    }
-
-    /// Write a pointer into the specified register
-    fn set_reg(&self, reg: ArraySize, ptr: ScopedPtr<'_>) {
-        self.regs[reg as usize].set(ptr);
-    }
-}
 
 // Heap memory types.
 struct Heap {
@@ -131,34 +86,32 @@ impl Heap {
     }
 }
 
-// Composed of a Heap and a Stack instance
+/// Wraps a heap and provides scope-limited access to the heap
 pub struct Memory {
     heap: Heap,
-    stack: Stack,
 }
 
 impl Memory {
     /// Instantiate a new memory environment
     pub fn new() -> Memory {
-        Memory {
-            heap: Heap::new(),
-            stack: Stack::new(),
-        }
+        Memory { heap: Heap::new() }
     }
 
     /// Run a mutator process
-    pub fn mutate<F>(&self, f: F) -> Result<(), RuntimeError>
-    where
-        F: Fn(&MutatorView) -> Result<(), RuntimeError>,
-    {
+    pub fn mutate<M: Mutator>(&self, m: &M, input: M::Input) -> Result<M::Output, RuntimeError> {
         let mut guard = MutatorView::new(self);
-        f(&mut guard)
+        m.run(&mut guard, input)
     }
 
     // TODO pub fn collect()
 }
 
-/// This represents a pointer to a window of registers on the stack
-struct ActivationFramePtr {
-    regs: [CellPtr; 256]
+/// Defines the interface a heap-mutating type must use to be allowed access to the heap
+pub trait Mutator: Sized {
+    type Input;
+    type Output;
+
+    fn run(&self, mem: &MutatorView, input: Self::Input) -> Result<Self::Output, RuntimeError>;
+
+    // TODO fn roots(&self) -> ???
 }

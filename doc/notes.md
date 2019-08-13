@@ -47,6 +47,17 @@ Activation Record?:
 
  ## Virtual Machine
 
+### eval/apply
+
+eval to identity:
+ - pap -> self
+ - closure -> self
+ - value -> self
+
+apply:
+ - pap + eval(args) -> value
+ - closure + eval(args) -> value
+
 Bytecode:
 
 ### v1
@@ -107,3 +118,14 @@ Bytecode:
     (Some (value))
     (None)
 ))
+
+
+
+# --- samples ---
+
+/// This represents a pointer to a window of registers on the stack.
+/// A mutator-lifetime limited view
+struct ActivationFramePtr<'guard> {
+    regs: &'guard [CellPtr; 256],
+
+}

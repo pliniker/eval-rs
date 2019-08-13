@@ -29,9 +29,10 @@ mod rawarray;
 mod safeptr;
 mod symbolmap;
 mod taggedptr;
+mod vm;
 
 use crate::error::{ErrorKind, RuntimeError};
-use crate::memory::Memory;
+use crate::memory::{Memory, Mutator, MutatorView};
 use crate::parser::parse;
 
 /// Read a file into a String
@@ -47,20 +48,44 @@ fn load_file(filename: &str) -> Result<String, io::Error> {
 fn read_file(filename: &str) -> Result<(), RuntimeError> {
     let contents = load_file(&filename)?;
 
-    let mem = Memory::new();
-
-    mem.mutate(|view| match parse(view, &contents) {
-        Ok(ast) => {
-            println!("{}", printer::print(*ast));
-            Ok(())
-        }
-        Err(e) => {
-            e.print_with_source(&contents);
-            Err(e)
-        }
-    })?;
+    // TODO
 
     Ok(())
+}
+
+/// Implements an iteration of a REPL
+struct ReadEvalPrint {}
+
+impl Mutator for ReadEvalPrint {
+    type Input = String;
+    type Output = ();
+
+    fn run(&self, mem: &MutatorView, line: String) -> Result<(), RuntimeError> {
+        match parse(mem, &line) {
+            Ok(value) => {
+                /* TODO
+                // eval
+                match eval(value, &mem) {
+                    // print
+                    Ok(result) => println!("{}", printer::print(&result)),
+                    Err(e) => e.print_with_source(&line),
+                } */
+                println!("{}", printer::print(*value));
+                Ok(())
+            }
+
+            Err(e) => {
+                match e.error_kind() {
+                    // non-fatal repl errors
+                    ErrorKind::LexerError(_) => e.print_with_source(&line),
+                    ErrorKind::ParseError(_) => e.print_with_source(&line),
+                    ErrorKind::EvalError(_) => e.print_with_source(&line),
+                    _ => return Err(e),
+                }
+                Ok(())
+            }
+        }
+    }
 }
 
 /// Read a line at a time, printing the input back out
@@ -85,45 +110,17 @@ fn read_print_loop() -> Result<(), RuntimeError> {
     }
 
     let mem = Memory::new();
+    let rep = ReadEvalPrint {};
 
     // repl
-    let mut input_counter = 1;
     loop {
-        let readline = reader.readline(&format!("evalrus:{:03}> ", input_counter));
-        input_counter += 1;
+        let readline = reader.readline("> ");
 
         match readline {
             // valid input
             Ok(line) => {
                 reader.add_history_entry(&line);
-
-                // parse/"read"
-                mem.mutate(|view| {
-                    match parse(view, &line) {
-                        Ok(value) => {
-                            /* TODO
-                                // eval
-                                match eval(value, &mem) {
-                                // print
-                                Ok(result) => println!("{}", printer::print(&result)),
-                                Err(e) => e.print_with_source(&line),
-                            } */
-                            println!("{}", printer::print(*value));
-                            Ok(())
-                        }
-
-                        Err(e) => {
-                            match e.error_kind() {
-                                // non-fatal repl errors
-                                ErrorKind::LexerError(_) => e.print_with_source(&line),
-                                ErrorKind::ParseError(_) => e.print_with_source(&line),
-                                ErrorKind::EvalError(_) => e.print_with_source(&line),
-                                _ => return Err(e),
-                            }
-                            Ok(())
-                        }
-                    }
-                })?;
+                mem.mutate(&rep, line)?;
             }
 
             // some kind of program termination condition
