@@ -102,8 +102,6 @@ impl Memory {
         let mut guard = MutatorView::new(self);
         m.run(&mut guard, input)
     }
-
-    // TODO pub fn collect()
 }
 
 /// Defines the interface a heap-mutating type must use to be allowed access to the heap
@@ -112,6 +110,4 @@ pub trait Mutator: Sized {
     type Output;
 
     fn run(&self, mem: &MutatorView, input: Self::Input) -> Result<Self::Output, RuntimeError>;
-
-    // TODO fn roots(&self) -> ???
 }

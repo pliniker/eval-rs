@@ -12,9 +12,13 @@ impl Mutator for VMFactory {
     type Output = VM;
 
     fn run(&self, mem: &MutatorView, _: ()) -> Result<VM, RuntimeError> {
-        Ok(VM {
-            stack: ArrayAny::with_capacity(mem, 256)?,
-        })
+        // initialize stack to 256 nil registers
+        let stack = ArrayAny::with_capacity(mem, 256)?;
+        for index in 0..256 {
+            stack.set(mem, index, mem.nil())?;
+        }
+
+        Ok(VM { stack: stack })
     }
 }
 

@@ -16,6 +16,7 @@ use rustyline::Editor;
 
 mod arena;
 mod array;
+mod compiler;
 mod containers;
 mod error;
 mod headers;

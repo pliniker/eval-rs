@@ -236,20 +236,42 @@ pub fn parse<'guard>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::memory::Memory;
+    use crate::memory::{Memory, Mutator, MutatorView};
     use crate::printer::print;
 
     fn check(input: &str, expect: &str) {
         let mem = Memory::new();
 
-        mem.mutate(|view| {
-            let ast = parse(view, input)?;
-            println!("expect: {}\ngot:    {}\ndebug:  {:?}", &expect, &ast, *ast);
-            assert!(print(*ast) == expect);
+        struct Test<'a> {
+            input: &'a str,
+            expect: &'a str,
+        }
 
-            Ok(())
-        })
-        .unwrap();
+        impl<'a> Mutator for Test<'a> {
+            type Input = ();
+            type Output = ();
+
+            fn run(
+                &self,
+                view: &MutatorView,
+                _: Self::Input,
+            ) -> Result<Self::Output, RuntimeError> {
+                let ast = parse(view, self.input)?;
+                println!(
+                    "expect: {}\ngot:    {}\ndebug:  {:?}",
+                    &self.expect, &ast, *ast
+                );
+                assert!(print(*ast) == self.expect);
+
+                Ok(())
+            }
+        }
+
+        let test = Test {
+            input: input,
+            expect: expect,
+        };
+        mem.mutate(&test, ()).unwrap();
     }
 
     #[test]
