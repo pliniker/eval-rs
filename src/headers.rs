@@ -6,7 +6,7 @@ use stickyimmix::{
 
 use crate::memory::HeapStorage;
 use crate::pointerops::{AsNonNull, Tagged};
-use crate::primitives::{ArrayAny, NumberObject, Pair, Symbol};
+use crate::primitives::{ArrayAny, ArrayU8, NumberObject, Pair, Symbol};
 use crate::taggedptr::FatPtr;
 
 /// Recognized heap-allocated types.
@@ -19,6 +19,7 @@ pub enum TypeList {
     NumberObject,
     Array, // type id for array backing bytes
     ArrayAny,
+    ArrayU8,
 }
 
 // Mark this as a Stickyimmix type-identifier type
@@ -112,3 +113,4 @@ declare_allocobject!(Symbol, Symbol);
 declare_allocobject!(Pair, Pair);
 declare_allocobject!(NumberObject, NumberObject);
 declare_allocobject!(ArrayAny, ArrayAny);
+declare_allocobject!(ArrayU8, ArrayU8);

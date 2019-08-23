@@ -49,20 +49,27 @@ Activation Record?:
 
 ### eval/apply
 
-eval to identity:
+eval:
+ - quote x -> x
+ - list -> apply sym args
  - pap -> self
  - closure -> self
- - value -> self
+ - int -> int
+ - nil -> nil
+ - true -> true
 
 apply:
+ - sym + eval(args) -> pap args | closure
  - pap + eval(args) -> value
  - closure + eval(args) -> value
 
 Bytecode:
 
 ### v1
- - lookup-sym reg str
- - atom reg = atom x
+ - load reg sym
+ - load reg int
+ - load reg pair
+ - atom regr regx: regr = atom regx
  - quote reg = quote x
  - car reg = car x:xs
  - cdr reg = cdr x:xs
@@ -75,13 +82,13 @@ Bytecode:
  - call sym(fn)
  - return reg
 
- ### v3
+### v3
  - make-closure
  - get-upvalue
  - set-upvalue
  - close-upvalue
 
- ### vn
+### vn
  - tailcall/cont sym(fn)
  - construct sym(type)
  - cons-str reg str
@@ -92,18 +99,23 @@ Bytecode:
 
 ## Syntax - easy to parse but unergonomic s-exprs
 
+### v1
+(atom sym)
+(quote thing)
+(car (quote (list of things)))
+(cdr (quote (list of things)))
+(cons thing (quote (list of things)))
+(eq thing1 thing2)
+
+### vn
 (defn fib (n)
     (match n
         ((0) 1)
-        ((n) (+ n (fib (- n 1))))
-    )
-)
+        ((n) (+ n (fib (- n 1))))))
 
 (defn function (x y)
     (let (variable expr)
-        (* x y)
-    )
-)
+        (* x y)))
 
 (defn mult () function)
 (mult 2 3)
@@ -111,13 +123,11 @@ Bytecode:
 (let (square (lambda (x) (* x x))))
 
 (with (io.file "name" 'r) f
-    (let (content (f.read)))
-)
+    (let (content (f.read))))
 
 (deftype Option (
     (Some (value))
-    (None)
-))
+    (None)))
 
 
 
@@ -127,5 +137,4 @@ Bytecode:
 /// A mutator-lifetime limited view
 struct ActivationFramePtr<'guard> {
     regs: &'guard [CellPtr; 256],
-
 }

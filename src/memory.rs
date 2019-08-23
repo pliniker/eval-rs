@@ -4,7 +4,6 @@
 /// view into the stack and heap.
 use stickyimmix::{AllocObject, AllocRaw, ArraySize, RawPtr, StickyImmixHeap};
 
-use crate::containers::{Container, IndexedAnyContainer, StackAnyContainer};
 use crate::error::RuntimeError;
 use crate::headers::{ObjectHeader, TypeList};
 use crate::safeptr::{MutatorScope, ScopedPtr};

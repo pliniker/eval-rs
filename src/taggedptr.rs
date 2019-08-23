@@ -18,7 +18,7 @@ use stickyimmix::{AllocRaw, RawPtr};
 
 use crate::memory::HeapStorage;
 use crate::pointerops::{get_tag, ScopedRef, Tagged, TAG_NUMBER, TAG_OBJECT, TAG_PAIR, TAG_SYMBOL};
-use crate::primitives::{ArrayAny, NumberObject, Pair, Symbol};
+use crate::primitives::{ArrayAny, ArrayU8, NumberObject, Pair, Symbol};
 use crate::printer::Print;
 use crate::safeptr::MutatorScope;
 
@@ -33,6 +33,7 @@ pub enum Value<'scope> {
     Number(isize),
     NumberObject(&'scope NumberObject),
     ArrayAny(&'scope ArrayAny),
+    ArrayU8(&'scope ArrayU8),
 }
 
 /// `Value` can have a safe `Display` implementation
@@ -44,6 +45,7 @@ impl<'scope> fmt::Display for Value<'scope> {
             Value::Symbol(s) => s.print(self, f),
             Value::Number(n) => write!(f, "{}", *n),
             Value::ArrayAny(a) => a.print(self, f),
+            Value::ArrayU8(a) => a.print(self, f),
             _ => write!(f, "<unidentified-object-type>"),
         }
     }
@@ -57,6 +59,7 @@ impl<'scope> fmt::Debug for Value<'scope> {
             Value::Symbol(s) => s.debug(self, f),
             Value::Number(n) => write!(f, "{}", *n),
             Value::ArrayAny(a) => a.debug(self, f),
+            Value::ArrayU8(a) => a.debug(self, f),
             _ => write!(f, "<unidentified-object-type>"),
         }
     }
@@ -74,6 +77,7 @@ pub enum FatPtr {
     Number(isize),
     NumberObject(RawPtr<NumberObject>),
     ArrayAny(RawPtr<ArrayAny>),
+    ArrayU8(RawPtr<ArrayU8>),
 }
 
 impl FatPtr {
@@ -87,6 +91,7 @@ impl FatPtr {
             FatPtr::Number(num) => Value::Number(*num),
             FatPtr::NumberObject(raw_ptr) => Value::NumberObject(raw_ptr.scoped_ref(guard)),
             FatPtr::ArrayAny(raw_ptr) => Value::ArrayAny(raw_ptr.scoped_ref(guard)),
+            FatPtr::ArrayU8(raw_ptr) => Value::ArrayU8(raw_ptr.scoped_ref(guard)),
         }
     }
 }
@@ -106,6 +111,7 @@ fatptr_from_primitive!(Pair, Pair);
 fatptr_from_primitive!(Symbol, Symbol);
 fatptr_from_primitive!(NumberObject, NumberObject);
 fatptr_from_primitive!(ArrayAny, ArrayAny);
+fatptr_from_primitive!(ArrayU8, ArrayU8);
 
 /// Conversion from a TaggedPtr type
 impl From<TaggedPtr> for FatPtr {
@@ -208,6 +214,7 @@ impl From<FatPtr> for TaggedPtr {
             FatPtr::Pair(raw) => TaggedPtr::pair(raw),
             FatPtr::NumberObject(raw) => TaggedPtr::object(raw),
             FatPtr::ArrayAny(raw) => TaggedPtr::object(raw),
+            FatPtr::ArrayU8(raw) => TaggedPtr::object(raw),
         }
     }
 }

@@ -226,6 +226,7 @@ fn parse_tokens<'guard>(
     parse_sexpr(mem, &mut tokenstream)
 }
 
+/// Parse the given string into an AST
 pub fn parse<'guard>(
     mem: &'guard MutatorView,
     input: &str,
@@ -248,15 +249,11 @@ mod test {
         }
 
         impl<'a> Mutator for Test<'a> {
-            type Input = ();
+            type Input = (); // not convenient to pass &str as Input as Output because of the lifetime
             type Output = ();
 
-            fn run(
-                &self,
-                view: &MutatorView,
-                _: Self::Input,
-            ) -> Result<Self::Output, RuntimeError> {
-                let ast = parse(view, self.input)?;
+            fn run(&self, mem: &MutatorView, _: Self::Input) -> Result<Self::Output, RuntimeError> {
+                let ast = parse(mem, self.input)?;
                 println!(
                     "expect: {}\ngot:    {}\ndebug:  {:?}",
                     &self.expect, &ast, *ast
