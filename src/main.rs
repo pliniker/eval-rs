@@ -1,6 +1,9 @@
 extern crate blockalloc;
 extern crate clap;
 extern crate dirs;
+extern crate num;
+#[macro_use]
+extern crate num_derive;
 extern crate rustyline;
 extern crate stickyimmix;
 
@@ -16,6 +19,7 @@ use rustyline::Editor;
 
 mod arena;
 mod array;
+mod bytecode;
 mod compiler;
 mod containers;
 mod error;

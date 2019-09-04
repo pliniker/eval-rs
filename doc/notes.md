@@ -138,3 +138,36 @@ Bytecode:
 struct ActivationFramePtr<'guard> {
     regs: &'guard [CellPtr; 256],
 }
+
+# Compile dry-runs
+
+(atom sym)
+
+* load-literal reg1 sym-literal
+* atom reg= reg1
+
+(atom 3)
+
+* load-literal reg1 3
+* atom reg= reg1
+
+(quote (list of things)))
+// quote means copy the list from the ast rather than eval/apply it
+
+* list-copy reg= list-of-things
+
+(car (quote (list of things)))
+
+* car reg= list
+
+(cdr (quote (list of things)))
+
+* cdr reg= list
+
+(cons thing (quote (list of things)))
+
+* cons reg= reg1 reg2
+
+(eq thing1 thing2)
+
+* eq reg= reg1 reg2

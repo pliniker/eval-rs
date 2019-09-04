@@ -16,9 +16,10 @@ use std::ptr::NonNull;
 
 use stickyimmix::{AllocRaw, RawPtr};
 
+use crate::bytecode::ByteCode;
 use crate::memory::HeapStorage;
 use crate::pointerops::{get_tag, ScopedRef, Tagged, TAG_NUMBER, TAG_OBJECT, TAG_PAIR, TAG_SYMBOL};
-use crate::primitives::{ArrayAny, ArrayU8, NumberObject, Pair, Symbol};
+use crate::primitives::{ArrayAny, ArrayU8, ArrayU32, NumberObject, Pair, Symbol};
 use crate::printer::Print;
 use crate::safeptr::MutatorScope;
 
@@ -34,6 +35,8 @@ pub enum Value<'scope> {
     NumberObject(&'scope NumberObject),
     ArrayAny(&'scope ArrayAny),
     ArrayU8(&'scope ArrayU8),
+    ArrayU32(&'scope ArrayU32),
+    ByteCode(&'scope ByteCode),
 }
 
 /// `Value` can have a safe `Display` implementation
@@ -46,6 +49,8 @@ impl<'scope> fmt::Display for Value<'scope> {
             Value::Number(n) => write!(f, "{}", *n),
             Value::ArrayAny(a) => a.print(self, f),
             Value::ArrayU8(a) => a.print(self, f),
+            Value::ArrayU32(a) => a.print(self, f),
+            Value::ByteCode(c) => c.print(self, f),
             _ => write!(f, "<unidentified-object-type>"),
         }
     }
@@ -60,6 +65,8 @@ impl<'scope> fmt::Debug for Value<'scope> {
             Value::Number(n) => write!(f, "{}", *n),
             Value::ArrayAny(a) => a.debug(self, f),
             Value::ArrayU8(a) => a.debug(self, f),
+            Value::ArrayU32(a) => a.debug(self, f),
+            Value::ByteCode(c) => c.debug(self, f),
             _ => write!(f, "<unidentified-object-type>"),
         }
     }
@@ -78,6 +85,8 @@ pub enum FatPtr {
     NumberObject(RawPtr<NumberObject>),
     ArrayAny(RawPtr<ArrayAny>),
     ArrayU8(RawPtr<ArrayU8>),
+    ArrayU32(RawPtr<ArrayU32>),
+    ByteCode(RawPtr<ByteCode>),
 }
 
 impl FatPtr {
@@ -92,12 +101,14 @@ impl FatPtr {
             FatPtr::NumberObject(raw_ptr) => Value::NumberObject(raw_ptr.scoped_ref(guard)),
             FatPtr::ArrayAny(raw_ptr) => Value::ArrayAny(raw_ptr.scoped_ref(guard)),
             FatPtr::ArrayU8(raw_ptr) => Value::ArrayU8(raw_ptr.scoped_ref(guard)),
+            FatPtr::ArrayU32(raw_ptr) => Value::ArrayU32(raw_ptr.scoped_ref(guard)),
+            FatPtr::ByteCode(raw_ptr) => Value::ByteCode(raw_ptr.scoped_ref(guard)),
         }
     }
 }
 
 /// Implement `From<RawPtr<T>> for FatPtr` for the given FatPtr discriminant and the given `T`
-macro_rules! fatptr_from_primitive {
+macro_rules! fatptr_from_rawptr {
     ($F:tt, $T:ty) => {
         impl From<RawPtr<$T>> for FatPtr {
             fn from(ptr: RawPtr<$T>) -> FatPtr {
@@ -107,11 +118,13 @@ macro_rules! fatptr_from_primitive {
     };
 }
 
-fatptr_from_primitive!(Pair, Pair);
-fatptr_from_primitive!(Symbol, Symbol);
-fatptr_from_primitive!(NumberObject, NumberObject);
-fatptr_from_primitive!(ArrayAny, ArrayAny);
-fatptr_from_primitive!(ArrayU8, ArrayU8);
+fatptr_from_rawptr!(Pair, Pair);
+fatptr_from_rawptr!(Symbol, Symbol);
+fatptr_from_rawptr!(NumberObject, NumberObject);
+fatptr_from_rawptr!(ArrayAny, ArrayAny);
+fatptr_from_rawptr!(ArrayU8, ArrayU8);
+fatptr_from_rawptr!(ArrayU32, ArrayU32);
+fatptr_from_rawptr!(ByteCode, ByteCode);
 
 /// Conversion from a TaggedPtr type
 impl From<TaggedPtr> for FatPtr {
@@ -215,6 +228,8 @@ impl From<FatPtr> for TaggedPtr {
             FatPtr::NumberObject(raw) => TaggedPtr::object(raw),
             FatPtr::ArrayAny(raw) => TaggedPtr::object(raw),
             FatPtr::ArrayU8(raw) => TaggedPtr::object(raw),
+            FatPtr::ArrayU32(raw) => TaggedPtr::object(raw),
+            FatPtr::ByteCode(raw) => TaggedPtr::object(raw),
         }
     }
 }

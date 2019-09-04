@@ -153,7 +153,16 @@ impl Print for ArrayAny {
 pub type ArrayU8 = Array<u8>;
 
 impl Print for ArrayU8 {
-    fn print<'guard>(&self, guard: &'guard MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "[...]")
+    fn print<'guard>(&self, _guard: &'guard MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "ArrayU8[...]")
+    }
+}
+
+/// Array of u32
+pub type ArrayU32 = Array<u32>;
+
+impl Print for ArrayU32 {
+    fn print<'guard>(&self, _guard: &'guard MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "ArrayU32[...]")
     }
 }

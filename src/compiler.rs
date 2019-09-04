@@ -1,10 +1,14 @@
+use crate::bytecode::ByteCode;
 use crate::containers::{Container, IndexedContainer, StackContainer};
 use crate::error::{ErrorKind, RuntimeError};
 use crate::memory::MutatorView;
-use crate::primitives::ArrayU8;
+use crate::primitives::{ArrayAny, ArrayU32};
 use crate::safeptr::ScopedPtr;
 
-type ByteCode = ArrayU8;
+/*
+ * LOAD_SYM reg= sym64
+ * ATOM reg= reg1
+ */
 
 /// Compile the given AST and return a bytecode structure
 pub fn compile<'guard>(
@@ -13,7 +17,7 @@ pub fn compile<'guard>(
 ) -> Result<ScopedPtr<'guard>, RuntimeError> {
     // depth-first tree traversal, flattening the output
 
-    let bytecode = ByteCode::with_capacity(mem, 256)?;
+    let bytecode = ByteCode::new();
 
     mem.alloc(bytecode)
 }
