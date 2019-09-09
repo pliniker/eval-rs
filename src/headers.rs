@@ -7,7 +7,7 @@ use stickyimmix::{
 use crate::bytecode::ByteCode;
 use crate::memory::HeapStorage;
 use crate::pointerops::{AsNonNull, Tagged};
-use crate::primitives::{ArrayAny, ArrayU8, ArrayU32, NumberObject, Pair, Symbol};
+use crate::primitives::{ArrayAny, ArrayU32, ArrayU8, NumberObject, Pair, Symbol};
 use crate::taggedptr::FatPtr;
 
 /// Recognized heap-allocated types.

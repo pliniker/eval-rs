@@ -7,40 +7,73 @@ use crate::primitives::{ArrayAny, ArrayU32};
 use crate::printer::Print;
 use crate::safeptr::{MutatorScope, ScopedPtr};
 
-
 #[repr(u8)]
 #[derive(FromPrimitive)]
-enum Opcodes {
+pub enum Opcode {
     HALT,
+    RETURN,
+    MOV,
     ATOM,
-    LOADINT,
-    LOADSYM,
+    LOADLIT,
     CAR,
     CDR,
     CONS,
     EQ,
 }
 
+pub type Register = u8;
+pub type LiteralId = u16;
 
-type Code = ArrayU32;
-type SymbolList = ArrayAny;
+pub type Code = ArrayU32;
+pub type Literals = ArrayAny;
 
 pub struct ByteCode {
     code: Code,
-    symbols: SymbolList,
-    next_reg: u8,
+    literals: Literals,
 }
-
 
 impl ByteCode {
     pub fn new() -> ByteCode {
         ByteCode {
             code: Code::new(),
-            symbols: SymbolList::new(),
-            next_reg: 0
+            literals: Literals::new(),
         }
     }
 
+    pub fn push_op0<'guard>(&self, mem: &'guard MutatorView, op: Opcode) {}
+
+    pub fn push_op1<'guard>(&self, mem: &'guard MutatorView, op: Opcode, reg: Register) {}
+
+    pub fn push_op2<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        op: Opcode,
+        reg_acc: Register,
+        reg1: Register,
+    ) {
+    }
+
+    pub fn push_op3<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        op: Opcode,
+        reg_acc: Register,
+        reg1: Register,
+        reg2: Register,
+    ) {
+    }
+
+    pub fn push_loadlit<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        reg_acc: Register,
+        lit: ScopedPtr,
+    ) {
+    }
+
+    pub fn push_loadlit<'guard>(&self, mem: &'guard MutatorView, reg_acc: Register, lit: LiteralId) {}
+
+    pub fn push_lit<'guard>(&self, mem: &'guard MutatorView, literal: ScopedPtr<'guard>) -> LiteralId {}
 }
 
 impl Print for ByteCode {

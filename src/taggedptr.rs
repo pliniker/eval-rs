@@ -19,7 +19,7 @@ use stickyimmix::{AllocRaw, RawPtr};
 use crate::bytecode::ByteCode;
 use crate::memory::HeapStorage;
 use crate::pointerops::{get_tag, ScopedRef, Tagged, TAG_NUMBER, TAG_OBJECT, TAG_PAIR, TAG_SYMBOL};
-use crate::primitives::{ArrayAny, ArrayU8, ArrayU32, NumberObject, Pair, Symbol};
+use crate::primitives::{ArrayAny, ArrayU32, ArrayU8, NumberObject, Pair, Symbol};
 use crate::printer::Print;
 use crate::safeptr::MutatorScope;
 

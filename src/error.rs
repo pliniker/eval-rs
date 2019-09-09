@@ -26,6 +26,7 @@ pub enum ErrorKind {
     LexerError(String),
     ParseError(String),
     EvalError(String),
+    CompileError(String),
     BadAllocationRequest,
     OutOfMemory,
     BoundsError,
