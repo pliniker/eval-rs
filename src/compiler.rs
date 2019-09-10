@@ -25,8 +25,7 @@ impl Compiler {
         ast: ScopedPtr<'guard>,
     ) -> Result<(), RuntimeError> {
         let result_reg = self.compile_inner(mem, ast)?;
-        self.bytecode.push_op1(mem, Opcode::RETURN, result_reg);
-        Ok(())
+        self.bytecode.push_op1(mem, Opcode::RETURN, result_reg)
     }
 
     fn compile_inner<'guard>(
@@ -34,20 +33,23 @@ impl Compiler {
         mem: &'guard MutatorView,
         ast_node: ScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
-        match *ast {
+        match *ast_node {
             Value::Symbol(s) => {
                 let reg = self.acquire_reg();
-                let lit_id = self.bytecode.push_lit(mem, ast_node);
-                self.bytecode.push_loadlit(mem, reg, lit_id);
+                let lit_id = self.bytecode.push_lit(mem, ast_node)?;
+                self.bytecode.push_loadlit(mem, reg, lit_id)?;
                 Ok(reg)
-            },
-            Value::Pair(p) => {
-                Ok(1)
-            },
-            _ => Err(RuntimeError::new(ErrorKind::CompileError(String::from("Unexpected type in AST"))))
+            }
+            //Value::Pair(p) => {
+            //    Ok(1)
+            //},
+            _ => Err(RuntimeError::new(ErrorKind::CompileError(String::from(
+                "Unexpected type in AST",
+            )))),
         }
     }
 
+    // this is a naive way of allocating registers - every result gets it's own register
     fn acquire_reg(&mut self) -> Register {
         let reg = self.next_reg;
         self.next_reg += 1;
@@ -62,7 +64,8 @@ pub fn compile<'guard>(
 ) -> Result<ScopedPtr<'guard>, RuntimeError> {
     // depth-first tree traversal, flattening the output
 
-    let compiler = Compiler::new();
+    let mut compiler = Compiler::new();
+    compiler.compile(mem, ast)?;
 
     let bytecode = compiler.bytecode;
     mem.alloc(bytecode)

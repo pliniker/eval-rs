@@ -14,6 +14,7 @@ pub enum Opcode {
     RETURN,
     MOV,
     ATOM,
+    NIL,
     LOADLIT,
     CAR,
     CDR,
@@ -40,9 +41,22 @@ impl ByteCode {
         }
     }
 
-    pub fn push_op0<'guard>(&self, mem: &'guard MutatorView, op: Opcode) {}
+    pub fn push_op0<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        op: Opcode,
+    ) -> Result<(), RuntimeError> {
+        unimplemented!()
+    }
 
-    pub fn push_op1<'guard>(&self, mem: &'guard MutatorView, op: Opcode, reg: Register) {}
+    pub fn push_op1<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        op: Opcode,
+        reg: Register,
+    ) -> Result<(), RuntimeError> {
+        unimplemented!()
+    }
 
     pub fn push_op2<'guard>(
         &self,
@@ -50,7 +64,8 @@ impl ByteCode {
         op: Opcode,
         reg_acc: Register,
         reg1: Register,
-    ) {
+    ) -> Result<(), RuntimeError> {
+        unimplemented!()
     }
 
     pub fn push_op3<'guard>(
@@ -60,20 +75,26 @@ impl ByteCode {
         reg_acc: Register,
         reg1: Register,
         reg2: Register,
-    ) {
+    ) -> Result<(), RuntimeError> {
+        unimplemented!()
     }
 
     pub fn push_loadlit<'guard>(
         &self,
         mem: &'guard MutatorView,
         reg_acc: Register,
-        lit: ScopedPtr,
-    ) {
+        literal_id: LiteralId
+    ) -> Result<(), RuntimeError> {
+        unimplemented!()
     }
 
-    pub fn push_loadlit<'guard>(&self, mem: &'guard MutatorView, reg_acc: Register, lit: LiteralId) {}
-
-    pub fn push_lit<'guard>(&self, mem: &'guard MutatorView, literal: ScopedPtr<'guard>) -> LiteralId {}
+    pub fn push_lit<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        literal: ScopedPtr<'guard>,
+    ) -> Result<LiteralId, RuntimeError> {
+        unimplemented!()
+    }
 }
 
 impl Print for ByteCode {

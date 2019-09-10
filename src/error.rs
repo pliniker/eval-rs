@@ -89,6 +89,7 @@ impl fmt::Display for RuntimeError {
             ErrorKind::IOError(ref reason) => write!(f, "IO Error: {}", reason),
             ErrorKind::LexerError(ref reason) => write!(f, "Parse error: {}", reason),
             ErrorKind::ParseError(ref reason) => write!(f, "Parse error: {}", reason),
+            ErrorKind::CompileError(ref reason) => write!(f, "Compile error: {}", reason),
             ErrorKind::EvalError(ref reason) => write!(f, "Evaluation error: {}", reason),
             ErrorKind::OutOfMemory => write!(f, "Out of memory!"),
             ErrorKind::BadAllocationRequest => {
@@ -139,6 +140,7 @@ impl Error for RuntimeError {
             ErrorKind::LexerError(ref reason) => reason,
             ErrorKind::ParseError(ref reason) => reason,
             ErrorKind::EvalError(ref reason) => reason,
+            ErrorKind::CompileError(ref reason) => reason,
             _ => "",
         }
     }
