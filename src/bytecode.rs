@@ -83,7 +83,7 @@ impl ByteCode {
         &self,
         mem: &'guard MutatorView,
         reg_acc: Register,
-        literal_id: LiteralId
+        literal_id: LiteralId,
     ) -> Result<(), RuntimeError> {
         unimplemented!()
     }

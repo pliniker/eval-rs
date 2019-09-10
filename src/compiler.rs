@@ -24,27 +24,61 @@ impl Compiler {
         mem: &'guard MutatorView,
         ast: ScopedPtr<'guard>,
     ) -> Result<(), RuntimeError> {
-        let result_reg = self.compile_inner(mem, ast)?;
+        let result_reg = self.compile_eval(mem, ast)?;
         self.bytecode.push_op1(mem, Opcode::RETURN, result_reg)
     }
 
-    fn compile_inner<'guard>(
+    fn compile_eval<'guard>(
         &mut self,
         mem: &'guard MutatorView,
         ast_node: ScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         match *ast_node {
+            Value::Pair(p) => self.compile_apply(mem, p.first.get(mem), p.second.get(mem)),
+
             Value::Symbol(s) => {
+                let literal = match s.as_str(mem) {
+                    "nil" => mem.nil(),
+                    _ => ast_node,
+                };
+
+                let reg = self.acquire_reg();
+                let lit_id = self.bytecode.push_lit(mem, literal)?;
+                self.bytecode.push_loadlit(mem, reg, lit_id)?;
+                Ok(reg)
+            }
+
+            _ => {
                 let reg = self.acquire_reg();
                 let lit_id = self.bytecode.push_lit(mem, ast_node)?;
                 self.bytecode.push_loadlit(mem, reg, lit_id)?;
                 Ok(reg)
             }
-            //Value::Pair(p) => {
-            //    Ok(1)
-            //},
+        }
+    }
+
+    fn compile_apply<'guard>(
+        &mut self,
+        mem: &'guard MutatorView,
+        function: ScopedPtr<'guard>,
+        params: ScopedPtr<'guard>,
+    ) -> Result<Register, RuntimeError> {
+        match *function {
+            Value::Symbol(s) => {
+                match s.as_str(mem) {
+                    "quote" => {
+                        let reg = self.acquire_reg();
+                        let lit_id = self.bytecode.push_lit(mem, params)?;
+                        self.bytecode.push_loadlit(mem, reg, lit_id)?;
+                        Ok(reg)
+                    },
+
+                    _ => unimplemented!()
+                }
+            },
+
             _ => Err(RuntimeError::new(ErrorKind::CompileError(String::from(
-                "Unexpected type in AST",
+                "Non-symbol in function-call position",
             )))),
         }
     }
