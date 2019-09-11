@@ -1,7 +1,7 @@
 use std::fmt;
 
-use crate::containers::{Container, IndexedContainer, StackContainer};
-use crate::error::{ErrorKind, RuntimeError};
+use crate::containers::{Container, StackContainer, StackAnyContainer};
+use crate::error::RuntimeError;
 use crate::memory::MutatorView;
 use crate::primitives::{ArrayAny, ArrayU32};
 use crate::printer::Print;
@@ -46,7 +46,7 @@ impl ByteCode {
         mem: &'guard MutatorView,
         op: Opcode,
     ) -> Result<(), RuntimeError> {
-        unimplemented!()
+        self.code.push(mem, (op as u32) << 24)
     }
 
     pub fn push_op1<'guard>(
@@ -55,7 +55,8 @@ impl ByteCode {
         op: Opcode,
         reg: Register,
     ) -> Result<(), RuntimeError> {
-        unimplemented!()
+        let code: u32 = (op as u32) << 24 | (reg as u32) << 16;
+        self.code.push(mem, code)
     }
 
     pub fn push_op2<'guard>(
@@ -65,7 +66,8 @@ impl ByteCode {
         reg_acc: Register,
         reg1: Register,
     ) -> Result<(), RuntimeError> {
-        unimplemented!()
+        let code: u32 = (op as u32) << 24 | (reg_acc as u32) << 16 | (reg1 as u32) << 8;
+        self.code.push(mem, code)
     }
 
     pub fn push_op3<'guard>(
@@ -76,7 +78,8 @@ impl ByteCode {
         reg1: Register,
         reg2: Register,
     ) -> Result<(), RuntimeError> {
-        unimplemented!()
+        let code: u32 = (op as u32) << 24 | (reg_acc as u32) << 16 | (reg1 as u32) << 8 | (reg2 as u32);
+        self.code.push(mem, code)
     }
 
     pub fn push_loadlit<'guard>(
@@ -85,7 +88,8 @@ impl ByteCode {
         reg_acc: Register,
         literal_id: LiteralId,
     ) -> Result<(), RuntimeError> {
-        unimplemented!()
+        let code: u32 = (Opcode::LOADLIT as u32) << 24 | (reg_acc as u32) << 16 | (literal_id as u32);
+        self.code.push(mem, code)
     }
 
     pub fn push_lit<'guard>(
@@ -93,7 +97,12 @@ impl ByteCode {
         mem: &'guard MutatorView,
         literal: ScopedPtr<'guard>,
     ) -> Result<LiteralId, RuntimeError> {
-        unimplemented!()
+        let lit_id = self.literals.length() as u16;
+        match *literal {
+            // TODO clone anything mutable
+            _ => StackAnyContainer::push(&self.literals, mem, literal)?
+        };
+        Ok(lit_id)
     }
 }
 

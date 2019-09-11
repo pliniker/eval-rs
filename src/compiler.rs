@@ -64,17 +64,15 @@ impl Compiler {
         params: ScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         match *function {
-            Value::Symbol(s) => {
-                match s.as_str(mem) {
-                    "quote" => {
-                        let reg = self.acquire_reg();
-                        let lit_id = self.bytecode.push_lit(mem, params)?;
-                        self.bytecode.push_loadlit(mem, reg, lit_id)?;
-                        Ok(reg)
-                    },
-
-                    _ => unimplemented!()
+            Value::Symbol(s) => match s.as_str(mem) {
+                "quote" => {
+                    let reg = self.acquire_reg();
+                    let lit_id = self.bytecode.push_lit(mem, params)?;
+                    self.bytecode.push_loadlit(mem, reg, lit_id)?;
+                    Ok(reg)
                 }
+
+                _ => unimplemented!(),
             },
 
             _ => Err(RuntimeError::new(ErrorKind::CompileError(String::from(
