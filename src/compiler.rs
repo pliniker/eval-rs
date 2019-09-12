@@ -1,9 +1,9 @@
 use crate::bytecode::{ByteCode, Opcode, Register};
 use crate::containers::{Container, IndexedContainer, StackContainer};
-use crate::error::{ErrorKind, RuntimeError};
+use crate::error::{err_compile, RuntimeError};
 use crate::memory::MutatorView;
 use crate::primitives::{ArrayAny, ArrayU32};
-use crate::safeptr::ScopedPtr;
+use crate::safeptr::{MutatorScope, ScopedPtr};
 use crate::taggedptr::Value;
 
 struct Compiler {
@@ -41,19 +41,10 @@ impl Compiler {
                     "nil" => mem.nil(),
                     _ => ast_node,
                 };
-
-                let reg = self.acquire_reg();
-                let lit_id = self.bytecode.push_lit(mem, literal)?;
-                self.bytecode.push_loadlit(mem, reg, lit_id)?;
-                Ok(reg)
+                self.push_literal(mem, literal)
             }
 
-            _ => {
-                let reg = self.acquire_reg();
-                let lit_id = self.bytecode.push_lit(mem, ast_node)?;
-                self.bytecode.push_loadlit(mem, reg, lit_id)?;
-                Ok(reg)
-            }
+            _ => self.push_literal(mem, ast_node),
         }
     }
 
@@ -65,19 +56,41 @@ impl Compiler {
     ) -> Result<Register, RuntimeError> {
         match *function {
             Value::Symbol(s) => match s.as_str(mem) {
-                "quote" => {
-                    let reg = self.acquire_reg();
-                    let lit_id = self.bytecode.push_lit(mem, params)?;
-                    self.bytecode.push_loadlit(mem, reg, lit_id)?;
-                    Ok(reg)
-                }
-
+                "quote" => self.push_literal(mem, self.get_first_of_undotted_pair(mem, params)?),
                 _ => unimplemented!(),
             },
 
-            _ => Err(RuntimeError::new(ErrorKind::CompileError(String::from(
-                "Non-symbol in function-call position",
-            )))),
+            _ => Err(err_compile("Non symbol in function-call position")),
+        }
+    }
+
+    // Push a literal onto the literals list and a load instruction onto the bytecode list
+    fn push_literal<'guard>(
+        &mut self,
+        mem: &'guard MutatorView,
+        literal: ScopedPtr<'guard>,
+    ) -> Result<Register, RuntimeError> {
+        let reg = self.acquire_reg();
+        let lit_id = self.bytecode.push_lit(mem, literal)?;
+        self.bytecode.push_loadlit(mem, reg, lit_id)?;
+        Ok(reg)
+    }
+
+    // Assert that pointer is to a Pair, that only the first is non-nil, and return the first
+    fn get_first_of_undotted_pair<'guard>(
+        &self,
+        guard: &'guard MutatorScope,
+        ptr: ScopedPtr<'guard>,
+    ) -> Result<ScopedPtr<'guard>, RuntimeError> {
+        match *ptr {
+            Value::Pair(pair) => {
+                if pair.second.is_nil() {
+                    Ok(pair.first.get(guard))
+                } else {
+                    Err(err_compile("Pair must not be dotted"))
+                }
+            }
+            _ => Err(err_compile("Expected Pair type")),
         }
     }
 

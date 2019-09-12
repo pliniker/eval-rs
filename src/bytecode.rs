@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::containers::{Container, StackContainer, StackAnyContainer};
+use crate::containers::{Container, StackAnyContainer, StackContainer};
 use crate::error::RuntimeError;
 use crate::memory::MutatorView;
 use crate::primitives::{ArrayAny, ArrayU32};
@@ -78,7 +78,8 @@ impl ByteCode {
         reg1: Register,
         reg2: Register,
     ) -> Result<(), RuntimeError> {
-        let code: u32 = (op as u32) << 24 | (reg_acc as u32) << 16 | (reg1 as u32) << 8 | (reg2 as u32);
+        let code: u32 =
+            (op as u32) << 24 | (reg_acc as u32) << 16 | (reg1 as u32) << 8 | (reg2 as u32);
         self.code.push(mem, code)
     }
 
@@ -88,7 +89,8 @@ impl ByteCode {
         reg_acc: Register,
         literal_id: LiteralId,
     ) -> Result<(), RuntimeError> {
-        let code: u32 = (Opcode::LOADLIT as u32) << 24 | (reg_acc as u32) << 16 | (literal_id as u32);
+        let code: u32 =
+            (Opcode::LOADLIT as u32) << 24 | (reg_acc as u32) << 16 | (literal_id as u32);
         self.code.push(mem, code)
     }
 
@@ -100,7 +102,7 @@ impl ByteCode {
         let lit_id = self.literals.length() as u16;
         match *literal {
             // TODO clone anything mutable
-            _ => StackAnyContainer::push(&self.literals, mem, literal)?
+            _ => StackAnyContainer::push(&self.literals, mem, literal)?,
         };
         Ok(lit_id)
     }

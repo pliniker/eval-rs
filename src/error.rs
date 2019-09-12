@@ -169,3 +169,8 @@ pub fn err_parser(reason: &str) -> RuntimeError {
 pub fn err_parser_wpos(pos: SourcePos, reason: &str) -> RuntimeError {
     RuntimeError::with_pos(ErrorKind::ParseError(String::from(reason)), pos)
 }
+
+/// Convenience shorthand function for building an compile error
+pub fn err_compile(reason: &str) -> RuntimeError {
+    RuntimeError::new(ErrorKind::CompileError(String::from(reason)))
+}

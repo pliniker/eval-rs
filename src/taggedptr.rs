@@ -165,6 +165,11 @@ impl TaggedPtr {
         TaggedPtr { tag: 0 }
     }
 
+    /// Return true if the pointer is nil
+    pub fn is_nil(&self) -> bool {
+        unsafe { self.tag == 0 }
+    }
+
     /// Construct a generic object TaggedPtr
     fn object<T>(ptr: RawPtr<T>) -> TaggedPtr {
         TaggedPtr {
