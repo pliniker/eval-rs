@@ -92,7 +92,7 @@ pub enum FatPtr {
 impl FatPtr {
     /// Given a lifetime, convert to a `Value` type. Unsafe because anything can provide a lifetime
     /// without any safety guarantee that it's valid.
-    pub fn as_value<'scope>(&self, guard: &'scope MutatorScope) -> Value<'scope> {
+    pub fn as_value<'scope>(&self, guard: &'scope dyn MutatorScope) -> Value<'scope> {
         match self {
             FatPtr::Nil => Value::Nil,
             FatPtr::Pair(raw_ptr) => Value::Pair(raw_ptr.scoped_ref(guard)),

@@ -17,7 +17,7 @@ pub struct ScopedPtr<'guard> {
 }
 
 impl<'guard> ScopedPtr<'guard> {
-    pub fn new(guard: &'guard MutatorScope, ptr: TaggedPtr) -> ScopedPtr<'guard> {
+    pub fn new(guard: &'guard dyn MutatorScope, ptr: TaggedPtr) -> ScopedPtr<'guard> {
         ScopedPtr {
             ptr: ptr,
             value: FatPtr::from(ptr).as_value(guard),
@@ -73,12 +73,12 @@ impl CellPtr {
 
     /// Return the pointer as a `ScopedPtr` type that carries a copy of the `TaggedPtr` and
     /// a `Value` type for both copying and access convenience
-    pub fn get<'scope>(&self, guard: &'scope MutatorScope) -> ScopedPtr<'scope> {
+    pub fn get<'scope>(&self, guard: &'scope dyn MutatorScope) -> ScopedPtr<'scope> {
         ScopedPtr::new(guard, self.inner.get())
     }
 
     /// This returns the pointer as a `Value` type, given a mutator scope for safety
-    pub fn get_value<'scope>(&self, guard: &'scope MutatorScope) -> Value<'scope> {
+    pub fn get_value<'scope>(&self, guard: &'scope dyn MutatorScope) -> Value<'scope> {
         FatPtr::from(self.inner.get()).as_value(guard)
     }
 

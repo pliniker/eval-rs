@@ -45,7 +45,7 @@ impl<T: Sized + Clone> Array<T> {
     /// Bounds-checked write
     fn write<'guard>(
         &self,
-        _guard: &'guard MutatorScope,
+        _guard: &'guard dyn MutatorScope,
         index: ArraySize,
         item: T,
     ) -> Result<&T, RuntimeError> {
@@ -59,7 +59,7 @@ impl<T: Sized + Clone> Array<T> {
     /// Bounds-checked read
     fn read<'guard>(
         &self,
-        _guard: &'guard MutatorScope,
+        _guard: &'guard dyn MutatorScope,
         index: ArraySize,
     ) -> Result<T, RuntimeError> {
         unsafe {
@@ -71,7 +71,7 @@ impl<T: Sized + Clone> Array<T> {
     /// Bounds-checked reference-read
     fn read_ref<'guard>(
         &self,
-        _guard: &'guard MutatorScope,
+        _guard: &'guard dyn MutatorScope,
         index: ArraySize,
     ) -> Result<&T, RuntimeError> {
         unsafe {
@@ -129,7 +129,7 @@ impl<T: Sized + Clone> StackContainer<T> for Array<T> {
 
     /// Pop returns None if the container is empty, otherwise moves the last item of the array
     /// out to the caller.
-    fn pop<'guard>(&self, _guard: &'guard MutatorScope) -> Result<T, RuntimeError> {
+    fn pop<'guard>(&self, _guard: &'guard dyn MutatorScope) -> Result<T, RuntimeError> {
         let length = self.length.get();
 
         if length == 0 {
@@ -159,7 +159,7 @@ impl StackAnyContainer for ArrayAny {
 
     /// Pop returns None if the container is empty, otherwise moves the last item of the array
     /// out to the caller.
-    fn pop<'guard>(&self, guard: &'guard MutatorScope) -> Result<ScopedPtr<'guard>, RuntimeError> {
+    fn pop<'guard>(&self, guard: &'guard dyn MutatorScope) -> Result<ScopedPtr<'guard>, RuntimeError> {
         Ok(StackContainer::<CellPtr>::pop(self, guard)?.get(guard))
     }
 }
@@ -168,7 +168,7 @@ impl<T: Sized + Clone> IndexedContainer<T> for Array<T> {
     /// Return a copy of the object at the given index. Bounds-checked.
     fn get<'guard>(
         &self,
-        guard: &'guard MutatorScope,
+        guard: &'guard dyn MutatorScope,
         index: ArraySize,
     ) -> Result<T, RuntimeError> {
         self.read(guard, index)
@@ -177,7 +177,7 @@ impl<T: Sized + Clone> IndexedContainer<T> for Array<T> {
     /// Move an object into the array at the given index. Bounds-checked.
     fn set<'guard>(
         &self,
-        guard: &'guard MutatorScope,
+        guard: &'guard dyn MutatorScope,
         index: ArraySize,
         item: T,
     ) -> Result<(), RuntimeError> {
@@ -190,7 +190,7 @@ impl IndexedAnyContainer for ArrayAny {
     /// Return a pointer to the object at the given index. Bounds-checked.
     fn get<'guard>(
         &self,
-        guard: &'guard MutatorScope,
+        guard: &'guard dyn MutatorScope,
         index: ArraySize,
     ) -> Result<ScopedPtr<'guard>, RuntimeError> {
         Ok(self.read_ref(guard, index)?.get(guard))
@@ -199,7 +199,7 @@ impl IndexedAnyContainer for ArrayAny {
     /// Set the object pointer at the given index. Bounds-checked.
     fn set<'guard>(
         &self,
-        guard: &'guard MutatorScope,
+        guard: &'guard dyn MutatorScope,
         index: ArraySize,
         item: ScopedPtr<'guard>,
     ) -> Result<(), RuntimeError> {

@@ -123,7 +123,7 @@ impl ByteCode {
 }
 
 impl Print for ByteCode {
-    fn print<'guard>(&self, _guard: &'guard MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+    fn print<'guard>(&self, _guard: &'guard dyn MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "ByteCode[...]")
     }
 }

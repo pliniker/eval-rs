@@ -12,12 +12,12 @@ use crate::taggedptr::Value;
 struct PairList<'guard> {
     head: CellPtr,
     tail: CellPtr,
-    _guard: PhantomData<&'guard MutatorScope>,
+    _guard: PhantomData<&'guard dyn MutatorScope>,
 }
 
 impl<'guard> PairList<'guard> {
     /// Create a new empty list
-    fn open(_guard: &'guard MutatorScope) -> PairList {
+    fn open(_guard: &'guard dyn MutatorScope) -> PairList {
         PairList {
             head: CellPtr::new_nil(),
             tail: CellPtr::new_nil(),
@@ -55,7 +55,7 @@ impl<'guard> PairList<'guard> {
     }
 
     /// Apply dot-notation to set the second value of the last pair of the list
-    fn dot(&mut self, guard: &'guard MutatorScope, value: ScopedPtr<'guard>, _pos: SourcePos) {
+    fn dot(&mut self, guard: &'guard dyn MutatorScope, value: ScopedPtr<'guard>, _pos: SourcePos) {
         if let Value::Pair(pair) = *self.tail.get(guard) {
             pair.dot(value);
         //pair.set_second_source_pos(pos);
@@ -65,7 +65,7 @@ impl<'guard> PairList<'guard> {
     }
 
     /// Consume the list and return the pair at the head
-    fn close(self, guard: &'guard MutatorScope) -> ScopedPtr<'guard> {
+    fn close(self, guard: &'guard dyn MutatorScope) -> ScopedPtr<'guard> {
         self.head.get(guard)
     }
 }

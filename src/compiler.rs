@@ -1,8 +1,6 @@
 use crate::bytecode::{ByteCode, Opcode, Register};
-use crate::containers::{Container, IndexedContainer, StackContainer};
 use crate::error::{err_compile, RuntimeError};
 use crate::memory::MutatorView;
-use crate::primitives::{ArrayAny, ArrayU32};
 use crate::safeptr::{MutatorScope, ScopedPtr};
 use crate::taggedptr::Value;
 
@@ -41,10 +39,10 @@ impl Compiler {
                     "nil" => mem.nil(),
                     _ => ast_node,
                 };
-                self.push_literal(mem, literal)
+                self.push_load_literal(mem, literal)
             }
 
-            _ => self.push_literal(mem, ast_node),
+            _ => self.push_load_literal(mem, ast_node),
         }
     }
 
@@ -56,7 +54,10 @@ impl Compiler {
     ) -> Result<Register, RuntimeError> {
         match *function {
             Value::Symbol(s) => match s.as_str(mem) {
-                "quote" => self.push_literal(mem, self.get_first_of_undotted_pair(mem, params)?),
+                "quote" => {
+                    self.push_load_literal(mem, self.get_first_of_undotted_pair(mem, params)?)
+                }
+                "atom" => self.push_op2(mem, Opcode::ATOM, params),
                 _ => unimplemented!(),
             },
 
@@ -64,8 +65,43 @@ impl Compiler {
         }
     }
 
+    fn push_op0<'guard>(
+        &mut self,
+        mem: &'guard MutatorView,
+        op: Opcode,
+    ) -> Result<(), RuntimeError> {
+        self.bytecode.push_op0(mem, op)?;
+        Ok(())
+    }
+
+    fn push_op2<'guard>(
+        &mut self,
+        mem: &'guard MutatorView,
+        op: Opcode,
+        params: ScopedPtr<'guard>,
+    ) -> Result<Register, RuntimeError> {
+        let result = self.acquire_reg();
+        let reg1 = self.compile_eval(mem, self.get_first_of_undotted_pair(mem, params)?)?;
+        self.bytecode.push_op2(mem, op, result, reg1)?;
+        Ok(result)
+    }
+
+    fn push_op3<'guard>(
+        &mut self,
+        mem: &'guard MutatorView,
+        op: Opcode,
+        params: ScopedPtr<'guard>,
+    ) -> Result<Register, RuntimeError> {
+        let result = self.acquire_reg();
+        let (first, second) = self.get_two_from_pairs(mem, params)?;
+        let reg1 = self.compile_eval(mem, first)?;
+        let reg2 = self.compile_eval(mem, second)?;
+        self.bytecode.push_op3(mem, op, result, reg1, reg2)?;
+        Ok(result)
+    }
+
     // Push a literal onto the literals list and a load instruction onto the bytecode list
-    fn push_literal<'guard>(
+    fn push_load_literal<'guard>(
         &mut self,
         mem: &'guard MutatorView,
         literal: ScopedPtr<'guard>,
@@ -79,7 +115,7 @@ impl Compiler {
     // Assert that pointer is to a Pair, that only the first is non-nil, and return the first
     fn get_first_of_undotted_pair<'guard>(
         &self,
-        guard: &'guard MutatorScope,
+        guard: &'guard dyn MutatorScope,
         ptr: ScopedPtr<'guard>,
     ) -> Result<ScopedPtr<'guard>, RuntimeError> {
         match *ptr {
@@ -87,10 +123,39 @@ impl Compiler {
                 if pair.second.is_nil() {
                     Ok(pair.first.get(guard))
                 } else {
-                    Err(err_compile("Pair must not be dotted"))
+                    Err(err_compile("Expected no more than one parameter"))
                 }
             }
-            _ => Err(err_compile("Expected Pair type")),
+            _ => Err(err_compile("Expected no less than one parameter")),
+        }
+    }
+
+    // Assert that pointer is to a Pair, that the second is also a Pair and return both Pair.first values
+    fn get_two_from_pairs<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        ptr: ScopedPtr<'guard>,
+    ) -> Result<(ScopedPtr<'guard>, ScopedPtr<'guard>), RuntimeError> {
+        match *ptr {
+            Value::Pair(pair) => {
+                let first_param = pair.first.get(guard);
+
+                match *pair.second.get(guard) {
+                    Value::Pair(pair) => {
+
+                        if let Value::Nil = *pair.second.get(guard) {
+                            let second_param = pair.first.get(guard);
+                            Ok((first_param, second_param))
+                        } else {
+                            Err(err_compile("Expected no more than two parameters"))
+                        }
+
+                    },
+
+                    _ => Err(err_compile("Expected no less than two parameters")),
+                }
+            }
+            _ => Err(err_compile("Expected no less than two parameters")),
         }
     }
 
