@@ -49,7 +49,10 @@ pub trait StackAnyContainer: StackContainer<CellPtr> {
 
     /// Pop returns a bounds error if the container is empty, otherwise moves the last item of the
     /// array out to the caller.
-    fn pop<'guard>(&self, _guard: &'guard dyn MutatorScope) -> Result<ScopedPtr<'guard>, RuntimeError>;
+    fn pop<'guard>(
+        &self,
+        _guard: &'guard dyn MutatorScope,
+    ) -> Result<ScopedPtr<'guard>, RuntimeError>;
 }
 
 /// Generic indexed-access trait. If implemented, the container can function as an indexable vector

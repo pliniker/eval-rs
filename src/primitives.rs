@@ -42,7 +42,11 @@ impl Symbol {
 
 impl Print for Symbol {
     /// Safe because the lifetime of `MutatorScope` defines a safe-access window
-    fn print<'guard>(&self, guard: &'guard dyn MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+    fn print<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
         write!(f, "{}", self.as_str(guard))
     }
 }
@@ -88,7 +92,11 @@ impl Pair {
 }
 
 impl Print for Pair {
-    fn print<'guard>(&self, guard: &'guard dyn MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+    fn print<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
         let mut tail = self;
         write!(f, "({}", tail.first.get(guard))?;
 
@@ -105,7 +113,11 @@ impl Print for Pair {
     }
 
     // In debug print, use dot notation
-    fn debug<'guard>(&self, guard: &'guard dyn MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+    fn debug<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
         write!(
             f,
             "({:?} . {:?})",
@@ -121,7 +133,11 @@ pub struct NumberObject {
 }
 
 impl Print for NumberObject {
-    fn print<'guard>(&self, _guard: &'guard dyn MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+    fn print<'guard>(
+        &self,
+        _guard: &'guard dyn MutatorScope,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
         // TODO
         write!(f, "NumberObject(nan)")
     }
@@ -131,7 +147,11 @@ impl Print for NumberObject {
 pub type ArrayAny = Array<CellPtr>;
 
 impl Print for ArrayAny {
-    fn print<'guard>(&self, guard: &'guard dyn MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+    fn print<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
         write!(f, "[")?;
 
         for i in 0..self.length() {
@@ -153,7 +173,11 @@ impl Print for ArrayAny {
 pub type ArrayU8 = Array<u8>;
 
 impl Print for ArrayU8 {
-    fn print<'guard>(&self, _guard: &'guard dyn MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+    fn print<'guard>(
+        &self,
+        _guard: &'guard dyn MutatorScope,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
         write!(f, "ArrayU8[...]")
     }
 }
@@ -162,7 +186,11 @@ impl Print for ArrayU8 {
 pub type ArrayU32 = Array<u32>;
 
 impl Print for ArrayU32 {
-    fn print<'guard>(&self, _guard: &'guard dyn MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+    fn print<'guard>(
+        &self,
+        _guard: &'guard dyn MutatorScope,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
         write!(f, "ArrayU32[...]")
     }
 }

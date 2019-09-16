@@ -19,7 +19,8 @@ pub enum Opcode {
     CDR = 0x06,
     CONS = 0x07,
     EQ = 0x08,
-    COND = 0x09,
+    JMPT = 0x09,
+    JMP = 0x10,
 }
 
 pub type Register = u8;
@@ -123,7 +124,11 @@ impl ByteCode {
 }
 
 impl Print for ByteCode {
-    fn print<'guard>(&self, _guard: &'guard dyn MutatorScope, f: &mut fmt::Formatter) -> fmt::Result {
+    fn print<'guard>(
+        &self,
+        _guard: &'guard dyn MutatorScope,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
         write!(f, "ByteCode[...]")
     }
 }

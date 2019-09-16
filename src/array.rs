@@ -159,7 +159,10 @@ impl StackAnyContainer for ArrayAny {
 
     /// Pop returns None if the container is empty, otherwise moves the last item of the array
     /// out to the caller.
-    fn pop<'guard>(&self, guard: &'guard dyn MutatorScope) -> Result<ScopedPtr<'guard>, RuntimeError> {
+    fn pop<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+    ) -> Result<ScopedPtr<'guard>, RuntimeError> {
         Ok(StackContainer::<CellPtr>::pop(self, guard)?.get(guard))
     }
 }

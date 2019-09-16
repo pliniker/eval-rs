@@ -54,11 +54,13 @@ impl Compiler {
     ) -> Result<Register, RuntimeError> {
         match *function {
             Value::Symbol(s) => match s.as_str(mem) {
-                "quote" => {
-                    self.push_load_literal(mem, self.get_first_of_undotted_pair(mem, params)?)
-                }
+                "quote" => self.push_load_literal(mem, self.get_first_of_undotted_pair(mem, params)?),
                 "atom" => self.push_op2(mem, Opcode::ATOM, params),
-                _ => unimplemented!(),
+                "car" => self.push_op3(mem, Opcode::CAR, params),
+                "cdr" => self.push_op3(mem, Opcode::CDR, params),
+                "cons" => self.push_op3(mem, Opcode::CDR, params),
+                "eq" => self.push_op3(mem, Opcode::EQ, params),
+                _ => Err(err_compile("Symbol is not bound to a function"))
             },
 
             _ => Err(err_compile("Non symbol in function-call position")),
@@ -142,15 +144,13 @@ impl Compiler {
 
                 match *pair.second.get(guard) {
                     Value::Pair(pair) => {
-
                         if let Value::Nil = *pair.second.get(guard) {
                             let second_param = pair.first.get(guard);
                             Ok((first_param, second_param))
                         } else {
                             Err(err_compile("Expected no more than two parameters"))
                         }
-
-                    },
+                    }
 
                     _ => Err(err_compile("Expected no less than two parameters")),
                 }
