@@ -1,3 +1,4 @@
+use crate::bytecode::ByteCode;
 use crate::containers::{Container, IndexedAnyContainer, StackAnyContainer};
 use crate::error::RuntimeError;
 use crate::memory::{Mutator, MutatorView};
@@ -27,10 +28,10 @@ struct VM {
 }
 
 impl Mutator for VM {
-    type Input = ();
+    type Input = ByteCode;
     type Output = ();
 
-    fn run(&self, mem: &MutatorView, _: ()) -> Result<(), RuntimeError> {
+    fn run(&self, mem: &MutatorView, code: ByteCode) -> Result<(), RuntimeError> {
         Ok(())
     }
 }

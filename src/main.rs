@@ -26,6 +26,7 @@ mod error;
 mod headers;
 mod lexer;
 mod memory;
+mod pair;
 mod parser;
 mod pointerops;
 mod primitives;

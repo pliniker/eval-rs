@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use crate::error::{err_parser, err_parser_wpos, RuntimeError, SourcePos};
 use crate::lexer::{tokenize, Token, TokenType};
 use crate::memory::MutatorView;
-use crate::primitives::Pair;
+use crate::pair::Pair;
 use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
 use crate::taggedptr::Value;
 

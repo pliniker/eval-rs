@@ -1,6 +1,7 @@
 use crate::bytecode::{ByteCode, Opcode, Register};
-use crate::error::{err_compile, RuntimeError};
+use crate::error::{err_eval, RuntimeError};
 use crate::memory::MutatorView;
+use crate::pair::{get_one_from_pair_list, get_two_from_pair_list};
 use crate::safeptr::{MutatorScope, ScopedPtr};
 use crate::taggedptr::Value;
 
@@ -54,16 +55,16 @@ impl Compiler {
     ) -> Result<Register, RuntimeError> {
         match *function {
             Value::Symbol(s) => match s.as_str(mem) {
-                "quote" => self.push_load_literal(mem, self.get_first_of_undotted_pair(mem, params)?),
+                "quote" => self.push_load_literal(mem, get_one_from_pair_list(mem, params)?),
                 "atom" => self.push_op2(mem, Opcode::ATOM, params),
                 "car" => self.push_op3(mem, Opcode::CAR, params),
                 "cdr" => self.push_op3(mem, Opcode::CDR, params),
                 "cons" => self.push_op3(mem, Opcode::CDR, params),
                 "eq" => self.push_op3(mem, Opcode::EQ, params),
-                _ => Err(err_compile("Symbol is not bound to a function"))
+                _ => Err(err_eval("Symbol is not bound to a function"))
             },
 
-            _ => Err(err_compile("Non symbol in function-call position")),
+            _ => Err(err_eval("Non symbol in function-call position")),
         }
     }
 
@@ -83,7 +84,7 @@ impl Compiler {
         params: ScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         let result = self.acquire_reg();
-        let reg1 = self.compile_eval(mem, self.get_first_of_undotted_pair(mem, params)?)?;
+        let reg1 = self.compile_eval(mem, get_one_from_pair_list(mem, params)?)?;
         self.bytecode.push_op2(mem, op, result, reg1)?;
         Ok(result)
     }
@@ -95,7 +96,7 @@ impl Compiler {
         params: ScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         let result = self.acquire_reg();
-        let (first, second) = self.get_two_from_pairs(mem, params)?;
+        let (first, second) = get_two_from_pair_list(mem, params)?;
         let reg1 = self.compile_eval(mem, first)?;
         let reg2 = self.compile_eval(mem, second)?;
         self.bytecode.push_op3(mem, op, result, reg1, reg2)?;
@@ -112,51 +113,6 @@ impl Compiler {
         let lit_id = self.bytecode.push_lit(mem, literal)?;
         self.bytecode.push_loadlit(mem, reg, lit_id)?;
         Ok(reg)
-    }
-
-    // Assert that pointer is to a Pair, that only the first is non-nil, and return the first
-    fn get_first_of_undotted_pair<'guard>(
-        &self,
-        guard: &'guard dyn MutatorScope,
-        ptr: ScopedPtr<'guard>,
-    ) -> Result<ScopedPtr<'guard>, RuntimeError> {
-        match *ptr {
-            Value::Pair(pair) => {
-                if pair.second.is_nil() {
-                    Ok(pair.first.get(guard))
-                } else {
-                    Err(err_compile("Expected no more than one parameter"))
-                }
-            }
-            _ => Err(err_compile("Expected no less than one parameter")),
-        }
-    }
-
-    // Assert that pointer is to a Pair, that the second is also a Pair and return both Pair.first values
-    fn get_two_from_pairs<'guard>(
-        &self,
-        guard: &'guard dyn MutatorScope,
-        ptr: ScopedPtr<'guard>,
-    ) -> Result<(ScopedPtr<'guard>, ScopedPtr<'guard>), RuntimeError> {
-        match *ptr {
-            Value::Pair(pair) => {
-                let first_param = pair.first.get(guard);
-
-                match *pair.second.get(guard) {
-                    Value::Pair(pair) => {
-                        if let Value::Nil = *pair.second.get(guard) {
-                            let second_param = pair.first.get(guard);
-                            Ok((first_param, second_param))
-                        } else {
-                            Err(err_compile("Expected no more than two parameters"))
-                        }
-                    }
-
-                    _ => Err(err_compile("Expected no less than two parameters")),
-                }
-            }
-            _ => Err(err_compile("Expected no less than two parameters")),
-        }
     }
 
     // this is a naive way of allocating registers - every result gets it's own register

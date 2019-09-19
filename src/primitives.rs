@@ -5,11 +5,8 @@ use std::str;
 
 use crate::array::Array;
 use crate::containers::{Container, IndexedAnyContainer};
-use crate::error::{RuntimeError, SourcePos};
-use crate::memory::MutatorView;
 use crate::printer::Print;
-use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
-use crate::taggedptr::Value;
+use crate::safeptr::{CellPtr, MutatorScope};
 
 /// A Symbol is a unique object that has a unique name string. The backing storage for the
 /// underlying str data must have a lifetime of at least that of the Symbol instance to
@@ -48,82 +45,6 @@ impl Print for Symbol {
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
         write!(f, "{}", self.as_str(guard))
-    }
-}
-
-/// A Pair of pointers, like a Cons cell of old
-pub struct Pair {
-    pub first: CellPtr,
-    pub second: CellPtr,
-    // Possible source code positions of the first and second values
-    pub first_pos: Option<SourcePos>,
-    pub second_pos: Option<SourcePos>,
-}
-
-impl Pair {
-    pub fn new() -> Pair {
-        Pair {
-            first: CellPtr::new_nil(),
-            second: CellPtr::new_nil(),
-            first_pos: None,
-            second_pos: None,
-        }
-    }
-
-    /// Set Pair.second to a new Pair with newPair.first set to the value
-    pub fn append<'guard>(
-        &self,
-        mem: &'guard MutatorView,
-        value: ScopedPtr<'guard>,
-    ) -> Result<ScopedPtr<'guard>, RuntimeError> {
-        let pair = Pair::new();
-        pair.first.set(value);
-
-        let pair = mem.alloc(pair)?;
-        self.second.set(pair);
-
-        Ok(pair)
-    }
-
-    /// Set Pair.second to the given value
-    pub fn dot<'guard>(&self, value: ScopedPtr<'guard>) {
-        self.second.set(value);
-    }
-}
-
-impl Print for Pair {
-    fn print<'guard>(
-        &self,
-        guard: &'guard dyn MutatorScope,
-        f: &mut fmt::Formatter,
-    ) -> fmt::Result {
-        let mut tail = self;
-        write!(f, "({}", tail.first.get(guard))?;
-
-        while let Value::Pair(next) = *tail.second.get(guard) {
-            tail = next;
-            write!(f, " {}", tail.first.get(guard))?;
-        }
-
-        if let Value::Symbol(ptr) = *tail.second.get(guard) {
-            write!(f, " . {}", ptr.as_str(guard))?;
-        }
-
-        write!(f, ")")
-    }
-
-    // In debug print, use dot notation
-    fn debug<'guard>(
-        &self,
-        guard: &'guard dyn MutatorScope,
-        f: &mut fmt::Formatter,
-    ) -> fmt::Result {
-        write!(
-            f,
-            "({:?} . {:?})",
-            self.first.get(guard),
-            self.second.get(guard)
-        )
     }
 }
 

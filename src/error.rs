@@ -26,7 +26,6 @@ pub enum ErrorKind {
     LexerError(String),
     ParseError(String),
     EvalError(String),
-    CompileError(String),
     BadAllocationRequest,
     OutOfMemory,
     BoundsError,
@@ -89,7 +88,6 @@ impl fmt::Display for RuntimeError {
             ErrorKind::IOError(ref reason) => write!(f, "IO Error: {}", reason),
             ErrorKind::LexerError(ref reason) => write!(f, "Parse error: {}", reason),
             ErrorKind::ParseError(ref reason) => write!(f, "Parse error: {}", reason),
-            ErrorKind::CompileError(ref reason) => write!(f, "Compile error: {}", reason),
             ErrorKind::EvalError(ref reason) => write!(f, "Evaluation error: {}", reason),
             ErrorKind::OutOfMemory => write!(f, "Out of memory!"),
             ErrorKind::BadAllocationRequest => {
@@ -140,7 +138,6 @@ impl Error for RuntimeError {
             ErrorKind::LexerError(ref reason) => reason,
             ErrorKind::ParseError(ref reason) => reason,
             ErrorKind::EvalError(ref reason) => reason,
-            ErrorKind::CompileError(ref reason) => reason,
             _ => "",
         }
     }
@@ -170,7 +167,7 @@ pub fn err_parser_wpos(pos: SourcePos, reason: &str) -> RuntimeError {
     RuntimeError::with_pos(ErrorKind::ParseError(String::from(reason)), pos)
 }
 
-/// Convenience shorthand function for building an compile error
-pub fn err_compile(reason: &str) -> RuntimeError {
-    RuntimeError::new(ErrorKind::CompileError(String::from(reason)))
+/// Convenience shorthand function for building an evaluation error
+pub fn err_eval(reason: &str) -> RuntimeError {
+    RuntimeError::new(ErrorKind::EvalError(String::from(reason)))
 }

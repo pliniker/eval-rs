@@ -13,7 +13,7 @@ use crate::taggedptr::{FatPtr, TaggedPtr};
 /// This type describes the mutator's view into memory - the heap and symbol name/ptr lookup.
 ///
 /// It implements `MutatorScope` such that any `ScopedPtr` or `Value` instances must be lifetime-
-/// limited to the lifetime of this instance using `&'scope MutatorScope`;
+/// limited to the lifetime of this instance using `&'scope dyn MutatorScope`;
 pub struct MutatorView<'memory> {
     heap: &'memory Heap,
 }
