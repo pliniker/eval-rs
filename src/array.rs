@@ -218,7 +218,8 @@ mod test {
     };
     use crate::error::{ErrorKind, RuntimeError};
     use crate::memory::{Memory, Mutator, MutatorView};
-    use crate::primitives::{ArrayAny, Pair};
+    use crate::pair::Pair;
+    use crate::primitives::ArrayAny;
     use crate::taggedptr::Value;
 
     #[test]

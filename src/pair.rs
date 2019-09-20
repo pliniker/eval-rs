@@ -93,10 +93,10 @@ pub fn get_one_from_pair_list<'guard>(
             if pair.second.is_nil() {
                 Ok(pair.first.get(guard))
             } else {
-                Err(err_eval("Expected no more than one parameter"))
+                Err(err_eval("Expected no more than one value in Pair list"))
             }
         }
-        _ => Err(err_eval("Expected no less than one parameter")),
+        _ => Err(err_eval("Expected a Pair list")),
     }
 }
 
@@ -115,13 +115,185 @@ pub fn get_two_from_pair_list<'guard>(
                         let second_param = pair.first.get(guard);
                         Ok((first_param, second_param))
                     } else {
-                        Err(err_eval("Expected no more than two parameters"))
+                        Err(err_eval("Expected no more than two values in Pair list"))
                     }
                 }
-
-                _ => Err(err_eval("Expected no less than two parameters")),
+                _ => Err(err_eval("Expected no less than two values in Pair list")),
             }
         }
-        _ => Err(err_eval("Expected no less than two parameters")),
+        _ => Err(err_eval("Expected a Pair list")),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::error::{ErrorKind, RuntimeError};
+    use crate::memory::{Memory, Mutator, MutatorView};
+    use crate::pair::Pair;
+
+    fn test_helper(test_fn: fn(&MutatorView) -> Result<(), RuntimeError>) {
+        let mem = Memory::new();
+
+        struct Test {}
+        impl Mutator for Test {
+            type Input = fn(&MutatorView) -> Result<(), RuntimeError>;
+            type Output = ();
+
+            fn run(
+                &self,
+                mem: &MutatorView,
+                test_fn: Self::Input,
+            ) -> Result<Self::Output, RuntimeError> {
+                test_fn(mem)
+            }
+        }
+
+        let test = Test {};
+        mem.mutate(&test, test_fn).unwrap();
+    }
+
+    #[test]
+    fn pair_list_length_1() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            let thing = mem.lookup_sym("thing");
+
+            let head = Pair::new();
+            head.first.set(thing);
+
+            let head = mem.alloc(head)?;
+
+            assert!(get_one_from_pair_list(mem, head).unwrap() == thing);
+
+            Ok(())
+        }
+
+        test_helper(test_inner)
+    }
+
+    #[test]
+    fn pair_list_length_0_should_be_1() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            let thing = mem.nil();
+
+            match get_one_from_pair_list(mem, thing) {
+                Ok(_) => panic!("No list given, no value should have been found!"),
+                Err(e) => assert!(
+                    *e.error_kind() == ErrorKind::EvalError(String::from("Expected a Pair list"))
+                ),
+            }
+
+            Ok(())
+        }
+
+        test_helper(test_inner)
+    }
+
+    #[test]
+    fn pair_list_length_2_should_be_1() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            let head = Pair::new();
+            head.append(mem, mem.nil())?;
+
+            let head = mem.alloc(head)?;
+
+            match get_one_from_pair_list(mem, head) {
+                Ok(_) => panic!("Too-long list given, no value should have been returned!"),
+                Err(e) => assert!(
+                    *e.error_kind()
+                        == ErrorKind::EvalError(String::from(
+                            "Expected no more than one value in Pair list"
+                        ))
+                ),
+            }
+
+            Ok(())
+        }
+
+        test_helper(test_inner)
+    }
+
+    #[test]
+    fn pair_list_length_2() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            let thing1 = mem.lookup_sym("thing1");
+            let thing2 = mem.lookup_sym("thing2");
+
+            let head = Pair::new();
+            head.first.set(thing1);
+            head.append(mem, thing2)?;
+
+            let head = mem.alloc(head)?;
+
+            assert!(get_two_from_pair_list(mem, head).unwrap() == (thing1, thing2));
+
+            Ok(())
+        }
+
+        test_helper(test_inner)
+    }
+
+    #[test]
+    fn pair_list_length_0_should_be_2() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            let thing = mem.nil();
+
+            match get_two_from_pair_list(mem, thing) {
+                Ok(_) => panic!("No list given, no values could have been found!"),
+                Err(e) => assert!(
+                    *e.error_kind() == ErrorKind::EvalError(String::from("Expected a Pair list"))
+                ),
+            }
+
+            Ok(())
+        }
+
+        test_helper(test_inner)
+    }
+
+    #[test]
+    fn pair_list_length_1_should_be_2() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            let head = mem.alloc(Pair::new())?;
+
+            match get_two_from_pair_list(mem, head) {
+                Ok(_) => panic!("Too-short list given, no values should have been found!"),
+                Err(e) => assert!(
+                    *e.error_kind()
+                        == ErrorKind::EvalError(String::from(
+                            "Expected no less than two values in Pair list"
+                        ))
+                ),
+            }
+
+            Ok(())
+        }
+
+        test_helper(test_inner)
+    }
+
+    #[test]
+    fn pair_list_length_3_should_be_2() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            let pair = Pair::new();
+            pair.append(mem, mem.nil())?;
+            let head = Pair::new();
+            head.dot(mem.alloc(pair)?);
+            let head = mem.alloc(head)?;
+
+            match get_two_from_pair_list(mem, head) {
+                Ok(_) => panic!("Too-long list given, no values should have been returned!"),
+                Err(e) => assert!(
+                    *e.error_kind()
+                        == ErrorKind::EvalError(String::from(
+                            "Expected no more than two values in Pair list"
+                        ))
+                ),
+            }
+
+            Ok(())
+        }
+
+        test_helper(test_inner)
     }
 }

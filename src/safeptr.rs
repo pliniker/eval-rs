@@ -49,6 +49,12 @@ impl<'guard> fmt::Debug for ScopedPtr<'guard> {
     }
 }
 
+impl<'guard> PartialEq for ScopedPtr<'guard> {
+    fn eq(&self, rhs: &ScopedPtr<'guard>) -> bool {
+        self.ptr == rhs.ptr
+    }
+}
+
 /// A wrapper around `TaggedPtr` for storing pointers in data structures with interior mutability,
 /// allowing pointers to be updated to point at different target objects.
 #[derive(Clone)]

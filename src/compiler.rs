@@ -61,7 +61,7 @@ impl Compiler {
                 "cdr" => self.push_op3(mem, Opcode::CDR, params),
                 "cons" => self.push_op3(mem, Opcode::CDR, params),
                 "eq" => self.push_op3(mem, Opcode::EQ, params),
-                _ => Err(err_eval("Symbol is not bound to a function"))
+                _ => Err(err_eval("Symbol is not bound to a function")),
             },
 
             _ => Err(err_eval("Non symbol in function-call position")),

@@ -50,8 +50,8 @@ pub type Code = ArrayU32;
 pub type Literals = ArrayAny;
 
 pub struct ByteCode {
-    code: Code,
-    literals: Literals,
+    pub code: Code,
+    pub literals: Literals,
 }
 
 impl ByteCode {
