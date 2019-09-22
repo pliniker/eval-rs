@@ -11,7 +11,7 @@ impl Mutator for VMFactory {
     type Input = ();
     type Output = VM;
 
-    fn run(&self, mem: &MutatorView, _: ()) -> Result<VM, RuntimeError> {
+    fn run(&self, mem: &MutatorView, _: Self::Input) -> Result<VM, RuntimeError> {
         // initialize stack to 256 nil registers
         let stack = ArrayAny::with_capacity(mem, 256)?;
         for index in 0..256 {
@@ -31,7 +31,7 @@ impl Mutator for VM {
     type Input = ByteCode;
     type Output = ();
 
-    fn run(&self, mem: &MutatorView, code: ByteCode) -> Result<(), RuntimeError> {
+    fn run(&self, mem: &MutatorView, code: ByteCode) -> Result<Self::Output, RuntimeError> {
         Ok(())
     }
 }

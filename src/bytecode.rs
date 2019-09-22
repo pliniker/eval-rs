@@ -1,5 +1,7 @@
 use std::fmt;
 
+use stickyimmix::ArraySize;
+
 use crate::containers::{Container, StackAnyContainer, StackContainer};
 use crate::error::RuntimeError;
 use crate::memory::MutatorView;
@@ -7,6 +9,7 @@ use crate::primitives::{ArrayAny, ArrayU32};
 use crate::printer::Print;
 use crate::safeptr::{MutatorScope, ScopedPtr};
 
+/// VM opcodes
 #[repr(u8)]
 #[derive(FromPrimitive)]
 pub enum Opcode {
@@ -20,41 +23,61 @@ pub enum Opcode {
     CONS = 0x07,
     EQ = 0x08,
     JMPT = 0x09,
-    JMP = 0x10,
+    JMP = 0x0A,
 }
 
+/// A register can be in the range 0..255
 pub type Register = u8;
+
+/// Literals are stored in a list, a LiteralId describes the index of the value in the list
 pub type LiteralId = u16;
 
+/// Encode an opcode with no operands
 fn encode_0(op: Opcode) -> u32 {
     (op as u32) << 24
 }
 
+/// Encode an opcode with one register operand
 fn encode_1(op: Opcode, reg: Register) -> u32 {
     (op as u32) << 24 | (reg as u32) << 16
 }
 
+/// Encode an opcode with two register operands, the result being stored in the first
 fn encode_2(op: Opcode, reg_acc: Register, reg1: Register) -> u32 {
     (op as u32) << 24 | (reg_acc as u32) << 16 | (reg1 as u32) << 8
 }
 
+/// Encode an opcode with three register operands, the result being stored in the first
 fn encode_3(op: Opcode, reg_acc: Register, reg1: Register, reg2: Register) -> u32 {
     (op as u32) << 24 | (reg_acc as u32) << 16 | (reg1 as u32) << 8 | (reg2 as u32)
 }
 
+/// Encode a literal load operation
 fn encode_load_lit(reg_acc: Register, literal_id: LiteralId) -> u32 {
     (Opcode::LOADLIT as u32) << 24 | (reg_acc as u32) << 16 | (literal_id as u32)
 }
 
+/// Bytecode is stored as fixed-width 32-bit operator+operand values as in Lua 5
 pub type Code = ArrayU32;
+
+/// Literals are stored in a separate list of machine-word-width pointers
 pub type Literals = ArrayAny;
 
+/// An instruction pointer. This abstraction is designed to hide the encoding of instructions
+/// such that the user of this module does not need to be aware of it.
+pub struct InstructionPointer {
+    ip: ArraySize
+}
+// TODO
+
+/// Byte code consists of the code and any literals used.
 pub struct ByteCode {
-    pub code: Code,
-    pub literals: Literals,
+    code: Code,
+    literals: Literals,
 }
 
 impl ByteCode {
+    /// Instantiate a blank ByteCode instance
     pub fn new() -> ByteCode {
         ByteCode {
             code: Code::new(),
@@ -62,6 +85,7 @@ impl ByteCode {
         }
     }
 
+    /// Push a 0-operand instruction to the back of the sequence
     pub fn push_op0<'guard>(
         &self,
         mem: &'guard MutatorView,
@@ -70,6 +94,7 @@ impl ByteCode {
         self.code.push(mem, encode_0(op))
     }
 
+    /// Push a 1-operand instuction to the back of the sequence
     pub fn push_op1<'guard>(
         &self,
         mem: &'guard MutatorView,
@@ -79,6 +104,7 @@ impl ByteCode {
         self.code.push(mem, encode_1(op, reg))
     }
 
+    /// Push a 2-operand instruction to the back of the sequence
     pub fn push_op2<'guard>(
         &self,
         mem: &'guard MutatorView,
@@ -89,6 +115,7 @@ impl ByteCode {
         self.code.push(mem, encode_2(op, reg_acc, reg1))
     }
 
+    /// Push a 3-operand instruction to the back of the sequence
     pub fn push_op3<'guard>(
         &self,
         mem: &'guard MutatorView,
@@ -100,25 +127,25 @@ impl ByteCode {
         self.code.push(mem, encode_3(op, reg_acc, reg1, reg2))
     }
 
+    /// Push a literal-load operation to the back of the sequence
     pub fn push_loadlit<'guard>(
         &self,
         mem: &'guard MutatorView,
         reg_acc: Register,
         literal_id: LiteralId,
     ) -> Result<(), RuntimeError> {
+        // TODO clone anything mutable
         self.code.push(mem, encode_load_lit(reg_acc, literal_id))
     }
 
+    /// Push a literal pointer/value to the back of the literals list and return it's index
     pub fn push_lit<'guard>(
         &self,
         mem: &'guard MutatorView,
         literal: ScopedPtr<'guard>,
     ) -> Result<LiteralId, RuntimeError> {
         let lit_id = self.literals.length() as u16;
-        match *literal {
-            // TODO clone anything mutable
-            _ => StackAnyContainer::push(&self.literals, mem, literal)?,
-        };
+        StackAnyContainer::push(&self.literals, mem, literal)?;
         Ok(lit_id)
     }
 }
