@@ -2,8 +2,8 @@ use std::fmt;
 
 use stickyimmix::ArraySize;
 
-use crate::containers::{Container, StackAnyContainer, StackContainer};
-use crate::error::RuntimeError;
+use crate::containers::{Container, IndexedContainer, StackAnyContainer, StackContainer};
+use crate::error::{err_eval, RuntimeError};
 use crate::memory::MutatorView;
 use crate::primitives::{ArrayAny, ArrayU32};
 use crate::printer::Print;
@@ -57,18 +57,41 @@ fn encode_load_lit(reg_acc: Register, literal_id: LiteralId) -> u32 {
     (Opcode::LOADLIT as u32) << 24 | (reg_acc as u32) << 16 | (literal_id as u32)
 }
 
+/// Decode an instruction and return the opcode
+fn decode_op(instr: u32) -> Result<Opcode, RuntimeError> {
+    let opcode = (instr >> 24) as u8;
+    if let Some(opcode) = num::FromPrimitive::from_u8(opcode) {
+        Ok(opcode)
+    } else {
+        Err(err_eval("Invalid opcode in bytecode"))
+    }
+}
+
+/// Decode the first register operand in an instruction
+fn decode_reg_acc(instr: u32) -> Register {
+    ((instr >> 16) & 0xFF) as u8
+}
+
+/// Decode the second register operand in an instruction
+fn decode_reg1(instr: u32) -> Register {
+    ((instr >> 8) & 0xFF) as u8
+}
+
+/// Decode the third register operand in an instruction
+fn decode_reg2(instr: u32) -> Register {
+    (instr & 0xFF) as u8
+}
+
+/// Decode the literal id operand in an instruction
+fn decode_literal_id(instr: u32) -> LiteralId {
+    (instr & 0xFFFF) as u16
+}
+
 /// Bytecode is stored as fixed-width 32-bit operator+operand values as in Lua 5
 pub type Code = ArrayU32;
 
 /// Literals are stored in a separate list of machine-word-width pointers
 pub type Literals = ArrayAny;
-
-/// An instruction pointer. This abstraction is designed to hide the encoding of instructions
-/// such that the user of this module does not need to be aware of it.
-pub struct InstructionPointer {
-    ip: ArraySize
-}
-// TODO
 
 /// Byte code consists of the code and any literals used.
 pub struct ByteCode {
@@ -157,6 +180,49 @@ impl Print for ByteCode {
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
         write!(f, "ByteCode[...]")
+    }
+}
+
+/// An instruction pointer. This abstraction is designed to hide the encoding of instructions
+/// such that the user of this module does not need to be aware of it.
+pub struct InstructionStream {
+    instructions: ByteCode,
+    ip: ArraySize,
+    current: u32,
+}
+
+impl InstructionStream {
+    pub fn new(code: ByteCode) -> InstructionStream {
+        InstructionStream {
+            instructions: code,
+            ip: 0,
+            current: 0,
+        }
+    }
+
+    pub fn get_next_opcode<'guard>(
+        &mut self,
+        guard: &'guard dyn MutatorScope,
+    ) -> Result<Opcode, RuntimeError> {
+        let instr = self.instructions.code.get(guard, self.ip)?;
+        self.ip += 1;
+        decode_op(instr)
+    }
+
+    pub fn get_reg_acc(&self) -> Register {
+        decode_reg_acc(self.current)
+    }
+
+    pub fn get_reg1(&self) -> Register {
+        decode_reg1(self.current)
+    }
+
+    pub fn get_reg2(&self) -> Register {
+        decode_reg2(self.current)
+    }
+
+    pub fn get_literal_id(&self) -> LiteralId {
+        decode_literal_id(self.current)
     }
 }
 
