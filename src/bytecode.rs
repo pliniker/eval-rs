@@ -2,7 +2,9 @@ use std::fmt;
 
 use stickyimmix::ArraySize;
 
-use crate::containers::{Container, IndexedContainer, StackAnyContainer, StackContainer};
+use crate::containers::{
+    Container, IndexedAnyContainer, IndexedContainer, StackAnyContainer, StackContainer,
+};
 use crate::error::{err_eval, RuntimeError};
 use crate::memory::MutatorView;
 use crate::primitives::{ArrayAny, ArrayU32};
@@ -11,7 +13,7 @@ use crate::safeptr::{MutatorScope, ScopedPtr};
 
 /// VM opcodes
 #[repr(u8)]
-#[derive(FromPrimitive)]
+#[derive(FromPrimitive, PartialEq)]
 pub enum Opcode {
     HALT = 0x00,
     RETURN = 0x01,
@@ -183,8 +185,7 @@ impl Print for ByteCode {
     }
 }
 
-/// An instruction pointer. This abstraction is designed to hide the encoding of instructions
-/// such that the user of this module does not need to be aware of it.
+/// Interpret a ByteCode as a stream of instructions, handling an instruction-pointer abstraction.
 pub struct InstructionStream {
     instructions: ByteCode,
     ip: ArraySize,
@@ -192,6 +193,7 @@ pub struct InstructionStream {
 }
 
 impl InstructionStream {
+    /// Create an InstructionStream instance with the given ByteCode instance that will be iterated over
     pub fn new(code: ByteCode) -> InstructionStream {
         InstructionStream {
             instructions: code,
@@ -200,6 +202,7 @@ impl InstructionStream {
         }
     }
 
+    /// Retrieve the next instruction and return the Opcode, if it correctly decodes
     pub fn get_next_opcode<'guard>(
         &mut self,
         guard: &'guard dyn MutatorScope,
@@ -209,20 +212,28 @@ impl InstructionStream {
         decode_op(instr)
     }
 
+    /// Retrieve the accumulator register operand from the current instruction
     pub fn get_reg_acc(&self) -> Register {
         decode_reg_acc(self.current)
     }
 
+    /// Retrieve the first argument register operand from the current instruction
     pub fn get_reg1(&self) -> Register {
         decode_reg1(self.current)
     }
 
+    /// Retrieve the second argument register operand from the current instruction
     pub fn get_reg2(&self) -> Register {
         decode_reg2(self.current)
     }
 
-    pub fn get_literal_id(&self) -> LiteralId {
-        decode_literal_id(self.current)
+    /// Retrieve the literal pointer from the current instruction
+    pub fn get_literal<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+    ) -> Result<ScopedPtr<'guard>, RuntimeError> {
+        let lit_id = decode_literal_id(self.current);
+        IndexedAnyContainer::get(&self.instructions.literals, guard, lit_id as ArraySize)
     }
 }
 
@@ -258,5 +269,40 @@ mod test {
     fn code_encode_load_lit() {
         let code = encode_load_lit(0x23, 0x1234);
         assert!(code == 0x02231234);
+    }
+
+    #[test]
+    fn code_decode_op() {
+        let code = 0x04010203;
+        let op = decode_op(code).unwrap();
+        assert!(op == Opcode::ATOM);
+    }
+
+    #[test]
+    fn code_decode_reg_acc() {
+        let code = 0x08101112;
+        let reg_acc = decode_reg_acc(code);
+        assert!(reg_acc == 0x10);
+    }
+
+    #[test]
+    fn code_decode_reg1() {
+        let code = 0x08101112;
+        let reg1 = decode_reg1(code);
+        assert!(reg1 == 0x11);
+    }
+
+    #[test]
+    fn code_decode_reg2() {
+        let code = 0x08101112;
+        let reg2 = decode_reg2(code);
+        assert!(reg2 == 0x12);
+    }
+
+    #[test]
+    #[should_panic]
+    fn code_decode_invalid_op() {
+        let code = 0xff000000;
+        let _op = decode_op(code).unwrap();
     }
 }
