@@ -1,7 +1,7 @@
 /// Basic mutable array type:
 ///
 ///  Array<T>
-///  ArrayAny = Array<CellPtr> (see primitives)
+///  ArrayAny = Array<TaggedCellPtr> (see primitives)
 use std::cell::Cell;
 use std::ptr::{read, write};
 
@@ -14,7 +14,7 @@ use crate::error::{ErrorKind, RuntimeError};
 use crate::memory::MutatorView;
 use crate::primitives::ArrayAny;
 use crate::rawarray::{default_array_growth, RawArray, DEFAULT_ARRAY_SIZE};
-use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
+use crate::safeptr::{MutatorScope, TaggedCellPtr, TaggedScopedPtr};
 
 /// An array, like Vec
 #[derive(Clone)]
@@ -148,12 +148,12 @@ impl StackAnyContainer for ArrayAny {
     fn push<'guard>(
         &self,
         mem: &'guard MutatorView,
-        item: ScopedPtr<'guard>,
+        item: TaggedScopedPtr<'guard>,
     ) -> Result<(), RuntimeError> {
-        Ok(StackContainer::<CellPtr>::push(
+        Ok(StackContainer::<TaggedCellPtr>::push(
             self,
             mem,
-            CellPtr::new_with(item),
+            TaggedCellPtr::new_with(item),
         )?)
     }
 
@@ -162,8 +162,8 @@ impl StackAnyContainer for ArrayAny {
     fn pop<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
-    ) -> Result<ScopedPtr<'guard>, RuntimeError> {
-        Ok(StackContainer::<CellPtr>::pop(self, guard)?.get(guard))
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
+        Ok(StackContainer::<TaggedCellPtr>::pop(self, guard)?.get(guard))
     }
 }
 
@@ -195,7 +195,7 @@ impl IndexedAnyContainer for ArrayAny {
         &self,
         guard: &'guard dyn MutatorScope,
         index: ArraySize,
-    ) -> Result<ScopedPtr<'guard>, RuntimeError> {
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
         Ok(self.read_ref(guard, index)?.get(guard))
     }
 
@@ -204,7 +204,7 @@ impl IndexedAnyContainer for ArrayAny {
         &self,
         guard: &'guard dyn MutatorScope,
         index: ArraySize,
-        item: ScopedPtr<'guard>,
+        item: TaggedScopedPtr<'guard>,
     ) -> Result<(), RuntimeError> {
         self.read_ref(guard, index)?.set(item);
         Ok(())

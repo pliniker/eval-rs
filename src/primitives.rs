@@ -6,7 +6,7 @@ use std::str;
 use crate::array::Array;
 use crate::containers::{Container, IndexedAnyContainer};
 use crate::printer::Print;
-use crate::safeptr::{CellPtr, MutatorScope};
+use crate::safeptr::{MutatorScope, TaggedCellPtr};
 
 /// A Symbol is a unique object that has a unique name string. The backing storage for the
 /// underlying str data must have a lifetime of at least that of the Symbol instance to
@@ -65,7 +65,7 @@ impl Print for NumberObject {
 }
 
 /// Array type that can contain any other object
-pub type ArrayAny = Array<CellPtr>;
+pub type ArrayAny = Array<TaggedCellPtr>;
 
 impl Print for ArrayAny {
     fn print<'guard>(

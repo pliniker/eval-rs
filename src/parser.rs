@@ -5,13 +5,13 @@ use crate::error::{err_parser, err_parser_wpos, RuntimeError, SourcePos};
 use crate::lexer::{tokenize, Token, TokenType};
 use crate::memory::MutatorView;
 use crate::pair::Pair;
-use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
+use crate::safeptr::{MutatorScope, TaggedCellPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
 // A linked list, internal to the parser to simplify the code and is stored on the Rust stack
 struct PairList<'guard> {
-    head: CellPtr,
-    tail: CellPtr,
+    head: TaggedCellPtr,
+    tail: TaggedCellPtr,
     _guard: PhantomData<&'guard dyn MutatorScope>,
 }
 
@@ -19,8 +19,8 @@ impl<'guard> PairList<'guard> {
     /// Create a new empty list
     fn open(_guard: &'guard dyn MutatorScope) -> PairList {
         PairList {
-            head: CellPtr::new_nil(),
-            tail: CellPtr::new_nil(),
+            head: TaggedCellPtr::new_nil(),
+            tail: TaggedCellPtr::new_nil(),
             _guard: PhantomData,
         }
     }
@@ -29,7 +29,7 @@ impl<'guard> PairList<'guard> {
     fn push(
         &mut self,
         mem: &'guard MutatorView,
-        value: ScopedPtr<'guard>,
+        value: TaggedScopedPtr<'guard>,
         _pos: SourcePos,
     ) -> Result<(), RuntimeError> {
         if let Value::Pair(old_tail) = *self.tail.get(mem) {
@@ -43,7 +43,7 @@ impl<'guard> PairList<'guard> {
             let pair = Pair::new();
             pair.first.set(value);
 
-            self.head.set(mem.alloc(pair)?);
+            self.head.set(mem.alloc_tagged(pair)?);
             self.tail.copy_from(&self.head);
 
             // set source code line/char
@@ -55,7 +55,12 @@ impl<'guard> PairList<'guard> {
     }
 
     /// Apply dot-notation to set the second value of the last pair of the list
-    fn dot(&mut self, guard: &'guard dyn MutatorScope, value: ScopedPtr<'guard>, _pos: SourcePos) {
+    fn dot(
+        &mut self,
+        guard: &'guard dyn MutatorScope,
+        value: TaggedScopedPtr<'guard>,
+        _pos: SourcePos,
+    ) {
         if let Value::Pair(pair) = *self.tail.get(guard) {
             pair.dot(value);
         //pair.set_second_source_pos(pos);
@@ -65,7 +70,7 @@ impl<'guard> PairList<'guard> {
     }
 
     /// Consume the list and return the pair at the head
-    fn close(self, guard: &'guard dyn MutatorScope) -> ScopedPtr<'guard> {
+    fn close(self, guard: &'guard dyn MutatorScope) -> TaggedScopedPtr<'guard> {
         self.head.get(guard)
     }
 }
@@ -85,7 +90,7 @@ impl<'guard> PairList<'guard> {
 fn parse_list<'guard, 'i, I: 'i>(
     mem: &'guard MutatorView,
     tokens: &mut Peekable<I>,
-) -> Result<ScopedPtr<'guard>, RuntimeError>
+) -> Result<TaggedScopedPtr<'guard>, RuntimeError>
 where
     I: Iterator<Item = &'i Token>,
 {
@@ -181,7 +186,7 @@ where
 fn parse_sexpr<'guard, 'i, I: 'i>(
     mem: &'guard MutatorView,
     tokens: &mut Peekable<I>,
-) -> Result<ScopedPtr<'guard>, RuntimeError>
+) -> Result<TaggedScopedPtr<'guard>, RuntimeError>
 where
     I: Iterator<Item = &'i Token>,
 {
@@ -221,7 +226,7 @@ where
 fn parse_tokens<'guard>(
     mem: &'guard MutatorView,
     tokens: Vec<Token>,
-) -> Result<ScopedPtr<'guard>, RuntimeError> {
+) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
     let mut tokenstream = tokens.iter().peekable();
     parse_sexpr(mem, &mut tokenstream)
 }
@@ -230,7 +235,7 @@ fn parse_tokens<'guard>(
 pub fn parse<'guard>(
     mem: &'guard MutatorView,
     input: &str,
-) -> Result<ScopedPtr<'guard>, RuntimeError> {
+) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
     parse_tokens(mem, tokenize(input)?)
 }
 

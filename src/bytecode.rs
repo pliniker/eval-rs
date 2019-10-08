@@ -9,7 +9,7 @@ use crate::error::{err_eval, RuntimeError};
 use crate::memory::MutatorView;
 use crate::primitives::{ArrayAny, ArrayU32};
 use crate::printer::Print;
-use crate::safeptr::{MutatorScope, ScopedPtr};
+use crate::safeptr::{MutatorScope, TaggedScopedPtr};
 
 /// VM opcodes
 #[repr(u8)]
@@ -167,7 +167,7 @@ impl ByteCode {
     pub fn push_lit<'guard>(
         &self,
         mem: &'guard MutatorView,
-        literal: ScopedPtr<'guard>,
+        literal: TaggedScopedPtr<'guard>,
     ) -> Result<LiteralId, RuntimeError> {
         let lit_id = self.literals.length() as u16;
         StackAnyContainer::push(&self.literals, mem, literal)?;
@@ -231,7 +231,7 @@ impl InstructionStream {
     pub fn get_literal<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
-    ) -> Result<ScopedPtr<'guard>, RuntimeError> {
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
         let lit_id = decode_literal_id(self.current);
         IndexedAnyContainer::get(&self.instructions.literals, guard, lit_id as ArraySize)
     }

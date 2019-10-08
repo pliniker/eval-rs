@@ -136,7 +136,7 @@ Bytecode:
 /// This represents a pointer to a window of registers on the stack.
 /// A mutator-lifetime limited view
 struct ActivationFramePtr<'guard> {
-    regs: &'guard [CellPtr; 256],
+    regs: &'guard [TaggedCellPtr; 256],
 }
 
 # Compile dry-runs

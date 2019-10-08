@@ -2,7 +2,7 @@ use crate::bytecode::{ByteCode, Opcode, Register};
 use crate::error::{err_eval, RuntimeError};
 use crate::memory::MutatorView;
 use crate::pair::{get_one_from_pair_list, get_two_from_pair_list};
-use crate::safeptr::{MutatorScope, ScopedPtr};
+use crate::safeptr::{MutatorScope, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
 struct Compiler {
@@ -21,7 +21,7 @@ impl Compiler {
     fn compile<'guard>(
         &mut self,
         mem: &'guard MutatorView,
-        ast: ScopedPtr<'guard>,
+        ast: TaggedScopedPtr<'guard>,
     ) -> Result<(), RuntimeError> {
         let result_reg = self.compile_eval(mem, ast)?;
         self.bytecode.push_op1(mem, Opcode::RETURN, result_reg)
@@ -30,7 +30,7 @@ impl Compiler {
     fn compile_eval<'guard>(
         &mut self,
         mem: &'guard MutatorView,
-        ast_node: ScopedPtr<'guard>,
+        ast_node: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         match *ast_node {
             Value::Pair(p) => self.compile_apply(mem, p.first.get(mem), p.second.get(mem)),
@@ -50,8 +50,8 @@ impl Compiler {
     fn compile_apply<'guard>(
         &mut self,
         mem: &'guard MutatorView,
-        function: ScopedPtr<'guard>,
-        params: ScopedPtr<'guard>,
+        function: TaggedScopedPtr<'guard>,
+        params: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         match *function {
             Value::Symbol(s) => match s.as_str(mem) {
@@ -81,7 +81,7 @@ impl Compiler {
         &mut self,
         mem: &'guard MutatorView,
         op: Opcode,
-        params: ScopedPtr<'guard>,
+        params: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         let result = self.acquire_reg();
         let reg1 = self.compile_eval(mem, get_one_from_pair_list(mem, params)?)?;
@@ -93,7 +93,7 @@ impl Compiler {
         &mut self,
         mem: &'guard MutatorView,
         op: Opcode,
-        params: ScopedPtr<'guard>,
+        params: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         let result = self.acquire_reg();
         let (first, second) = get_two_from_pair_list(mem, params)?;
@@ -107,7 +107,7 @@ impl Compiler {
     fn push_load_literal<'guard>(
         &mut self,
         mem: &'guard MutatorView,
-        literal: ScopedPtr<'guard>,
+        literal: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         let reg = self.acquire_reg();
         let lit_id = self.bytecode.push_lit(mem, literal)?;
@@ -126,13 +126,13 @@ impl Compiler {
 /// Compile the given AST and return a bytecode structure
 pub fn compile<'guard>(
     mem: &'guard MutatorView,
-    ast: ScopedPtr<'guard>,
-) -> Result<ScopedPtr<'guard>, RuntimeError> {
+    ast: TaggedScopedPtr<'guard>,
+) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
     // depth-first tree traversal, flattening the output
 
     let mut compiler = Compiler::new();
     compiler.compile(mem, ast)?;
 
     let bytecode = compiler.bytecode;
-    mem.alloc(bytecode)
+    mem.alloc_tagged(bytecode)
 }

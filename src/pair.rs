@@ -3,13 +3,13 @@ use std::fmt;
 use crate::error::{err_eval, RuntimeError, SourcePos};
 use crate::memory::MutatorView;
 use crate::printer::Print;
-use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
+use crate::safeptr::{MutatorScope, TaggedCellPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
 /// A Pair of pointers, like a Cons cell of old
 pub struct Pair {
-    pub first: CellPtr,
-    pub second: CellPtr,
+    pub first: TaggedCellPtr,
+    pub second: TaggedCellPtr,
     // Possible source code positions of the first and second values
     pub first_pos: Option<SourcePos>,
     pub second_pos: Option<SourcePos>,
@@ -19,8 +19,8 @@ impl Pair {
     /// Return a new empty Pair instance
     pub fn new() -> Pair {
         Pair {
-            first: CellPtr::new_nil(),
-            second: CellPtr::new_nil(),
+            first: TaggedCellPtr::new_nil(),
+            second: TaggedCellPtr::new_nil(),
             first_pos: None,
             second_pos: None,
         }
@@ -30,19 +30,19 @@ impl Pair {
     pub fn append<'guard>(
         &self,
         mem: &'guard MutatorView,
-        value: ScopedPtr<'guard>,
-    ) -> Result<ScopedPtr<'guard>, RuntimeError> {
+        value: TaggedScopedPtr<'guard>,
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
         let pair = Pair::new();
         pair.first.set(value);
 
-        let pair = mem.alloc(pair)?;
+        let pair = mem.alloc_tagged(pair)?;
         self.second.set(pair);
 
         Ok(pair)
     }
 
     /// Set Pair.second to the given value
-    pub fn dot<'guard>(&self, value: ScopedPtr<'guard>) {
+    pub fn dot<'guard>(&self, value: TaggedScopedPtr<'guard>) {
         self.second.set(value);
     }
 }
@@ -86,8 +86,8 @@ impl Print for Pair {
 /// Given a pointer to a Pair linked list, assert that the list is of length 1 and return that 1 value
 pub fn get_one_from_pair_list<'guard>(
     guard: &'guard dyn MutatorScope,
-    ptr: ScopedPtr<'guard>,
-) -> Result<ScopedPtr<'guard>, RuntimeError> {
+    ptr: TaggedScopedPtr<'guard>,
+) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
     match *ptr {
         Value::Pair(pair) => {
             if pair.second.is_nil() {
@@ -103,8 +103,8 @@ pub fn get_one_from_pair_list<'guard>(
 /// Given a pointer to a Pair linked list, assert that the list is of length 2 and return the 2 values
 pub fn get_two_from_pair_list<'guard>(
     guard: &'guard dyn MutatorScope,
-    ptr: ScopedPtr<'guard>,
-) -> Result<(ScopedPtr<'guard>, ScopedPtr<'guard>), RuntimeError> {
+    ptr: TaggedScopedPtr<'guard>,
+) -> Result<(TaggedScopedPtr<'guard>, TaggedScopedPtr<'guard>), RuntimeError> {
     match *ptr {
         Value::Pair(pair) => {
             let first_param = pair.first.get(guard);
@@ -161,7 +161,7 @@ mod test {
             let head = Pair::new();
             head.first.set(thing);
 
-            let head = mem.alloc(head)?;
+            let head = mem.alloc_tagged(head)?;
 
             assert!(get_one_from_pair_list(mem, head).unwrap() == thing);
 
@@ -195,7 +195,7 @@ mod test {
             let head = Pair::new();
             head.append(mem, mem.nil())?;
 
-            let head = mem.alloc(head)?;
+            let head = mem.alloc_tagged(head)?;
 
             match get_one_from_pair_list(mem, head) {
                 Ok(_) => panic!("Too-long list given, no value should have been returned!"),
@@ -223,7 +223,7 @@ mod test {
             head.first.set(thing1);
             head.append(mem, thing2)?;
 
-            let head = mem.alloc(head)?;
+            let head = mem.alloc_tagged(head)?;
 
             assert!(get_two_from_pair_list(mem, head).unwrap() == (thing1, thing2));
 
@@ -254,7 +254,7 @@ mod test {
     #[test]
     fn pair_list_length_1_should_be_2() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
-            let head = mem.alloc(Pair::new())?;
+            let head = mem.alloc_tagged(Pair::new())?;
 
             match get_two_from_pair_list(mem, head) {
                 Ok(_) => panic!("Too-short list given, no values should have been found!"),
@@ -278,8 +278,8 @@ mod test {
             let pair = Pair::new();
             pair.append(mem, mem.nil())?;
             let head = Pair::new();
-            head.dot(mem.alloc(pair)?);
-            let head = mem.alloc(head)?;
+            head.dot(mem.alloc_tagged(pair)?);
+            let head = mem.alloc_tagged(head)?;
 
             match get_two_from_pair_list(mem, head) {
                 Ok(_) => panic!("Too-long list given, no values should have been returned!"),

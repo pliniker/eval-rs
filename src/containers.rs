@@ -5,7 +5,7 @@ use stickyimmix::ArraySize;
 
 use crate::error::RuntimeError;
 use crate::memory::MutatorView;
-use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr};
+use crate::safeptr::{MutatorScope, TaggedCellPtr, TaggedScopedPtr};
 
 /// Base container-type trait. All container types are subtypes of `Container`.
 ///
@@ -39,12 +39,12 @@ pub trait StackContainer<T: Sized + Clone>: Container<T> {
 }
 
 /// Specialized stack trait. If implemented, the container can function as a stack
-pub trait StackAnyContainer: StackContainer<CellPtr> {
+pub trait StackAnyContainer: StackContainer<TaggedCellPtr> {
     /// Push can trigger an underlying array resize, hence it requires the ability to allocate
     fn push<'guard>(
         &self,
         mem: &'guard MutatorView,
-        item: ScopedPtr<'guard>,
+        item: TaggedScopedPtr<'guard>,
     ) -> Result<(), RuntimeError>;
 
     /// Pop returns a bounds error if the container is empty, otherwise moves the last item of the
@@ -52,7 +52,7 @@ pub trait StackAnyContainer: StackContainer<CellPtr> {
     fn pop<'guard>(
         &self,
         _guard: &'guard dyn MutatorScope,
-    ) -> Result<ScopedPtr<'guard>, RuntimeError>;
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError>;
 }
 
 /// Generic indexed-access trait. If implemented, the container can function as an indexable vector
@@ -73,21 +73,21 @@ pub trait IndexedContainer<T: Sized + Clone>: Container<T> {
     ) -> Result<(), RuntimeError>;
 }
 
-/// Specialized indexable interface for where CellPtr is used as T
-pub trait IndexedAnyContainer: IndexedContainer<CellPtr> {
+/// Specialized indexable interface for where TaggedCellPtr is used as T
+pub trait IndexedAnyContainer: IndexedContainer<TaggedCellPtr> {
     /// Return a pointer to the object at the given index. Bounds-checked.
     fn get<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
         index: ArraySize,
-    ) -> Result<ScopedPtr<'guard>, RuntimeError>;
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError>;
 
     /// Set the object pointer at the given index. Bounds-checked.
     fn set<'guard>(
         &self,
         _guard: &'guard dyn MutatorScope,
         index: ArraySize,
-        item: ScopedPtr<'guard>,
+        item: TaggedScopedPtr<'guard>,
     ) -> Result<(), RuntimeError>;
 }
 

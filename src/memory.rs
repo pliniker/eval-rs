@@ -6,13 +6,13 @@ use stickyimmix::{AllocObject, AllocRaw, ArraySize, RawPtr, StickyImmixHeap};
 
 use crate::error::RuntimeError;
 use crate::headers::{ObjectHeader, TypeList};
-use crate::safeptr::{MutatorScope, ScopedPtr};
+use crate::safeptr::{MutatorScope, TaggedScopedPtr};
 use crate::symbolmap::SymbolMap;
 use crate::taggedptr::{FatPtr, TaggedPtr};
 
 /// This type describes the mutator's view into memory - the heap and symbol name/ptr lookup.
 ///
-/// It implements `MutatorScope` such that any `ScopedPtr` or `Value` instances must be lifetime-
+/// It implements `MutatorScope` such that any `TaggedScopedPtr` or `Value` instances must be lifetime-
 /// limited to the lifetime of this instance using `&'scope dyn MutatorScope`;
 pub struct MutatorView<'memory> {
     heap: &'memory Heap,
@@ -24,17 +24,24 @@ impl<'memory> MutatorView<'memory> {
     }
 
     /// Get a Symbol pointer from its name
-    pub fn lookup_sym(&self, name: &str) -> ScopedPtr<'_> {
-        ScopedPtr::new(self, self.heap.lookup_sym(name))
+    pub fn lookup_sym(&self, name: &str) -> TaggedScopedPtr<'_> {
+        TaggedScopedPtr::new(self, self.heap.lookup_sym(name))
     }
+    /*
+        pub fn alloc<T>(&self, object: T) -> Result<ScopedPtr<'_, T>, RuntimeError>
+        where
+            T: AllocObject<TypeList>
+        {
 
+        }
+    */
     /// Write an object into the heap and return the pointer to it
-    pub fn alloc<T>(&self, object: T) -> Result<ScopedPtr<'_>, RuntimeError>
+    pub fn alloc_tagged<T>(&self, object: T) -> Result<TaggedScopedPtr<'_>, RuntimeError>
     where
         FatPtr: From<RawPtr<T>>,
         T: AllocObject<TypeList>,
     {
-        Ok(ScopedPtr::new(self, self.heap.alloc(object)?))
+        Ok(TaggedScopedPtr::new(self, self.heap.alloc_tagged(object)?))
     }
 
     /// Make space for an array of bytes
@@ -42,8 +49,8 @@ impl<'memory> MutatorView<'memory> {
         self.heap.alloc_array(capacity)
     }
 
-    pub fn nil(&self) -> ScopedPtr<'_> {
-        ScopedPtr::new(self, TaggedPtr::nil())
+    pub fn nil(&self) -> TaggedScopedPtr<'_> {
+        TaggedScopedPtr::new(self, TaggedPtr::nil())
     }
 }
 
@@ -71,8 +78,16 @@ impl Heap {
         TaggedPtr::symbol(self.syms.lookup(name))
     }
 
-    /// Write an object into the heap and return the pointer to it
-    fn alloc<T>(&self, object: T) -> Result<TaggedPtr, RuntimeError>
+    /// Write an object to the heap and return the raw pointer to it
+    fn alloc<T>(&self, object: T) -> Result<RawPtr<T>, RuntimeError>
+    where
+        T: AllocObject<TypeList>,
+    {
+        Ok(self.heap.alloc(object)?)
+    }
+
+    /// Write an object into the heap and return a tagged pointer to it
+    fn alloc_tagged<T>(&self, object: T) -> Result<TaggedPtr, RuntimeError>
     where
         FatPtr: From<RawPtr<T>>,
         T: AllocObject<TypeList>,
