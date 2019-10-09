@@ -6,7 +6,8 @@ use stickyimmix::{AllocObject, AllocRaw, ArraySize, RawPtr, StickyImmixHeap};
 
 use crate::error::RuntimeError;
 use crate::headers::{ObjectHeader, TypeList};
-use crate::safeptr::{MutatorScope, TaggedScopedPtr};
+use crate::pointerops::ScopedRef;
+use crate::safeptr::{MutatorScope, ScopedPtr, TaggedScopedPtr};
 use crate::symbolmap::SymbolMap;
 use crate::taggedptr::{FatPtr, TaggedPtr};
 
@@ -27,15 +28,19 @@ impl<'memory> MutatorView<'memory> {
     pub fn lookup_sym(&self, name: &str) -> TaggedScopedPtr<'_> {
         TaggedScopedPtr::new(self, self.heap.lookup_sym(name))
     }
-    /*
-        pub fn alloc<T>(&self, object: T) -> Result<ScopedPtr<'_, T>, RuntimeError>
-        where
-            T: AllocObject<TypeList>
-        {
 
-        }
-    */
-    /// Write an object into the heap and return the pointer to it
+    /// Write an object into the heap and return a scope-limited pointer to it
+    pub fn alloc<T>(&self, object: T) -> Result<ScopedPtr<'_, T>, RuntimeError>
+    where
+        T: AllocObject<TypeList>,
+    {
+        Ok(ScopedPtr::new(
+            self,
+            self.heap.alloc(object)?.scoped_ref(self),
+        ))
+    }
+
+    /// Write an object into the heap and return a scope-limited runtime-tagged pointer to it
     pub fn alloc_tagged<T>(&self, object: T) -> Result<TaggedScopedPtr<'_>, RuntimeError>
     where
         FatPtr: From<RawPtr<T>>,

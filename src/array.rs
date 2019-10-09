@@ -309,22 +309,16 @@ mod test {
                 input: Self::Input,
             ) -> Result<Self::Output, RuntimeError> {
                 let array: ArrayAny = Array::new();
+                let array = view.alloc(array)?;
 
-                let ptr = view.alloc(array)?;
-
-                match *ptr {
-                    Value::ArrayAny(array) => {
-                        for _ in 0..12 {
-                            StackAnyContainer::push(array, view, view.nil())?;
-                        }
-
-                        // or by copy/clone
-                        let pair = view.alloc(Pair::new())?;
-
-                        IndexedAnyContainer::set(array, view, 3, pair)?;
-                    }
-                    _ => panic!("Expected ArrayAny type!"),
+                for _ in 0..12 {
+                    StackAnyContainer::push(&array, view, view.nil())?;
                 }
+
+                // or by copy/clone
+                let pair = view.alloc_tagged(Pair::new())?;
+
+                IndexedAnyContainer::set(&array, view, 3, pair)?;
 
                 Ok(())
             }

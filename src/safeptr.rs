@@ -4,21 +4,59 @@ use std::ops::Deref;
 
 use stickyimmix::RawPtr;
 
+use crate::pointerops::ScopedRef;
+use crate::printer::Print;
 use crate::taggedptr::{FatPtr, TaggedPtr, Value};
 
 /// Type that provides a generic anchor for mutator timeslice lifetimes
 pub trait MutatorScope {}
 
-
+/// An untagged compile-time typed pointer with scope limited by `MutatorScope`
 #[derive(Copy, Clone)]
-struct ScopedPtr<'scope, T: Sized> {
-    value: &'scope T,
+pub struct ScopedPtr<'guard, T: Sized> {
+    value: &'guard T,
 }
 
-impl<'scope, T: Sized> ScopedPtr<'scope, T> {}
+impl<'guard, T: Sized> ScopedPtr<'guard, T> {
+    pub fn new(_guard: &'guard dyn MutatorScope, value: &'guard T) -> ScopedPtr<'guard, T> {
+        ScopedPtr { value: value }
+    }
+}
 
+/// Anything that _has_ a scope lifetime can pass as a scope representation
+impl<'scope, T: Sized> MutatorScope for ScopedPtr<'scope, T> {}
+
+impl<'guard, T: Sized> Deref for ScopedPtr<'guard, T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        self.value
+    }
+}
+
+impl<'guard, T: Sized + Print> fmt::Display for ScopedPtr<'guard, T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.value.print(self, f)
+    }
+}
+
+impl<'guard, T: Sized + Print> fmt::Debug for ScopedPtr<'guard, T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.value.print(self, f)
+    }
+}
+
+impl<'guard, T: Sized + PartialEq> PartialEq for ScopedPtr<'guard, T> {
+    fn eq(&self, rhs: &ScopedPtr<'guard, T>) -> bool {
+        self.value == rhs.value
+    }
+}
+
+/// A wrapper around untagged raw pointers for storing compile-time typed pointers in data
+/// structures with interior mutability, allowing pointers to be updated to point at different
+/// target objects.
 #[derive(Clone)]
-struct CellPtr<T: Sized> {
+pub struct CellPtr<T: Sized> {
     inner: Cell<RawPtr<T>>,
 }
 
@@ -26,16 +64,16 @@ impl<T: Sized> CellPtr<T> {
     /// Construct a new CellPtr from a ScopedPtr
     pub fn new_with(source: ScopedPtr<T>) -> CellPtr<T> {
         CellPtr {
-            inner: Cell::new(TaggedPtr::from(source.ptr)),
+            inner: Cell::new(RawPtr::new(source.value)),
         }
     }
 
-    pub fn get<'scope>(&self, guard: &'scope dyn MutatorScope) -> ScopedPtr<'scope, T> {
-        ScopedPtr::new(guard, self.inner.get())
+    pub fn get<'guard>(&self, guard: &'guard dyn MutatorScope) -> ScopedPtr<'guard, T> {
+        ScopedPtr::new(guard, self.inner.get().scoped_ref(guard))
     }
 
     pub fn set(&self, source: ScopedPtr<T>) {
-        self.inner.set(TaggedPtr::from(source.ptr))
+        self.inner.set(RawPtr::new(source.value))
     }
 
     pub fn copy_from(&self, other: &CellPtr<T>) {
@@ -43,9 +81,8 @@ impl<T: Sized> CellPtr<T> {
     }
 }
 
-
-/// A pointer type with scope limited by `MutatorScopeGuard` such that a `Value` instance can
-/// safely be derived and accessed. This type is neccessary to derive `Value`s from
+/// A _tagged_ runtime typed pointer type with scope limited by `MutatorScope` such that a `Value`
+/// instance can safely be derived and accessed. This type is neccessary to derive `Value`s from.
 #[derive(Copy, Clone)]
 pub struct TaggedScopedPtr<'guard> {
     ptr: TaggedPtr,
@@ -64,6 +101,10 @@ impl<'guard> TaggedScopedPtr<'guard> {
         self.value
     }
 }
+
+/// Anything that _has_ a scope lifetime can pass as a scope representation. `Value` also implements
+/// `MutatorScope` so this is largely for consistency.
+impl<'scope> MutatorScope for TaggedScopedPtr<'scope> {}
 
 impl<'guard> Deref for TaggedScopedPtr<'guard> {
     type Target = Value<'guard>;
@@ -91,8 +132,8 @@ impl<'guard> PartialEq for TaggedScopedPtr<'guard> {
     }
 }
 
-/// A wrapper around `TaggedPtr` for storing pointers in data structures with interior mutability,
-/// allowing pointers to be updated to point at different target objects.
+/// A wrapper around the runtime typed `TaggedPtr` for storing pointers in data structures with
+/// interior mutability, allowing pointers to be updated to point at different target objects.
 #[derive(Clone)]
 pub struct TaggedCellPtr {
     inner: Cell<TaggedPtr>,
@@ -115,12 +156,12 @@ impl TaggedCellPtr {
 
     /// Return the pointer as a `TaggedScopedPtr` type that carries a copy of the `TaggedPtr` and
     /// a `Value` type for both copying and access convenience
-    pub fn get<'scope>(&self, guard: &'scope dyn MutatorScope) -> TaggedScopedPtr<'scope> {
+    pub fn get<'guard>(&self, guard: &'guard dyn MutatorScope) -> TaggedScopedPtr<'guard> {
         TaggedScopedPtr::new(guard, self.inner.get())
     }
 
     /// This returns the pointer as a `Value` type, given a mutator scope for safety
-    pub fn get_value<'scope>(&self, guard: &'scope dyn MutatorScope) -> Value<'scope> {
+    pub fn get_value<'guard>(&self, guard: &'guard dyn MutatorScope) -> Value<'guard> {
         FatPtr::from(self.inner.get()).as_value(guard)
     }
 

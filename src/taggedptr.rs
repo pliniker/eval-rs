@@ -1,4 +1,4 @@
-/// This file defines pointer abstractions.
+/// This file defines internal pointer abstractions for runtime tag-typed pointers.
 /// From high level to low, safest to unsafest:
 ///  * Value > FatPtr > TaggedPtr
 ///
@@ -10,7 +10,7 @@
 ///
 /// Defines a `TaggedPtr` type where the low bits of a pointer indicate the
 /// type of the object pointed to for certain types, but the object header is
-/// required to provide most object type ids.
+/// required to provide all other object type ids.
 use std::fmt;
 use std::ptr::NonNull;
 
