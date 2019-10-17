@@ -89,10 +89,12 @@ fn decode_literal_id(instr: u32) -> LiteralId {
     (instr & 0xFFFF) as u16
 }
 
-/// Bytecode is stored as fixed-width 32-bit operator+operand values as in Lua 5
+/// Bytecode is stored as fixed-width 32-bit operator+operand values.
+/// This is not the most efficient format but it is easy to work with.
 pub type Code = ArrayU32;
 
-/// Literals are stored in a separate list of machine-word-width pointers
+/// Literals are stored in a separate list of machine-word-width pointers.
+/// This is also not the most efficient scheme but it is easy to work with.
 pub type Literals = ArrayAny;
 
 /// Byte code consists of the code and any literals used.
@@ -178,10 +180,14 @@ impl ByteCode {
 impl Print for ByteCode {
     fn print<'guard>(
         &self,
-        _guard: &'guard dyn MutatorScope,
+        guard: &'guard dyn MutatorScope,
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
-        write!(f, "ByteCode[...]")
+        for index in 0..self.code.length() {
+            let instr = self.code.get(guard, index)?;
+            write!(f, "{:02} 0x{:x}\n", index, instr)?;
+        }
+        Ok(())
     }
 }
 

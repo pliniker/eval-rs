@@ -2,7 +2,7 @@ use crate::bytecode::{ByteCode, Opcode, Register};
 use crate::error::{err_eval, RuntimeError};
 use crate::memory::MutatorView;
 use crate::pair::{get_one_from_pair_list, get_two_from_pair_list};
-use crate::safeptr::{MutatorScope, TaggedScopedPtr};
+use crate::safeptr::{ScopedPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
 struct Compiler {
@@ -38,6 +38,8 @@ impl Compiler {
             Value::Symbol(s) => {
                 let literal = match s.as_str(mem) {
                     "nil" => mem.nil(),
+                    // TODO there will be an environment where symbols will be bound, this shouldn't be
+                    // a literal but an environment lookup
                     _ => ast_node,
                 };
                 self.push_load_literal(mem, literal)
@@ -127,12 +129,10 @@ impl Compiler {
 pub fn compile<'guard>(
     mem: &'guard MutatorView,
     ast: TaggedScopedPtr<'guard>,
-) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-    // depth-first tree traversal, flattening the output
-
+) -> Result<ScopedPtr<'guard, ByteCode>, RuntimeError> {
     let mut compiler = Compiler::new();
     compiler.compile(mem, ast)?;
 
     let bytecode = compiler.bytecode;
-    mem.alloc_tagged(bytecode)
+    mem.alloc(bytecode)
 }

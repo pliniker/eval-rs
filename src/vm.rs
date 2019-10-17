@@ -3,6 +3,7 @@ use crate::containers::{Container, IndexedAnyContainer, StackAnyContainer};
 use crate::error::RuntimeError;
 use crate::memory::{Mutator, MutatorView};
 use crate::primitives::ArrayAny;
+use crate::safeptr::ScopedPtr;
 
 /// Mutator that instantiates a VM
 struct VMFactory {}
@@ -31,7 +32,7 @@ impl Mutator for VM {
     type Input = ByteCode;
     type Output = ();
 
-    fn run(&self, mem: &MutatorView, code: ByteCode) -> Result<Self::Output, RuntimeError> {
+    fn run(&self, mem: &MutatorView, code: Self::Input) -> Result<Self::Output, RuntimeError> {
         Ok(())
     }
 }

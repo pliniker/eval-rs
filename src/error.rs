@@ -147,6 +147,14 @@ impl Error for RuntimeError {
     }
 }
 
+/// Convert _to_ std::fmt::Error
+impl From<RuntimeError> for fmt::Error {
+    fn from(_other: RuntimeError) -> fmt::Error {
+        // Is there anything else that can be done here? :-(
+        fmt::Error
+    }
+}
+
 /// Convenience shorthand function for building a SourcePos
 pub fn spos(line: u32, column: u32) -> SourcePos {
     SourcePos::new(line, column)

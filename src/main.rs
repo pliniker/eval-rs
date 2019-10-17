@@ -38,8 +38,10 @@ mod taggedptr;
 mod vm;
 
 use crate::error::{ErrorKind, RuntimeError};
+use crate::compiler::compile;
 use crate::memory::{Memory, Mutator, MutatorView};
 use crate::parser::parse;
+use crate::printer::Print;
 
 /// Read a file into a String
 fn load_file(filename: &str) -> Result<String, io::Error> {
@@ -69,14 +71,14 @@ impl Mutator for ReadEvalPrint {
     fn run(&self, mem: &MutatorView, line: String) -> Result<(), RuntimeError> {
         match parse(mem, &line) {
             Ok(value) => {
-                /* TODO
-                // eval
-                match eval(value, &mem) {
-                    // print
-                    Ok(result) => println!("{}", printer::print(&result)),
+
+                match compile(mem, value) {
+                    Ok(result) => println!("{}", result),
                     Err(e) => e.print_with_source(&line),
-                } */
+                }
+
                 println!("{}", printer::print(*value));
+
                 Ok(())
             }
 

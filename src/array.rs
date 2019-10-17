@@ -220,7 +220,6 @@ mod test {
     use crate::memory::{Memory, Mutator, MutatorView};
     use crate::pair::Pair;
     use crate::primitives::ArrayAny;
-    use crate::taggedptr::Value;
 
     #[test]
     fn array_generic_push_and_pop() {
@@ -234,7 +233,7 @@ mod test {
             fn run(
                 &self,
                 view: &MutatorView,
-                input: Self::Input,
+                _input: Self::Input,
             ) -> Result<Self::Output, RuntimeError> {
                 let array: Array<i64> = Array::new();
 
@@ -268,7 +267,7 @@ mod test {
             fn run(
                 &self,
                 view: &MutatorView,
-                input: Self::Input,
+                _input: Self::Input,
             ) -> Result<Self::Output, RuntimeError> {
                 let array: Array<i64> = Array::new();
 
@@ -340,7 +339,7 @@ mod test {
             fn run(
                 &self,
                 view: &MutatorView,
-                input: Self::Input,
+                _input: Self::Input,
             ) -> Result<Self::Output, RuntimeError> {
                 let array: ArrayAny = Array::with_capacity(view, 256)?;
 

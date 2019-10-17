@@ -54,6 +54,7 @@ impl<'memory> MutatorView<'memory> {
         self.heap.alloc_array(capacity)
     }
 
+    /// Return a nil-initialized runtime-tagged pointer
     pub fn nil(&self) -> TaggedScopedPtr<'_> {
         TaggedScopedPtr::new(self, TaggedPtr::nil())
     }
