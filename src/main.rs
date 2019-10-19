@@ -37,8 +37,8 @@ mod symbolmap;
 mod taggedptr;
 mod vm;
 
-use crate::error::{ErrorKind, RuntimeError};
 use crate::compiler::compile;
+use crate::error::{ErrorKind, RuntimeError};
 use crate::memory::{Memory, Mutator, MutatorView};
 use crate::parser::parse;
 use crate::printer::Print;
@@ -71,7 +71,6 @@ impl Mutator for ReadEvalPrint {
     fn run(&self, mem: &MutatorView, line: String) -> Result<(), RuntimeError> {
         match parse(mem, &line) {
             Ok(value) => {
-
                 match compile(mem, value) {
                     Ok(result) => println!("{}", result),
                     Err(e) => e.print_with_source(&line),

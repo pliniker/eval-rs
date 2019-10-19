@@ -12,7 +12,6 @@ use crate::taggedptr::{FatPtr, TaggedPtr, Value};
 pub trait MutatorScope {}
 
 /// An untagged compile-time typed pointer with scope limited by `MutatorScope`
-#[derive(Copy, Clone)]
 pub struct ScopedPtr<'guard, T: Sized> {
     value: &'guard T,
 }
@@ -25,6 +24,14 @@ impl<'guard, T: Sized> ScopedPtr<'guard, T> {
 
 /// Anything that _has_ a scope lifetime can pass as a scope representation
 impl<'scope, T: Sized> MutatorScope for ScopedPtr<'scope, T> {}
+
+impl<'guard, T: Sized> Clone for ScopedPtr<'guard, T> {
+    fn clone(&self) -> ScopedPtr<'guard, T> {
+        ScopedPtr { value: self.value }
+    }
+}
+
+impl<'guard, T: Sized> Copy for ScopedPtr<'guard, T> {}
 
 impl<'guard, T: Sized> Deref for ScopedPtr<'guard, T> {
     type Target = T;

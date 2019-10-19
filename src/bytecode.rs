@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::fmt;
 
 use stickyimmix::ArraySize;
@@ -194,8 +195,8 @@ impl Print for ByteCode {
 /// Interpret a ByteCode as a stream of instructions, handling an instruction-pointer abstraction.
 pub struct InstructionStream {
     instructions: ByteCode,
-    ip: ArraySize,
-    current: u32,
+    ip: Cell<ArraySize>,
+    current: Cell<u32>,
 }
 
 impl InstructionStream {
@@ -203,34 +204,35 @@ impl InstructionStream {
     pub fn new(code: ByteCode) -> InstructionStream {
         InstructionStream {
             instructions: code,
-            ip: 0,
-            current: 0,
+            ip: Cell::new(0),
+            current: Cell::new(0),
         }
     }
 
     /// Retrieve the next instruction and return the Opcode, if it correctly decodes
     pub fn get_next_opcode<'guard>(
-        &mut self,
+        &self,
         guard: &'guard dyn MutatorScope,
     ) -> Result<Opcode, RuntimeError> {
-        let instr = self.instructions.code.get(guard, self.ip)?;
-        self.ip += 1;
+        let instr = self.instructions.code.get(guard, self.ip.get())?;
+        self.ip.set(self.ip.get() + 1);
+        self.current.set(instr);
         decode_op(instr)
     }
 
     /// Retrieve the accumulator register operand from the current instruction
     pub fn get_reg_acc(&self) -> Register {
-        decode_reg_acc(self.current)
+        decode_reg_acc(self.current.get())
     }
 
     /// Retrieve the first argument register operand from the current instruction
     pub fn get_reg1(&self) -> Register {
-        decode_reg1(self.current)
+        decode_reg1(self.current.get())
     }
 
     /// Retrieve the second argument register operand from the current instruction
     pub fn get_reg2(&self) -> Register {
-        decode_reg2(self.current)
+        decode_reg2(self.current.get())
     }
 
     /// Retrieve the literal pointer from the current instruction
@@ -238,7 +240,7 @@ impl InstructionStream {
         &self,
         guard: &'guard dyn MutatorScope,
     ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-        let lit_id = decode_literal_id(self.current);
+        let lit_id = decode_literal_id(self.current.get());
         IndexedAnyContainer::get(&self.instructions.literals, guard, lit_id as ArraySize)
     }
 }

@@ -4,7 +4,7 @@ use stickyimmix::{
     AllocHeader, AllocObject, AllocRaw, AllocTypeId, ArraySize, Mark, RawPtr, SizeClass,
 };
 
-use crate::bytecode::ByteCode;
+use crate::bytecode::{ByteCode, InstructionStream};
 use crate::memory::HeapStorage;
 use crate::pair::Pair;
 use crate::pointerops::{AsNonNull, Tagged};
@@ -24,6 +24,7 @@ pub enum TypeList {
     ArrayU8,
     ArrayU32,
     ByteCode,
+    InstructionStream,
 }
 
 // Mark this as a Stickyimmix type-identifier type
@@ -120,3 +121,4 @@ declare_allocobject!(ArrayAny, ArrayAny);
 declare_allocobject!(ArrayU8, ArrayU8);
 declare_allocobject!(ArrayU32, ArrayU32);
 declare_allocobject!(ByteCode, ByteCode);
+declare_allocobject!(InstructionStream, InstructionStream);
