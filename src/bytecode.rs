@@ -1,5 +1,6 @@
 use std::cell::Cell;
 use std::fmt;
+use std::ops::Deref;
 
 use stickyimmix::ArraySize;
 
