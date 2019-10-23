@@ -11,7 +11,7 @@ use crate::error::{err_eval, RuntimeError};
 use crate::memory::MutatorView;
 use crate::primitives::{ArrayAny, ArrayU32};
 use crate::printer::Print;
-use crate::safeptr::{MutatorScope, TaggedScopedPtr};
+use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr, TaggedScopedPtr};
 
 /// VM opcodes
 #[repr(u8)]
@@ -195,16 +195,16 @@ impl Print for ByteCode {
 
 /// Interpret a ByteCode as a stream of instructions, handling an instruction-pointer abstraction.
 pub struct InstructionStream {
-    instructions: ByteCode,
+    instructions: CellPtr<ByteCode>,
     ip: Cell<ArraySize>,
     current: Cell<u32>,
 }
 
 impl InstructionStream {
     /// Create an InstructionStream instance with the given ByteCode instance that will be iterated over
-    pub fn new(code: ByteCode) -> InstructionStream {
+    pub fn new(code: ScopedPtr<'_, ByteCode>) -> InstructionStream {
         InstructionStream {
-            instructions: code,
+            instructions: CellPtr::new_with(code),
             ip: Cell::new(0),
             current: Cell::new(0),
         }
@@ -215,7 +215,7 @@ impl InstructionStream {
         &self,
         guard: &'guard dyn MutatorScope,
     ) -> Result<Opcode, RuntimeError> {
-        let instr = self.instructions.code.get(guard, self.ip.get())?;
+        let instr = self.instructions.get(guard).code.get(guard, self.ip.get())?;
         self.ip.set(self.ip.get() + 1);
         self.current.set(instr);
         decode_op(instr)
@@ -242,7 +242,12 @@ impl InstructionStream {
         guard: &'guard dyn MutatorScope,
     ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
         let lit_id = decode_literal_id(self.current.get());
-        IndexedAnyContainer::get(&self.instructions.literals, guard, lit_id as ArraySize)
+        IndexedAnyContainer::get(&self.instructions.get(guard).literals, guard, lit_id as ArraySize)
+    }
+
+    /// Adjust the instruction pointer by the given signed offset
+    pub fn jump(&self, offset: i16) -> Result<(), RuntimeError> {
+        unimplemented!()
     }
 }
 

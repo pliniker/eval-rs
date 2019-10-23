@@ -39,6 +39,7 @@ mod vm;
 
 use crate::compiler::compile;
 use crate::error::{ErrorKind, RuntimeError};
+use crate::vm::quick_vm_eval;
 use crate::memory::{Memory, Mutator, MutatorView};
 use crate::parser::parse;
 use crate::printer::Print;
@@ -72,7 +73,11 @@ impl Mutator for ReadEvalPrint {
         match parse(mem, &line) {
             Ok(value) => {
                 match compile(mem, value) {
-                    Ok(result) => println!("{}", result),
+                    Ok(result) => {
+                        println!("{}", result);
+                        let value = quick_vm_eval(mem, result)?;
+                        println!("{}", value);
+                    },
                     Err(e) => e.print_with_source(&line),
                 }
 
