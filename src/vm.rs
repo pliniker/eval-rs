@@ -14,14 +14,14 @@ use crate::taggedptr::Value;
 pub enum EvalStatus<'guard> {
     Pending,
     Return(TaggedScopedPtr<'guard>),
-    Halt
+    Halt,
 }
 
 /// Execute the next instruction and return
 fn eval_next_instr<'guard>(
     mem: &'guard MutatorView,
     stack: ScopedPtr<'guard, ArrayAny>,
-    instr: ScopedPtr<'guard, InstructionStream>
+    instr: ScopedPtr<'guard, InstructionStream>,
 ) -> Result<EvalStatus<'guard>, RuntimeError> {
     let opcode = instr.get_next_opcode(mem)?;
 
@@ -30,14 +30,14 @@ fn eval_next_instr<'guard>(
 
         Opcode::RETURN => {
             let reg = instr.get_reg_acc() as ArraySize;
-            return Ok(EvalStatus::Return(stack.get(mem, reg)?))
-        },
+            return Ok(EvalStatus::Return(stack.get(mem, reg)?));
+        }
 
         Opcode::LOADLIT => {
             let acc = instr.get_reg_acc() as ArraySize;
             let literal = instr.get_literal(mem)?;
             stack.set(mem, acc, literal)?;
-        },
+        }
 
         Opcode::NIL => {
             let acc = instr.get_reg_acc() as ArraySize;
@@ -47,9 +47,9 @@ fn eval_next_instr<'guard>(
 
             match *reg1_val {
                 Value::Nil => stack.set(mem, acc, mem.lookup_sym("true"))?,
-                _ => stack.set(mem, acc, mem.nil())?
+                _ => stack.set(mem, acc, mem.nil())?,
             }
-        },
+        }
 
         Opcode::ATOM => {
             let acc = instr.get_reg_acc() as ArraySize;
@@ -60,9 +60,9 @@ fn eval_next_instr<'guard>(
             match *reg1_val {
                 Value::Nil => stack.set(mem, acc, mem.nil())?,
                 Value::Pair(_) => stack.set(mem, acc, mem.nil())?,
-                _ => stack.set(mem, acc, mem.lookup_sym("true"))?
+                _ => stack.set(mem, acc, mem.lookup_sym("true"))?,
             }
-        },
+        }
 
         Opcode::CAR => {
             let acc = instr.get_reg_acc() as ArraySize;
@@ -72,9 +72,9 @@ fn eval_next_instr<'guard>(
 
             match *reg1_val {
                 Value::Pair(p) => stack.set(mem, acc, p.first.get(mem))?,
-                _ => return Err(err_eval("Parameter to CAR is not a list"))
+                _ => return Err(err_eval("Parameter to CAR is not a list")),
             }
-        },
+        }
 
         Opcode::CDR => {
             let acc = instr.get_reg_acc() as ArraySize;
@@ -84,9 +84,9 @@ fn eval_next_instr<'guard>(
 
             match *reg1_val {
                 Value::Pair(p) => stack.set(mem, acc, p.second.get(mem))?,
-                _ => return Err(err_eval("Parameter to CDR is not a list"))
+                _ => return Err(err_eval("Parameter to CDR is not a list")),
             }
-        },
+        }
 
         Opcode::CONS => {
             let acc = instr.get_reg_acc() as ArraySize;
@@ -101,7 +101,7 @@ fn eval_next_instr<'guard>(
             new_pair.second.set(reg2_val);
 
             stack.set(mem, acc, mem.alloc_tagged(new_pair)?)?
-        },
+        }
 
         Opcode::EQ => unimplemented!(),
         Opcode::JMPT => unimplemented!(),
@@ -122,7 +122,7 @@ pub fn vm_eval_stream<'guard>(
         match eval_next_instr(mem, stack, instr)? {
             EvalStatus::Return(value) => return Ok(EvalStatus::Return(value)),
             EvalStatus::Halt => return Ok(EvalStatus::Halt),
-            _ => ()
+            _ => (),
         }
     }
     Ok(EvalStatus::Pending)
@@ -146,7 +146,7 @@ pub fn quick_vm_eval<'guard>(
         match status {
             EvalStatus::Return(value) => return Ok(value),
             EvalStatus::Halt => return Err(err_eval("Program halted")),
-            _ => ()
+            _ => (),
         }
     }
 

@@ -39,10 +39,10 @@ mod vm;
 
 use crate::compiler::compile;
 use crate::error::{ErrorKind, RuntimeError};
-use crate::vm::quick_vm_eval;
 use crate::memory::{Memory, Mutator, MutatorView};
 use crate::parser::parse;
 use crate::printer::Print;
+use crate::vm::quick_vm_eval;
 
 /// Read a file into a String
 fn load_file(filename: &str) -> Result<String, io::Error> {
@@ -77,7 +77,7 @@ impl Mutator for ReadEvalPrint {
                         // println!("{}", result);
                         let value = quick_vm_eval(mem, result)?;
                         println!("{}", value);
-                    },
+                    }
                     Err(e) => e.print_with_source(&line),
                 }
 

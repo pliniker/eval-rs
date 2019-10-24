@@ -215,7 +215,11 @@ impl InstructionStream {
         &self,
         guard: &'guard dyn MutatorScope,
     ) -> Result<Opcode, RuntimeError> {
-        let instr = self.instructions.get(guard).code.get(guard, self.ip.get())?;
+        let instr = self
+            .instructions
+            .get(guard)
+            .code
+            .get(guard, self.ip.get())?;
         self.ip.set(self.ip.get() + 1);
         self.current.set(instr);
         decode_op(instr)
@@ -242,7 +246,11 @@ impl InstructionStream {
         guard: &'guard dyn MutatorScope,
     ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
         let lit_id = decode_literal_id(self.current.get());
-        IndexedAnyContainer::get(&self.instructions.get(guard).literals, guard, lit_id as ArraySize)
+        IndexedAnyContainer::get(
+            &self.instructions.get(guard).literals,
+            guard,
+            lit_id as ArraySize,
+        )
     }
 
     /// Adjust the instruction pointer by the given signed offset
