@@ -134,7 +134,11 @@ pub fn quick_vm_eval<'guard>(
     code: ScopedPtr<'_, ByteCode>,
 ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
     let stream = mem.alloc(InstructionStream::new(code))?;
+
     let stack = mem.alloc(ArrayAny::with_capacity(mem, 256)?)?;
+    for _ in 0..256 {
+        stack.push(mem, mem.nil())?;
+    }
 
     let mut status = EvalStatus::Pending;
     while status == EvalStatus::Pending {

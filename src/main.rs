@@ -74,14 +74,14 @@ impl Mutator for ReadEvalPrint {
             Ok(value) => {
                 match compile(mem, value) {
                     Ok(result) => {
-                        println!("{}", result);
+                        // println!("{}", result);
                         let value = quick_vm_eval(mem, result)?;
                         println!("{}", value);
                     },
                     Err(e) => e.print_with_source(&line),
                 }
 
-                println!("{}", printer::print(*value));
+                // println!("{}", printer::print(*value));
 
                 Ok(())
             }

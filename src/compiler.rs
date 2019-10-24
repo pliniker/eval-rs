@@ -59,9 +59,9 @@ impl Compiler {
             Value::Symbol(s) => match s.as_str(mem) {
                 "quote" => self.push_load_literal(mem, get_one_from_pair_list(mem, params)?),
                 "atom" => self.push_op2(mem, Opcode::ATOM, params),
-                "car" => self.push_op3(mem, Opcode::CAR, params),
-                "cdr" => self.push_op3(mem, Opcode::CDR, params),
-                "cons" => self.push_op3(mem, Opcode::CDR, params),
+                "car" => self.push_op2(mem, Opcode::CAR, params),
+                "cdr" => self.push_op2(mem, Opcode::CDR, params),
+                "cons" => self.push_op3(mem, Opcode::CONS, params),
                 "eq" => self.push_op3(mem, Opcode::EQ, params),
                 _ => Err(err_eval("Symbol is not bound to a function")),
             },
