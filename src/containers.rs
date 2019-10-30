@@ -24,6 +24,9 @@ pub trait Container<T: Sized + Clone>: Sized {
         capacity: ArraySize,
     ) -> Result<Self, RuntimeError>;
 
+    /// Reset the size of the container to zero - empty
+    fn clear<'guard>(&self, mem: &'guard MutatorView) -> Result<(), RuntimeError>;
+
     /// Count of items in the container
     fn length(&self) -> ArraySize;
 }
@@ -88,6 +91,15 @@ pub trait IndexedAnyContainer: IndexedContainer<TaggedCellPtr> {
         _guard: &'guard dyn MutatorScope,
         index: ArraySize,
         item: TaggedScopedPtr<'guard>,
+    ) -> Result<(), RuntimeError>;
+}
+
+/// Convert a Pair list to a different container
+pub trait ContainerFromPairList: Container<TaggedCellPtr> {
+    fn from_pair_list<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        pair_list: TaggedScopedPtr<'guard>,
     ) -> Result<(), RuntimeError>;
 }
 

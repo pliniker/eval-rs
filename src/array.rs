@@ -8,13 +8,15 @@ use std::ptr::{read, write};
 use stickyimmix::ArraySize;
 
 use crate::containers::{
-    Container, IndexedAnyContainer, IndexedContainer, StackAnyContainer, StackContainer,
+    Container, ContainerFromPairList, IndexedAnyContainer, IndexedContainer, StackAnyContainer,
+    StackContainer,
 };
 use crate::error::{ErrorKind, RuntimeError};
 use crate::memory::MutatorView;
 use crate::primitives::ArrayAny;
 use crate::rawarray::{default_array_growth, RawArray, DEFAULT_ARRAY_SIZE};
 use crate::safeptr::{MutatorScope, TaggedCellPtr, TaggedScopedPtr};
+use crate::taggedptr::Value;
 
 /// An array, like Vec
 #[derive(Clone)]
@@ -97,6 +99,11 @@ impl<T: Sized + Clone> Container<T> for Array<T> {
             length: Cell::new(0),
             data: Cell::new(RawArray::with_capacity(mem, capacity)?),
         })
+    }
+
+    fn clear<'guard>(&self, mem: &'guard MutatorView) -> Result<(), RuntimeError> {
+        self.length.set(0);
+        Ok(())
     }
 
     fn length(&self) -> ArraySize {
@@ -211,15 +218,35 @@ impl IndexedAnyContainer for ArrayAny {
     }
 }
 
+impl ContainerFromPairList for ArrayAny {
+    fn from_pair_list<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        pair_list: TaggedScopedPtr<'guard>,
+    ) -> Result<(), RuntimeError> {
+        self.length.set(0);
+
+        let mut head = pair_list;
+        while let Value::Pair(p) = *head {
+            StackAnyContainer::push(self, mem, p.first.get(mem))?;
+            head = p.second.get(mem);
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::{
-        Array, Container, IndexedAnyContainer, IndexedContainer, StackAnyContainer, StackContainer,
+        Array, Container, ContainerFromPairList, IndexedAnyContainer, IndexedContainer,
+        StackAnyContainer, StackContainer,
     };
     use crate::error::{ErrorKind, RuntimeError};
     use crate::memory::{Memory, Mutator, MutatorView};
     use crate::pair::Pair;
     use crate::primitives::ArrayAny;
+    use crate::taggedptr::Value;
 
     #[test]
     fn array_generic_push_and_pop() {
@@ -362,6 +389,56 @@ mod test {
 
                 // array storage should have been reallocated
                 assert!(ptr_before != ptr_realloc);
+
+                Ok(())
+            }
+        }
+
+        let test = Test {};
+        mem.mutate(&test, ()).unwrap();
+    }
+
+    #[test]
+    fn arrayany_from_pair_list() {
+        let mem = Memory::new();
+
+        struct Test {}
+        impl Mutator for Test {
+            type Input = ();
+            type Output = ();
+
+            fn run(
+                &self,
+                view: &MutatorView,
+                _input: Self::Input,
+            ) -> Result<Self::Output, RuntimeError> {
+                let array: ArrayAny = Array::new();
+                let array = view.alloc(array)?;
+
+                let pair = Pair::new();
+                pair.first.set(view.lookup_sym("thing0"));
+
+                let head = view.alloc_tagged(pair)?;
+                let mut tail = head;
+
+                for n in 1..12 {
+                    if let Value::Pair(pair) = *tail {
+                        tail = pair.append(view, view.lookup_sym(&format!("thing{}", n)))?;
+                    } else {
+                        panic!("expected pair!")
+                    }
+                }
+
+                array.from_pair_list(view, head)?;
+
+                for n in 0..12 {
+                    let thing = IndexedAnyContainer::get(&*array, view, n)?;
+
+                    match *thing {
+                        Value::Symbol(s) => assert!(s.as_str(view) == format!("thing{}", n)),
+                        _ => panic!("expected symbol!"),
+                    }
+                }
 
                 Ok(())
             }

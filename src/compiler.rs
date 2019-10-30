@@ -62,7 +62,29 @@ impl Compiler {
                 "car" => self.push_op2(mem, Opcode::CAR, params),
                 "cdr" => self.push_op2(mem, Opcode::CDR, params),
                 "cons" => self.push_op3(mem, Opcode::CONS, params),
+                // "cond" => self.....what?
+                //
+                //   for each param:
+                //     eval cond
+                //     if false then jmp -> next
+                //     else eval stuff
+                //     jmp -> end
+                //
+                // let mut head = params;
+                // while let Value::Pair(p) = *head {
+                //     cond = first.get(mem);
+                //     head = p.second.get(mem);
+                //     match *head {
+                //         Value::Pair(p) => {
+                //             expr = p.first.get(mem);
+                //             head = p.second.get(mem);
+                //         },
+                //         unexpected end of cond list
+                //     }
+                // }
+                //
                 "eq" => self.push_op3(mem, Opcode::EQ, params),
+
                 _ => Err(err_eval("Symbol is not bound to a function")),
             },
 
