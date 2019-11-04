@@ -62,7 +62,8 @@ impl Compiler {
                 "car" => self.push_op2(mem, Opcode::CAR, params),
                 "cdr" => self.push_op2(mem, Opcode::CDR, params),
                 "cons" => self.push_op3(mem, Opcode::CONS, params),
-                // "cond" => self.....what?
+                "cond" => {
+                    let result = self.acquire_reg();
                 //
                 //   for each param:
                 //     eval cond
@@ -70,19 +71,21 @@ impl Compiler {
                 //     else eval stuff
                 //     jmp -> end
                 //
-                // let mut head = params;
-                // while let Value::Pair(p) = *head {
-                //     cond = first.get(mem);
-                //     head = p.second.get(mem);
-                //     match *head {
-                //         Value::Pair(p) => {
-                //             expr = p.first.get(mem);
-                //             head = p.second.get(mem);
-                //         },
-                //         unexpected end of cond list
-                //     }
-                // }
-                //
+                    let mut head = params;
+                    while let Value::Pair(p) = *head {
+                        cond = first.get(mem);
+                        head = p.second.get(mem);
+                        match *head {
+                            Value::Pair(p) => {
+                                expr = p.first.get(mem);
+                                head = p.second.get(mem);
+                            },
+                            _ => return Err(err_eval("Unexpected end of cond list"))
+                        }
+                    }
+
+                    Ok(())
+                },
                 "eq" => self.push_op3(mem, Opcode::EQ, params),
 
                 _ => Err(err_eval("Symbol is not bound to a function")),
@@ -144,6 +147,11 @@ impl Compiler {
         let reg = self.next_reg;
         self.next_reg += 1;
         reg
+    }
+
+    // reset the next register back to the one after the given register
+    fn reset_reg(&mut self, reg: Register) {
+        self.next_reg = reg + 1;
     }
 }
 
