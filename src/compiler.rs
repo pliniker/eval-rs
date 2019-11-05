@@ -63,28 +63,30 @@ impl Compiler {
                 "cdr" => self.push_op2(mem, Opcode::CDR, params),
                 "cons" => self.push_op3(mem, Opcode::CONS, params),
                 "cond" => {
-                    let result = self.acquire_reg();
-                //
-                //   for each param:
-                //     eval cond
-                //     if false then jmp -> next
-                //     else eval stuff
-                //     jmp -> end
-                //
+                    let result = self.next_reg;
+                    //
+                    //   for each param:
+                    //     eval cond
+                    //     if false then jmp -> next
+                    //     else eval stuff
+                    //     jmp -> end
+                    //
                     let mut head = params;
                     while let Value::Pair(p) = *head {
-                        cond = first.get(mem);
+                        let cond = p.first.get(mem);
                         head = p.second.get(mem);
                         match *head {
                             Value::Pair(p) => {
-                                expr = p.first.get(mem);
+                                let expr = p.first.get(mem);
                                 head = p.second.get(mem);
                             },
                             _ => return Err(err_eval("Unexpected end of cond list"))
                         }
+
+                        self.reset_reg(result);
                     }
 
-                    Ok(())
+                    Ok(result)
                 },
                 "eq" => self.push_op3(mem, Opcode::EQ, params),
 
@@ -149,9 +151,9 @@ impl Compiler {
         reg
     }
 
-    // reset the next register back to the one after the given register
+    // reset the next register back to the given one
     fn reset_reg(&mut self, reg: Register) {
-        self.next_reg = reg + 1;
+        self.next_reg = reg
     }
 }
 

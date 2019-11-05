@@ -61,6 +61,11 @@ fn encode_load_lit(reg_acc: Register, literal_id: LiteralId) -> u32 {
     (Opcode::LOADLIT as u32) << 24 | (reg_acc as u32) << 16 | (literal_id as u32)
 }
 
+/// Encode a jump operation
+fn encode_jump(op: Opcode, reg: Register, offset: ArraySize) -> u32 {
+    (op as u32) << 24 | (reg as u32) << 16 | offset as u32
+}
+
 /// Decode an instruction and return the opcode
 fn decode_op(instr: u32) -> Result<Opcode, RuntimeError> {
     let opcode = (instr >> 24) as u8;
@@ -91,6 +96,11 @@ fn decode_literal_id(instr: u32) -> LiteralId {
     (instr & 0xFFFF) as u16
 }
 
+/// Decode the jump offset in an instruction
+fn decode_jump_offset(instr: u32) -> ArraySize {
+    (instr & 0xFFFF) as ArraySize
+}
+
 /// Bytecode is stored as fixed-width 32-bit operator+operand values.
 /// This is not the most efficient format but it is easy to work with.
 pub type Code = ArrayU32;
@@ -114,37 +124,40 @@ impl ByteCode {
         }
     }
 
-    /// Push a 0-operand instruction to the back of the sequence
+    /// Push a 0-operand instruction to the back of the sequence and return the index of the instruction
     pub fn push_op0<'guard>(
         &self,
         mem: &'guard MutatorView,
         op: Opcode,
-    ) -> Result<(), RuntimeError> {
-        self.code.push(mem, encode_0(op))
+    ) -> Result<ArraySize, RuntimeError> {
+        self.code.push(mem, encode_0(op))?;
+        Ok(self.code.length() - 1)
     }
 
-    /// Push a 1-operand instuction to the back of the sequence
+    /// Push a 1-operand instuction to the back of the sequence and return the index of the instruction
     pub fn push_op1<'guard>(
         &self,
         mem: &'guard MutatorView,
         op: Opcode,
         reg: Register,
-    ) -> Result<(), RuntimeError> {
-        self.code.push(mem, encode_1(op, reg))
+    ) -> Result<ArraySize, RuntimeError> {
+        self.code.push(mem, encode_1(op, reg))?;
+        Ok(self.code.length() - 1)
     }
 
-    /// Push a 2-operand instruction to the back of the sequence
+    /// Push a 2-operand instruction to the back of the sequence and return the index of the instruction
     pub fn push_op2<'guard>(
         &self,
         mem: &'guard MutatorView,
         op: Opcode,
         reg_acc: Register,
         reg1: Register,
-    ) -> Result<(), RuntimeError> {
-        self.code.push(mem, encode_2(op, reg_acc, reg1))
+    ) -> Result<ArraySize, RuntimeError> {
+        self.code.push(mem, encode_2(op, reg_acc, reg1))?;
+        Ok(self.code.length() - 1)
     }
 
-    /// Push a 3-operand instruction to the back of the sequence
+    /// Push a 3-operand instruction to the back of the sequence and return the index of the instruction
     pub fn push_op3<'guard>(
         &self,
         mem: &'guard MutatorView,
@@ -152,19 +165,42 @@ impl ByteCode {
         reg_acc: Register,
         reg1: Register,
         reg2: Register,
-    ) -> Result<(), RuntimeError> {
-        self.code.push(mem, encode_3(op, reg_acc, reg1, reg2))
+    ) -> Result<ArraySize, RuntimeError> {
+        self.code.push(mem, encode_3(op, reg_acc, reg1, reg2))?;
+        Ok(self.code.length() - 1)
     }
 
-    /// Push a literal-load operation to the back of the sequence
+    /// Push an unconditionl jump instruction to the back of the sequence and return the index of the instruction
+    pub fn push_jump<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        offset: ArraySize
+    ) -> Result<ArraySize, RuntimeError> {
+        self.code.push(mem, encode_jump(Opcode::JMP, 0, offset))?;
+        Ok(self.code.length() - 1)
+    }
+
+    /// Push an unconditionl jump instruction to the back of the sequence and return the index of the instruction
+    pub fn push_cond_jump<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        reg: Register,
+        offset: ArraySize
+    ) -> Result<ArraySize, RuntimeError> {
+        self.code.push(mem, encode_jump(Opcode::JMPT, reg, offset))?;
+        Ok(self.code.length() - 1)
+    }
+
+    /// Push a literal-load operation to the back of the sequence and return the index of the instruction
     pub fn push_loadlit<'guard>(
         &self,
         mem: &'guard MutatorView,
         reg_acc: Register,
         literal_id: LiteralId,
-    ) -> Result<(), RuntimeError> {
+    ) -> Result<ArraySize, RuntimeError> {
         // TODO clone anything mutable
-        self.code.push(mem, encode_load_lit(reg_acc, literal_id))
+        self.code.push(mem, encode_load_lit(reg_acc, literal_id))?;
+        Ok(self.code.length() - 1)
     }
 
     /// Push a literal pointer/value to the back of the literals list and return it's index
