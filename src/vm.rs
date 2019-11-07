@@ -104,8 +104,9 @@ fn eval_next_instr<'guard>(
         }
 
         Opcode::EQ => unimplemented!(),
-        Opcode::JMPT => unimplemented!(),
         Opcode::JMP => unimplemented!(),
+        Opcode::JMPT => unimplemented!(),
+        Opcode::JMPNT => unimplemented!(),
     }
 
     Ok(EvalStatus::Pending)

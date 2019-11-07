@@ -5,6 +5,8 @@ use crate::pair::{get_one_from_pair_list, get_two_from_pair_list};
 use crate::safeptr::{ScopedPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
+use stickyimmix::ArraySize;
+
 struct Compiler {
     bytecode: ByteCode,
     next_reg: Register,
@@ -24,7 +26,8 @@ impl Compiler {
         ast: TaggedScopedPtr<'guard>,
     ) -> Result<(), RuntimeError> {
         let result_reg = self.compile_eval(mem, ast)?;
-        self.bytecode.push_op1(mem, Opcode::RETURN, result_reg)
+        self.bytecode.push_op1(mem, Opcode::RETURN, result_reg)?;
+        Ok(())
     }
 
     fn compile_eval<'guard>(
@@ -63,7 +66,6 @@ impl Compiler {
                 "cdr" => self.push_op2(mem, Opcode::CDR, params),
                 "cons" => self.push_op3(mem, Opcode::CONS, params),
                 "cond" => {
-                    let result = self.next_reg;
                     //
                     //   for each param:
                     //     eval cond
@@ -71,19 +73,49 @@ impl Compiler {
                     //     else eval stuff
                     //     jmp -> end
                     //
+                    let mut end_jumps: Vec<ArraySize> = Vec::new();
+                    let mut last_cond_jump: Option<ArraySize> = None;
+
+                    let result = self.next_reg;
+
                     let mut head = params;
                     while let Value::Pair(p) = *head {
+
                         let cond = p.first.get(mem);
                         head = p.second.get(mem);
                         match *head {
                             Value::Pair(p) => {
                                 let expr = p.first.get(mem);
                                 head = p.second.get(mem);
+
+                                // if this is not the first condition, set the offset of the last
+                                // condition-not-true jump to the beginning of this condition
+                                if let Some(address) = last_cond_jump {
+                                    let offset = self.bytecode.next_instruction() - address;
+                                    self.bytecode.write_jump_offset(mem, address, offset)?;
+                                }
+
+                                // We have a condition to evaluate. If the resut is Not True, jump to the
+                                // next condition.
+                                self.reset_reg(result);  // reuse this register for condition and result
+                                let cond_result = self.compile_eval(mem, cond)?;
+                                self.bytecode.push_cond_jump(mem, Opcode::JMPNT, cond_result)?;
+                                last_cond_jump = Some(self.bytecode.last_instruction());
+
+                                // Compile the expression and jump to the end of the entire cond
+                                self.reset_reg(result);  // reuse this register for condition and result
+                                let _expr_result = self.compile_eval(mem, expr)?;
+                                self.bytecode.push_jump(mem)?;
+                                end_jumps.push(self.bytecode.last_instruction());
                             },
                             _ => return Err(err_eval("Unexpected end of cond list"))
                         }
+                    }
 
-                        self.reset_reg(result);
+                    // Update all the post-expr jumps to point at the next instruction after the entire cond
+                    for address in end_jumps.iter() {
+                        let offset = self.bytecode.next_instruction() - address;
+                        self.bytecode.write_jump_offset(mem, *address, offset)?;
                     }
 
                     Ok(result)
@@ -151,7 +183,7 @@ impl Compiler {
         reg
     }
 
-    // reset the next register back to the given one
+    // reset the next register back to the given one so that it is reused
     fn reset_reg(&mut self, reg: Register) {
         self.next_reg = reg
     }
