@@ -98,8 +98,8 @@ fn decode_literal_id(instr: u32) -> LiteralId {
 }
 
 /// Decode the jump offset in an instruction
-fn decode_jump_offset(instr: u32) -> ArraySize {
-    (instr & 0xFFFF) as ArraySize
+fn decode_jump_offset(instr: u32) -> i16 {
+    (instr & 0xFFFF) as i16
 }
 
 /// Bytecode is stored as fixed-width 32-bit operator+operand values.
@@ -304,8 +304,11 @@ impl InstructionStream {
     }
 
     /// Adjust the instruction pointer by the given signed offset
-    pub fn jump(&self, offset: i16) -> Result<(), RuntimeError> {
-        unimplemented!()
+    pub fn jump(&self) {
+        let offset = decode_jump_offset(self.current.get());
+        let mut ip = self.ip.get() as i32;
+        ip += offset as i32;
+        self.ip.set(ip as ArraySize);
     }
 }
 

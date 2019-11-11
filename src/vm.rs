@@ -104,9 +104,23 @@ fn eval_next_instr<'guard>(
         }
 
         Opcode::EQ => unimplemented!(),
-        Opcode::JMP => unimplemented!(),
+
+        Opcode::JMP => {
+            instr.jump();
+        }
+
         Opcode::JMPT => unimplemented!(),
-        Opcode::JMPNT => unimplemented!(),
+
+        Opcode::JMPNT => {
+            let reg = instr.get_reg1() as ArraySize;
+            let reg_val = stack.get(mem, reg)?;
+
+            let true_sym = mem.lookup_sym("true");
+
+            if reg_val != true_sym {
+                instr.jump()
+            }
+        }
     }
 
     Ok(EvalStatus::Pending)
