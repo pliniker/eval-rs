@@ -109,7 +109,16 @@ fn eval_next_instr<'guard>(
             instr.jump();
         }
 
-        Opcode::JMPT => unimplemented!(),
+        Opcode::JMPT => {
+            let reg = instr.get_reg1() as ArraySize;
+            let reg_val = stack.get(mem, reg)?;
+
+            let true_sym = mem.lookup_sym("true");  // TODO preload keyword syms
+
+            if reg_val == true_sym {
+                instr.jump()
+            }
+        }
 
         Opcode::JMPNT => {
             let reg = instr.get_reg1() as ArraySize;
@@ -120,6 +129,11 @@ fn eval_next_instr<'guard>(
             if reg_val != true_sym {
                 instr.jump()
             }
+        }
+
+        Opcode::LOADNIL => {
+            let reg = instr.get_reg1() as ArraySize;
+            stack.set(mem, reg, mem.nil())?;
         }
     }
 

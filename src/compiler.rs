@@ -105,7 +105,7 @@ impl Compiler {
                     // if this is not the first condition, set the offset of the last
                     // condition-not-true jump to the beginning of this condition
                     if let Some(address) = last_cond_jump {
-                        let offset = self.bytecode.next_instruction() - address;
+                        let offset = self.bytecode.next_instruction() - address - 1;
                         self.bytecode.write_jump_offset(mem, address, offset)?;
                     }
 
@@ -119,20 +119,25 @@ impl Compiler {
                     // Compile the expression and jump to the end of the entire cond
                     self.reset_reg(result);  // reuse this register for condition and result
                     let _expr_result = self.compile_eval(mem, expr)?;
-                    // If there's another condition coming up, compile in a jump over it to the end
-                    if let Value::Pair(_) = *head {
-                        self.bytecode.push_jump(mem)?;
-                        end_jumps.push(self.bytecode.last_instruction());
-                    }
+                    self.bytecode.push_jump(mem)?;
+                    end_jumps.push(self.bytecode.last_instruction());
                 },
 
                 _ => return Err(err_eval("Unexpected end of cond list"))
             }
         }
 
+        // Close out with a default NIL result if none of the conditions passed
+        if let Some(address) = last_cond_jump {
+            self.reset_reg(result);
+            self.push_op1(mem, Opcode::LOADNIL)?;
+            let offset = self.bytecode.next_instruction() - address - 1;
+            self.bytecode.write_jump_offset(mem, address, offset)?;
+        }
+
         // Update all the post-expr jumps to point at the next instruction after the entire cond
         for address in end_jumps.iter() {
-            let offset = self.bytecode.next_instruction() - address;
+            let offset = self.bytecode.next_instruction() - address - 1;
             self.bytecode.write_jump_offset(mem, *address, offset)?;
         }
 
@@ -146,6 +151,16 @@ impl Compiler {
     ) -> Result<(), RuntimeError> {
         self.bytecode.push_op0(mem, op)?;
         Ok(())
+    }
+
+    fn push_op1<'guard>(
+        &mut self,
+        mem: &'guard MutatorView,
+        op: Opcode
+    ) -> Result<Register, RuntimeError> {
+        let result = self.acquire_reg();
+        self.bytecode.push_op1(mem, op, result)?;
+        Ok(result)
     }
 
     fn push_op2<'guard>(

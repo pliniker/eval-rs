@@ -29,6 +29,7 @@ pub enum Opcode {
     JMP = 0x09,
     JMPT = 0x0A,
     JMPNT = 0x0B,
+    LOADNIL = 0x0C,
 }
 
 /// A register can be in the range 0..255
@@ -303,7 +304,7 @@ impl InstructionStream {
         )
     }
 
-    /// Adjust the instruction pointer by the given signed offset
+    /// Adjust the instruction pointer by the given signed offset from the current ip
     pub fn jump(&self) {
         let offset = decode_jump_offset(self.current.get());
         let mut ip = self.ip.get() as i32;

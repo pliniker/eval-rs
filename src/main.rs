@@ -74,7 +74,7 @@ impl Mutator for ReadEvalPrint {
             Ok(value) => {
                 match compile(mem, value) {
                     Ok(result) => {
-                        // println!("{}", result);
+                        // println!("{}", result);  // prints bytecode
                         let value = quick_vm_eval(mem, result)?;
                         println!("{}", value);
                     }
