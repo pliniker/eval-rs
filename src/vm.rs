@@ -103,7 +103,20 @@ fn eval_next_instr<'guard>(
             stack.set(mem, acc, mem.alloc_tagged(new_pair)?)?
         }
 
-        Opcode::EQ => unimplemented!(),
+        Opcode::EQ => {
+            let acc = instr.get_reg_acc() as ArraySize;
+            let reg1 = instr.get_reg1() as ArraySize;
+            let reg2 = instr.get_reg2() as ArraySize;
+
+            let reg1_val = stack.get(mem, reg1)?;
+            let reg2_val = stack.get(mem, reg2)?;
+
+            if reg1_val == reg2_val {
+                stack.set(mem, acc, mem.lookup_sym("true"))?;
+            } else {
+                stack.set(mem, acc, mem.nil())?;
+            }
+        }
 
         Opcode::JMP => {
             instr.jump();
