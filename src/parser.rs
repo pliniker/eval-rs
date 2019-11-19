@@ -279,7 +279,7 @@ mod test {
     #[test]
     fn parse_empty_list() {
         let input = String::from("()");
-        let expect = input.clone();
+        let expect = String::from("nil");
         check(&input, &expect);
     }
 
