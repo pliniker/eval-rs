@@ -44,7 +44,7 @@ pub enum Value<'scope> {
 impl<'scope> fmt::Display for Value<'scope> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Value::Nil => write!(f, "()"),
+            Value::Nil => write!(f, "nil"),
             Value::Pair(p) => p.print(self, f),
             Value::Symbol(s) => s.print(self, f),
             Value::Number(n) => write!(f, "{}", *n),
@@ -60,7 +60,7 @@ impl<'scope> fmt::Display for Value<'scope> {
 impl<'scope> fmt::Debug for Value<'scope> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Value::Nil => write!(f, "()"),
+            Value::Nil => write!(f, "nil"),
             Value::Pair(p) => p.debug(self, f),
             Value::Symbol(s) => s.debug(self, f),
             Value::Number(n) => write!(f, "{}", *n),
