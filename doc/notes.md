@@ -18,9 +18,10 @@ Glue language:
   - Arity
   - Free variable symbol list
   - Code
+  - Name
 
 Closure:
- - Function prototype pointer
+ - Function Prototype pointer
  - Upvalues
 
 Partial Application:
@@ -33,17 +34,15 @@ Coroutine:
  - ReEntry pointer
  - Stack with 1 Activation Record
 
-Activation Record?:
+Activation Record Stack:
  - Closure definition pointer
- - Register bank <- Supplied parameters starting in reg 0
+ - IP
+ - Stack base pointer
 
-Activation Record?:
- - Return pointer
- - Dynamic pointer (parent base pointer)
- - Static pointer  (parent scope pointer)
- - Return value
- - Parameters
-
+ Register Stack
+ - return value [0]
+ - parameters [1..n]
+ - registers [n..255]
 
  ## Virtual Machine
 
@@ -60,7 +59,7 @@ eval:
 
 apply:
  - sym + eval(args) -> pap args | closure
- - pap + eval(args) -> value
+ - pap + eval(args) -> pap args | value
  - closure + eval(args) -> value
 
 Bytecode:
@@ -133,41 +132,12 @@ Bytecode:
 
 # --- samples ---
 
+```
 /// This represents a pointer to a window of registers on the stack.
 /// A mutator-lifetime limited view
 struct ActivationFramePtr<'guard> {
+    function: &'guard TaggedCellPtr,
+    ip: &'guard TaggedCellPtr,
     regs: &'guard [TaggedCellPtr; 256],
 }
-
-# Compile dry-runs
-
-(atom sym)
-
-* load-literal reg1 sym-literal
-* atom reg= reg1
-
-(atom 3)
-
-* load-literal reg1 3
-* atom reg= reg1
-
-(quote (list of things)))
-// quote means copy the list from the ast rather than eval/apply it
-
-* list-copy reg= list-of-things
-
-(car (quote (list of things)))
-
-* car reg= list
-
-(cdr (quote (list of things)))
-
-* cdr reg= list
-
-(cons thing (quote (list of things)))
-
-* cons reg= reg1 reg2
-
-(eq thing1 thing2)
-
-* eq reg= reg1 reg2
+```
