@@ -133,8 +133,14 @@ where
                 pos,
             }) => {
                 tokens.next();
-                let sym = mem.lookup_sym(name);
-                list.push(mem, sym, pos)?;
+
+                // the symbol 'nil' is reinterpreted as a literal nil value
+                if name == "nil" {
+                    list.push(mem, mem.nil(), pos)?;
+                } else {
+                    let sym = mem.lookup_sym(name);
+                    list.push(mem, sym, pos)?;
+                }
             }
 
             Some(&&Token { token: Dot, pos }) => {
@@ -206,7 +212,12 @@ where
             pos: _,
         }) => {
             tokens.next();
-            Ok(mem.lookup_sym(name))
+            // the symbol 'nil' is reinterpreted as a literal nil value
+            if name == "nil" {
+                Ok(mem.nil())
+            } else {
+                Ok(mem.lookup_sym(name))
+            }
         }
 
         Some(&&Token {
@@ -280,6 +291,13 @@ mod test {
     fn parse_empty_list() {
         let input = String::from("()");
         let expect = String::from("nil");
+        check(&input, &expect);
+    }
+
+    #[test]
+    fn parse_nil() {
+        let input = String::from("(a . nil)");
+        let expect = String::from("(a)");
         check(&input, &expect);
     }
 
