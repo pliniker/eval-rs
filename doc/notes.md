@@ -4,7 +4,7 @@
 
 Glue language:
  - Immutable values and data structures, structural sharing
- - Mutable synchronized variables?
+ - Mutable concurrency-safe variables?
  - Mutable stack-pinned resource/state/io management - 'with'
  - Closures with upvalues
  - Coroutines
@@ -19,6 +19,7 @@ Glue language:
   - Free variable symbol list
   - Code
   - Name
+  - Docstring
 
 Closure:
  - Function Prototype pointer
@@ -141,3 +142,47 @@ struct ActivationFramePtr<'guard> {
     regs: &'guard [TaggedCellPtr; 256],
 }
 ```
+
+
+## HashTable
+
+```
+trait Hashable {
+    fn hash<'guard>(&self, _guard: &'guard dyn MutatorScope) -> u64;
+}
+
+trait HashIndexedAnyContainer {
+    fn get<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        key: TaggedScopedPtr,
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError>;
+
+    fn set<'guard>(
+        &self,
+        _guard: &'guard dyn MutatorScope,
+        key: TaggedScopedPtr<'guard>,
+        value: TaggedScopedPtr<'guard>
+    ) -> Result<(), RuntimeError>;
+}
+
+HashItem {
+    hash: u64,
+    key: TaggedPtr,
+    value: TaggedPtr
+}
+
+HashTable {
+    array: RawArray<HashItem>,
+    # item count
+    size: ArraySize
+}
+```
+
+### Type System
+
+Trait based?  Duck typed?
+
+Dispatch?
+ * Multiple dispatch: partial functions?
+ * Single dispatch: x.y() === X::y(x)

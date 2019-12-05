@@ -3,6 +3,7 @@
 ///  Array<T>
 ///  ArrayAny = Array<TaggedCellPtr> (see primitives)
 use std::cell::Cell;
+use std::fmt;
 use std::ptr::{read, write};
 
 use stickyimmix::ArraySize;
@@ -13,7 +14,7 @@ use crate::containers::{
 };
 use crate::error::{ErrorKind, RuntimeError};
 use crate::memory::MutatorView;
-use crate::primitives::ArrayAny;
+use crate::printer::Print;
 use crate::rawarray::{default_array_growth, RawArray, DEFAULT_ARRAY_SIZE};
 use crate::safeptr::{MutatorScope, TaggedCellPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
@@ -29,7 +30,7 @@ pub struct Array<T: Sized + Clone> {
 impl<T: Sized + Clone> Array<T> {
     /// Return a bounds-checked pointer to the object at the given index
     fn get_offset(&self, index: ArraySize) -> Result<*mut T, RuntimeError> {
-        if index < 0 || index >= self.length.get() {
+        if index >= self.length.get() {
             Err(RuntimeError::new(ErrorKind::BoundsError))
         } else {
             let ptr = self
@@ -101,7 +102,7 @@ impl<T: Sized + Clone> Container<T> for Array<T> {
         })
     }
 
-    fn clear<'guard>(&self, mem: &'guard MutatorView) -> Result<(), RuntimeError> {
+    fn clear<'guard>(&self, _guard: &'guard MutatorView) -> Result<(), RuntimeError> {
         self.length.set(0);
         Ok(())
     }
@@ -233,6 +234,58 @@ impl ContainerFromPairList for ArrayAny {
         }
 
         Ok(())
+    }
+}
+
+/// Array type that can contain any other object
+pub type ArrayAny = Array<TaggedCellPtr>;
+
+impl Print for ArrayAny {
+    fn print<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
+        write!(f, "[")?;
+
+        for i in 0..self.length() {
+            if i > 1 {
+                write!(f, ", ")?;
+            }
+
+            let ptr =
+                IndexedAnyContainer::get(self, guard, i).expect("Failed to read ptr from array");
+
+            fmt::Display::fmt(&ptr.value(), f)?;
+        }
+
+        write!(f, "]")
+    }
+}
+
+/// Array of u8
+pub type ArrayU8 = Array<u8>;
+
+impl Print for ArrayU8 {
+    fn print<'guard>(
+        &self,
+        _guard: &'guard dyn MutatorScope,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
+        write!(f, "ArrayU8[...]")
+    }
+}
+
+/// Array of u32
+pub type ArrayU32 = Array<u32>;
+
+impl Print for ArrayU32 {
+    fn print<'guard>(
+        &self,
+        _guard: &'guard dyn MutatorScope,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
+        write!(f, "ArrayU32[...]")
     }
 }
 

@@ -4,11 +4,12 @@ use stickyimmix::{
     AllocHeader, AllocObject, AllocRaw, AllocTypeId, ArraySize, Mark, RawPtr, SizeClass,
 };
 
+use crate::array::{ArrayAny, ArrayU32, ArrayU8};
 use crate::bytecode::{ByteCode, InstructionStream};
 use crate::memory::HeapStorage;
 use crate::pair::Pair;
 use crate::pointerops::{AsNonNull, Tagged};
-use crate::primitives::{ArrayAny, ArrayU32, ArrayU8, NumberObject, Symbol};
+use crate::primitives::{NumberObject, Symbol};
 use crate::taggedptr::FatPtr;
 
 /// Recognized heap-allocated types.

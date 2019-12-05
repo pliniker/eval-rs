@@ -16,11 +16,12 @@ use std::ptr::NonNull;
 
 use stickyimmix::{AllocRaw, RawPtr};
 
+use crate::array::{ArrayAny, ArrayU32, ArrayU8};
 use crate::bytecode::ByteCode;
 use crate::memory::HeapStorage;
 use crate::pair::Pair;
 use crate::pointerops::{get_tag, ScopedRef, Tagged, TAG_NUMBER, TAG_OBJECT, TAG_PAIR, TAG_SYMBOL};
-use crate::primitives::{ArrayAny, ArrayU32, ArrayU8, NumberObject, Symbol};
+use crate::primitives::{NumberObject, Symbol};
 use crate::printer::Print;
 use crate::safeptr::MutatorScope;
 

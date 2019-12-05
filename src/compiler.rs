@@ -78,7 +78,7 @@ impl Compiler {
     fn compile_apply_cond<'guard>(
         &mut self,
         mem: &'guard MutatorView,
-        params: TaggedScopedPtr<'guard>
+        params: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         //
         //   for each param:
@@ -94,7 +94,6 @@ impl Compiler {
 
         let mut head = params;
         while let Value::Pair(p) = *head {
-
             let cond = p.first.get(mem);
             head = p.second.get(mem);
             match *head {
@@ -111,19 +110,20 @@ impl Compiler {
 
                     // We have a condition to evaluate. If the resut is Not True, jump to the
                     // next condition.
-                    self.reset_reg(result);  // reuse this register for condition and result
+                    self.reset_reg(result); // reuse this register for condition and result
                     let cond_result = self.compile_eval(mem, cond)?;
-                    self.bytecode.push_cond_jump(mem, Opcode::JMPNT, cond_result)?;
+                    self.bytecode
+                        .push_cond_jump(mem, Opcode::JMPNT, cond_result)?;
                     last_cond_jump = Some(self.bytecode.last_instruction());
 
                     // Compile the expression and jump to the end of the entire cond
-                    self.reset_reg(result);  // reuse this register for condition and result
+                    self.reset_reg(result); // reuse this register for condition and result
                     let _expr_result = self.compile_eval(mem, expr)?;
                     self.bytecode.push_jump(mem)?;
                     end_jumps.push(self.bytecode.last_instruction());
-                },
+                }
 
-                _ => return Err(err_eval("Unexpected end of cond list"))
+                _ => return Err(err_eval("Unexpected end of cond list")),
             }
         }
 
@@ -156,7 +156,7 @@ impl Compiler {
     fn push_op1<'guard>(
         &mut self,
         mem: &'guard MutatorView,
-        op: Opcode
+        op: Opcode,
     ) -> Result<Register, RuntimeError> {
         let result = self.acquire_reg();
         self.bytecode.push_op1(mem, op, result)?;

@@ -1,11 +1,11 @@
 use stickyimmix::ArraySize;
 
+use crate::array::ArrayAny;
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{Container, IndexedAnyContainer, StackAnyContainer};
 use crate::error::{err_eval, RuntimeError};
 use crate::memory::{Mutator, MutatorView};
 use crate::pair::Pair;
-use crate::primitives::ArrayAny;
 use crate::safeptr::{ScopedPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
@@ -126,7 +126,7 @@ fn eval_next_instr<'guard>(
             let reg = instr.get_reg1() as ArraySize;
             let reg_val = stack.get(mem, reg)?;
 
-            let true_sym = mem.lookup_sym("true");  // TODO preload keyword syms
+            let true_sym = mem.lookup_sym("true"); // TODO preload keyword syms
 
             if reg_val == true_sym {
                 instr.jump()

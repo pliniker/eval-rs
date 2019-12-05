@@ -41,7 +41,6 @@ use crate::compiler::compile;
 use crate::error::{ErrorKind, RuntimeError};
 use crate::memory::{Memory, Mutator, MutatorView};
 use crate::parser::parse;
-use crate::printer::Print;
 use crate::vm::quick_vm_eval;
 
 /// Read a file into a String

@@ -1,15 +1,14 @@
 use std::cell::Cell;
 use std::fmt;
-use std::ops::Deref;
 
 use stickyimmix::ArraySize;
 
+use crate::array::{ArrayAny, ArrayU32};
 use crate::containers::{
     Container, IndexedAnyContainer, IndexedContainer, StackAnyContainer, StackContainer,
 };
 use crate::error::{err_eval, RuntimeError};
 use crate::memory::MutatorView;
-use crate::primitives::{ArrayAny, ArrayU32};
 use crate::printer::Print;
 use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr, TaggedScopedPtr};
 
@@ -169,10 +168,7 @@ impl ByteCode {
     }
 
     /// Push an unconditionl jump instruction to the back of the sequence
-    pub fn push_jump<'guard>(
-        &self,
-        mem: &'guard MutatorView
-    ) -> Result<(), RuntimeError> {
+    pub fn push_jump<'guard>(&self, mem: &'guard MutatorView) -> Result<(), RuntimeError> {
         self.code.push(mem, encode_jump(Opcode::JMP, 0, 0xFFFF))
     }
 
@@ -181,7 +177,7 @@ impl ByteCode {
         &self,
         mem: &'guard MutatorView,
         op: Opcode,
-        reg: Register
+        reg: Register,
     ) -> Result<(), RuntimeError> {
         self.code.push(mem, encode_jump(op, reg, 0xFFFF))
     }
@@ -191,7 +187,8 @@ impl ByteCode {
         &self,
         mem: &'guard MutatorView,
         instruction: ArraySize,
-        offset: ArraySize) -> Result<(), RuntimeError> {
+        offset: ArraySize,
+    ) -> Result<(), RuntimeError> {
         let bytecode = self.code.get(mem, instruction)? & 0xFFFF0000;
         self.code.set(mem, instruction, bytecode | offset as u32)?;
         Ok(())

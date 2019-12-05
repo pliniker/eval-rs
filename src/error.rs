@@ -29,6 +29,8 @@ pub enum ErrorKind {
     BadAllocationRequest,
     OutOfMemory,
     BoundsError,
+    KeyError,
+    UnhashableError,
 }
 
 /// An Eval-rs runtime error type
@@ -94,6 +96,8 @@ impl fmt::Display for RuntimeError {
                 write!(f, "An invalid memory size allocation was requested!")
             }
             ErrorKind::BoundsError => write!(f, "Indexing bounds error"),
+            ErrorKind::KeyError => write!(f, "Key does not exist in Dict"),
+            ErrorKind::UnhashableError => write!(f, "Attempt to access Dict with unhashable key"),
         }
     }
 }

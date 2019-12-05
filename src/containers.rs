@@ -94,6 +94,39 @@ pub trait IndexedAnyContainer: IndexedContainer<TaggedCellPtr> {
     ) -> Result<(), RuntimeError>;
 }
 
+/// Hashable-indexed interface. Objects used as keys must implement Hashable.
+trait HashIndexedAnyContainer {
+    /// Return a pointer to to the object associated with the given key.
+    /// Absence of an association should return an error.
+    fn get_assoc<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        key: TaggedScopedPtr,
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError>;
+
+    /// Associate a key with a value.
+    fn assoc<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        key: TaggedScopedPtr<'guard>,
+        value: TaggedScopedPtr<'guard>,
+    ) -> Result<(), RuntimeError>;
+
+    /// Remove an association by its key.
+    fn dissoc<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        key: TaggedScopedPtr,
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError>;
+
+    /// Returns true if the key exists in the container.
+    fn exists<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        key: TaggedScopedPtr,
+    ) -> Result<bool, RuntimeError>;
+}
+
 /// Convert a Pair list to a different container
 pub trait ContainerFromPairList: Container<TaggedCellPtr> {
     fn from_pair_list<'guard>(
