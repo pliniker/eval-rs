@@ -1,7 +1,9 @@
 /// Basic mutable array type:
 ///
 ///  Array<T>
-///  ArrayAny = Array<TaggedCellPtr> (see primitives)
+///  ArrayAny = Array<TaggedCellPtr>
+///  ArrayU32 = Array<u32>
+///  ArrayU8 = Array<u8>
 use std::cell::Cell;
 use std::fmt;
 use std::ptr::{read, write};

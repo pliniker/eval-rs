@@ -95,7 +95,7 @@ pub trait IndexedAnyContainer: IndexedContainer<TaggedCellPtr> {
 }
 
 /// Hashable-indexed interface. Objects used as keys must implement Hashable.
-trait HashIndexedAnyContainer {
+pub trait HashIndexedAnyContainer {
     /// Return a pointer to to the object associated with the given key.
     /// Absence of an association should return an error.
     fn get_assoc<'guard>(

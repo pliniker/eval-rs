@@ -122,7 +122,7 @@ impl<T: Sized> RawArray<T> {
         }
     }
 
-    /// Return the capacity of the array in bytes
+    /// Return the capacity of the array in the count of objects it can hold
     pub fn capacity(&self) -> ArraySize {
         self.capacity
     }
