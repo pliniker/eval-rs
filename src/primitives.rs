@@ -1,10 +1,12 @@
 /// Native runtime types
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::slice;
 use std::str;
 
 use crate::array::Array;
 use crate::containers::{Container, IndexedAnyContainer};
+use crate::hashable::Hashable;
 use crate::printer::Print;
 use crate::safeptr::{MutatorScope, TaggedCellPtr};
 
@@ -45,6 +47,12 @@ impl Print for Symbol {
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
         write!(f, "{}", self.as_str(guard))
+    }
+}
+
+impl Hashable for Symbol {
+    fn hash<'guard, H: Hasher>(&self, guard: &'guard dyn MutatorScope, h: &mut H) {
+        self.as_str(guard).hash(h)
     }
 }
 

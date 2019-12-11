@@ -1,9 +1,9 @@
-// TODO
+/// Scope-guard limited Hashable trait type
+use std::hash::Hasher;
 
 use crate::safeptr::MutatorScope;
 
-pub type HashValue = u64;
-
-trait Hashable {
-    fn hash<'guard>(&self, _guard: &'guard dyn MutatorScope) -> HashValue;
+/// Similar to Hash but for use in a mutator lifetime-limited scope
+pub trait Hashable {
+    fn hash<'guard, H: Hasher>(&self, _guard: &'guard dyn MutatorScope, hasher: &mut H);
 }
