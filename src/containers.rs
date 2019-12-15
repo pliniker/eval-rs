@@ -98,7 +98,7 @@ pub trait IndexedAnyContainer: IndexedContainer<TaggedCellPtr> {
 pub trait HashIndexedAnyContainer {
     /// Return a pointer to to the object associated with the given key.
     /// Absence of an association should return an error.
-    fn get_assoc<'guard>(
+    fn lookup<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
         key: TaggedScopedPtr,

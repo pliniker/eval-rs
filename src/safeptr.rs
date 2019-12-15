@@ -186,4 +186,9 @@ impl TaggedCellPtr {
     pub fn is_nil(&self) -> bool {
         self.inner.get().is_nil()
     }
+
+    /// Set this pointer to nil
+    pub fn set_to_nil(&self) {
+        self.inner.set(TaggedPtr::nil())
+    }
 }
