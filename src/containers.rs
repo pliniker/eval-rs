@@ -115,7 +115,7 @@ pub trait HashIndexedAnyContainer {
     /// Remove an association by its key.
     fn dissoc<'guard>(
         &self,
-        mem: &'guard MutatorView,
+        guard: &'guard dyn MutatorScope,
         key: TaggedScopedPtr,
     ) -> Result<TaggedScopedPtr<'guard>, RuntimeError>;
 

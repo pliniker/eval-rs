@@ -1,9 +1,9 @@
 use stickyimmix::ArraySize;
 
-use crate::array::ArrayAny;
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{Container, IndexedAnyContainer, StackAnyContainer};
 use crate::error::{err_eval, RuntimeError};
+use crate::list::List;
 use crate::memory::{Mutator, MutatorView};
 use crate::pair::Pair;
 use crate::safeptr::{ScopedPtr, TaggedScopedPtr};
@@ -20,7 +20,7 @@ pub enum EvalStatus<'guard> {
 /// Execute the next instruction and return
 fn eval_next_instr<'guard>(
     mem: &'guard MutatorView,
-    stack: ScopedPtr<'guard, ArrayAny>,
+    stack: ScopedPtr<'guard, List>,
     instr: ScopedPtr<'guard, InstructionStream>,
 ) -> Result<EvalStatus<'guard>, RuntimeError> {
     let opcode = instr.get_next_opcode(mem)?;
@@ -156,7 +156,7 @@ fn eval_next_instr<'guard>(
 /// Given an InstructionStream, execute up to max_instr more instructions
 pub fn vm_eval_stream<'guard>(
     mem: &'guard MutatorView,
-    stack: ScopedPtr<'guard, ArrayAny>,
+    stack: ScopedPtr<'guard, List>,
     instr: ScopedPtr<'guard, InstructionStream>,
     max_instr: ArraySize,
 ) -> Result<EvalStatus<'guard>, RuntimeError> {
@@ -177,7 +177,7 @@ pub fn quick_vm_eval<'guard>(
 ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
     let stream = mem.alloc(InstructionStream::new(code))?;
 
-    let stack = mem.alloc(ArrayAny::with_capacity(mem, 256)?)?;
+    let stack = mem.alloc(List::with_capacity(mem, 256)?)?;
     for _ in 0..256 {
         stack.push(mem, mem.nil())?;
     }
@@ -204,7 +204,7 @@ impl Mutator for VMFactory {
 
     fn run(&self, mem: &MutatorView, _: Self::Input) -> Result<VM, RuntimeError> {
         // initialize stack to 256 nil registers
-        let stack = ArrayAny::with_capacity(mem, 256)?;
+        let stack = List::with_capacity(mem, 256)?;
         for index in 0..256 {
             stack.set(mem, index, mem.nil())?;
         }
@@ -215,7 +215,7 @@ impl Mutator for VMFactory {
 
 /// Mutator that implements the VM
 struct VM {
-    stack: ArrayAny,
+    stack: List,
 }
 
 impl Mutator for VM {

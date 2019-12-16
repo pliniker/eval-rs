@@ -3,11 +3,12 @@ use std::fmt;
 
 use stickyimmix::ArraySize;
 
-use crate::array::{ArrayAny, ArrayU32};
+use crate::array::ArrayU32;
 use crate::containers::{
     Container, IndexedAnyContainer, IndexedContainer, StackAnyContainer, StackContainer,
 };
 use crate::error::{err_eval, RuntimeError};
+use crate::list::List;
 use crate::memory::MutatorView;
 use crate::printer::Print;
 use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr, TaggedScopedPtr};
@@ -108,7 +109,7 @@ pub type Code = ArrayU32;
 
 /// Literals are stored in a separate list of machine-word-width pointers.
 /// This is also not the most efficient scheme but it is easy to work with.
-pub type Literals = ArrayAny;
+pub type Literals = List;
 
 /// Byte code consists of the code and any literals used.
 pub struct ByteCode {

@@ -4,12 +4,14 @@ use stickyimmix::{
     AllocHeader, AllocObject, AllocRaw, AllocTypeId, ArraySize, Mark, RawPtr, SizeClass,
 };
 
-use crate::array::{ArrayAny, ArrayU32, ArrayU8};
+use crate::array::{ArrayU32, ArrayU8};
 use crate::bytecode::{ByteCode, InstructionStream};
+use crate::list::List;
 use crate::memory::HeapStorage;
+use crate::number::NumberObject;
 use crate::pair::Pair;
 use crate::pointerops::{AsNonNull, Tagged};
-use crate::primitives::{NumberObject, Symbol};
+use crate::symbol::Symbol;
 use crate::taggedptr::FatPtr;
 
 /// Recognized heap-allocated types.
@@ -21,7 +23,7 @@ pub enum TypeList {
     Symbol,
     NumberObject,
     Array, // type id for array backing bytes
-    ArrayAny,
+    List,
     ArrayU8,
     ArrayU32,
     ByteCode,
@@ -51,7 +53,7 @@ impl ObjectHeader {
             TypeList::NumberObject => {
                 FatPtr::NumberObject(RawPtr::untag(object_addr.cast::<NumberObject>()))
             }
-            TypeList::ArrayAny => FatPtr::ArrayAny(RawPtr::untag(object_addr.cast::<ArrayAny>())),
+            TypeList::List => FatPtr::List(RawPtr::untag(object_addr.cast::<List>())),
 
             _ => panic!("Invalid ObjectHeader type tag {:?}!", self.type_id),
         }
@@ -118,7 +120,7 @@ macro_rules! declare_allocobject {
 declare_allocobject!(Symbol, Symbol);
 declare_allocobject!(Pair, Pair);
 declare_allocobject!(NumberObject, NumberObject);
-declare_allocobject!(ArrayAny, ArrayAny);
+declare_allocobject!(List, List);
 declare_allocobject!(ArrayU8, ArrayU8);
 declare_allocobject!(ArrayU32, ArrayU32);
 declare_allocobject!(ByteCode, ByteCode);

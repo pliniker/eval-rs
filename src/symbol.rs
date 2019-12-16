@@ -1,14 +1,12 @@
-/// Native runtime types
+/// A Symbol type
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::slice;
 use std::str;
 
-use crate::array::Array;
-use crate::containers::{Container, IndexedAnyContainer};
 use crate::hashable::Hashable;
 use crate::printer::Print;
-use crate::safeptr::{MutatorScope, TaggedCellPtr};
+use crate::safeptr::MutatorScope;
 
 /// A Symbol is a unique object that has a unique name string. The backing storage for the
 /// underlying str data must have a lifetime of at least that of the Symbol instance to
@@ -53,21 +51,5 @@ impl Print for Symbol {
 impl Hashable for Symbol {
     fn hash<'guard, H: Hasher>(&self, guard: &'guard dyn MutatorScope, h: &mut H) {
         self.as_str(guard).hash(h)
-    }
-}
-
-/// TODO A heap-allocated number
-pub struct NumberObject {
-    value: Array<u64>,
-}
-
-impl Print for NumberObject {
-    fn print<'guard>(
-        &self,
-        _guard: &'guard dyn MutatorScope,
-        f: &mut fmt::Formatter,
-    ) -> fmt::Result {
-        // TODO
-        write!(f, "NumberObject(nan)")
     }
 }

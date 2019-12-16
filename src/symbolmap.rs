@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use stickyimmix::{AllocRaw, RawPtr};
 
 use crate::arena::Arena;
-use crate::primitives::Symbol;
+use crate::symbol::Symbol;
 
 /// A mapping of symbol names (Strings) to Symbol pointers. Only one copy of the symbol
 /// name String is kept; a Symbol resides in managed memory with a raw pointer to the

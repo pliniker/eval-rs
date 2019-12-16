@@ -1,7 +1,6 @@
 /// Basic mutable array type:
 ///
 ///  Array<T>
-///  ArrayAny = Array<TaggedCellPtr>
 ///  ArrayU32 = Array<u32>
 ///  ArrayU8 = Array<u8>
 use std::cell::Cell;
@@ -74,7 +73,7 @@ impl<T: Sized + Clone> Array<T> {
     }
 
     /// Bounds-checked reference-read
-    fn read_ref<'guard>(
+    pub fn read_ref<'guard>(
         &self,
         _guard: &'guard dyn MutatorScope,
         index: ArraySize,
@@ -153,30 +152,6 @@ impl<T: Sized + Clone> StackContainer<T> for Array<T> {
     }
 }
 
-impl StackAnyContainer for ArrayAny {
-    /// Push can trigger an underlying array resize, hence it requires the ability to allocate
-    fn push<'guard>(
-        &self,
-        mem: &'guard MutatorView,
-        item: TaggedScopedPtr<'guard>,
-    ) -> Result<(), RuntimeError> {
-        Ok(StackContainer::<TaggedCellPtr>::push(
-            self,
-            mem,
-            TaggedCellPtr::new_with(item),
-        )?)
-    }
-
-    /// Pop returns None if the container is empty, otherwise moves the last item of the array
-    /// out to the caller.
-    fn pop<'guard>(
-        &self,
-        guard: &'guard dyn MutatorScope,
-    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-        Ok(StackContainer::<TaggedCellPtr>::pop(self, guard)?.get(guard))
-    }
-}
-
 impl<T: Sized + Clone> IndexedContainer<T> for Array<T> {
     /// Return a copy of the object at the given index. Bounds-checked.
     fn get<'guard>(
@@ -196,72 +171,6 @@ impl<T: Sized + Clone> IndexedContainer<T> for Array<T> {
     ) -> Result<(), RuntimeError> {
         self.write(guard, index, item)?;
         Ok(())
-    }
-}
-
-impl IndexedAnyContainer for ArrayAny {
-    /// Return a pointer to the object at the given index. Bounds-checked.
-    fn get<'guard>(
-        &self,
-        guard: &'guard dyn MutatorScope,
-        index: ArraySize,
-    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-        Ok(self.read_ref(guard, index)?.get(guard))
-    }
-
-    /// Set the object pointer at the given index. Bounds-checked.
-    fn set<'guard>(
-        &self,
-        guard: &'guard dyn MutatorScope,
-        index: ArraySize,
-        item: TaggedScopedPtr<'guard>,
-    ) -> Result<(), RuntimeError> {
-        self.read_ref(guard, index)?.set(item);
-        Ok(())
-    }
-}
-
-impl ContainerFromPairList for ArrayAny {
-    fn from_pair_list<'guard>(
-        &self,
-        mem: &'guard MutatorView,
-        pair_list: TaggedScopedPtr<'guard>,
-    ) -> Result<(), RuntimeError> {
-        self.length.set(0);
-
-        let mut head = pair_list;
-        while let Value::Pair(p) = *head {
-            StackAnyContainer::push(self, mem, p.first.get(mem))?;
-            head = p.second.get(mem);
-        }
-
-        Ok(())
-    }
-}
-
-/// Array type that can contain any other object
-pub type ArrayAny = Array<TaggedCellPtr>;
-
-impl Print for ArrayAny {
-    fn print<'guard>(
-        &self,
-        guard: &'guard dyn MutatorScope,
-        f: &mut fmt::Formatter,
-    ) -> fmt::Result {
-        write!(f, "[")?;
-
-        for i in 0..self.length() {
-            if i > 1 {
-                write!(f, ", ")?;
-            }
-
-            let ptr =
-                IndexedAnyContainer::get(self, guard, i).expect("Failed to read ptr from array");
-
-            fmt::Display::fmt(&ptr.value(), f)?;
-        }
-
-        write!(f, "]")
     }
 }
 
@@ -291,6 +200,93 @@ impl Print for ArrayU32 {
     }
 }
 
+impl StackAnyContainer for Array<TaggedCellPtr> {
+    /// Push can trigger an underlying array resize, hence it requires the ability to allocate
+    fn push<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        item: TaggedScopedPtr<'guard>,
+    ) -> Result<(), RuntimeError> {
+        Ok(StackContainer::<TaggedCellPtr>::push(
+            self,
+            mem,
+            TaggedCellPtr::new_with(item),
+        )?)
+    }
+
+    /// Pop returns None if the container is empty, otherwise moves the last item of the array
+    /// out to the caller.
+    fn pop<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
+        Ok(StackContainer::<TaggedCellPtr>::pop(self, guard)?.get(guard))
+    }
+}
+
+impl IndexedAnyContainer for Array<TaggedCellPtr> {
+    /// Return a pointer to the object at the given index. Bounds-checked.
+    fn get<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        index: ArraySize,
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
+        Ok(self.read_ref(guard, index)?.get(guard))
+    }
+
+    /// Set the object pointer at the given index. Bounds-checked.
+    fn set<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        index: ArraySize,
+        item: TaggedScopedPtr<'guard>,
+    ) -> Result<(), RuntimeError> {
+        self.read_ref(guard, index)?.set(item);
+        Ok(())
+    }
+}
+
+impl ContainerFromPairList for Array<TaggedCellPtr> {
+    fn from_pair_list<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        pair_list: TaggedScopedPtr<'guard>,
+    ) -> Result<(), RuntimeError> {
+        self.length.set(0);
+
+        let mut head = pair_list;
+        while let Value::Pair(p) = *head {
+            StackAnyContainer::push(self, mem, p.first.get(mem))?;
+            head = p.second.get(mem);
+        }
+
+        Ok(())
+    }
+}
+
+impl Print for Array<TaggedCellPtr> {
+    fn print<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
+        write!(f, "[")?;
+
+        for i in 0..self.length() {
+            if i > 1 {
+                write!(f, ", ")?;
+            }
+
+            let ptr =
+                IndexedAnyContainer::get(self, guard, i).expect("Failed to read ptr from array");
+
+            fmt::Display::fmt(&ptr.value(), f)?;
+        }
+
+        write!(f, "]")
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::{
@@ -300,7 +296,7 @@ mod test {
     use crate::error::{ErrorKind, RuntimeError};
     use crate::memory::{Memory, Mutator, MutatorView};
     use crate::pair::Pair;
-    use crate::primitives::ArrayAny;
+    use crate::safeptr::{TaggedCellPtr};
     use crate::taggedptr::Value;
 
     #[test]
@@ -389,7 +385,7 @@ mod test {
                 view: &MutatorView,
                 _input: Self::Input,
             ) -> Result<Self::Output, RuntimeError> {
-                let array: ArrayAny = Array::new();
+                let array: Array<TaggedCellPtr> = Array::new();
                 let array = view.alloc(array)?;
 
                 for _ in 0..12 {
@@ -423,7 +419,7 @@ mod test {
                 view: &MutatorView,
                 _input: Self::Input,
             ) -> Result<Self::Output, RuntimeError> {
-                let array: ArrayAny = Array::with_capacity(view, 256)?;
+                let array: Array<TaggedCellPtr> = Array::with_capacity(view, 256)?;
 
                 let ptr_before = array.data.get().as_ptr();
 
@@ -467,7 +463,7 @@ mod test {
                 view: &MutatorView,
                 _input: Self::Input,
             ) -> Result<Self::Output, RuntimeError> {
-                let array: ArrayAny = Array::new();
+                let array: Array<TaggedCellPtr> = Array::new();
                 let array = view.alloc(array)?;
 
                 let pair = Pair::new();

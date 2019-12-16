@@ -24,6 +24,7 @@ struct DictItem {
 }
 
 /// Internal entry representation, keeping copy of hash for the key
+/// Taken straight from http://craftinginterpreters.com/hash-tables.html
 impl DictItem {
     fn blank() -> DictItem {
         DictItem {
@@ -35,48 +36,27 @@ impl DictItem {
 }
 
 /// A mutable Dict key/value associative data structure.
+/// TODO: resizing, deleting with tombstone values
 struct Dict {
     length: Cell<ArraySize>,
     data: Cell<RawArray<DictItem>>,
 }
 
 impl Dict {
-    /// Return a bounds-checked pointer to the entry at the given index
-    fn get_offset(&self, index: ArraySize) -> Result<*mut DictItem, RuntimeError> {
-        let data = self.data.get();
-
-        if index >= data.capacity() {
-            Err(RuntimeError::new(ErrorKind::BoundsError))
-        } else {
-            let ptr = data
-                .as_ptr()
-                .ok_or(RuntimeError::new(ErrorKind::BoundsError))?;
-
-            let dest_ptr = unsafe { ptr.offset(index as isize) as *mut DictItem };
-
-            Ok(dest_ptr)
-        }
-    }
-
-    /// Return a bounts-checked mutable reference to the entyr at the given index
-    fn get_item_ref<'guard>(
-        &self,
-        _guard: &'guard dyn MutatorScope,
-        index: ArraySize,
-    ) -> Result<&'guard mut DictItem, RuntimeError> {
-        Ok(unsafe { &mut *self.get_offset(index)? })
-    }
-
     /// Given a key, generate the hash and search for an entry that either matches this hash
     /// or the next available blank entry.
-    /// Cribbed from http://craftinginterpreters.com/hash-tables.html
     fn find_entry<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
         key: TaggedScopedPtr
     ) -> Result<(&'guard mut DictItem, u64), RuntimeError> {
-        // the inefficiency of my implementation is offensive but for now...
+        // get raw pointer to base of array
+        let data = self.data.get();
+        let ptr = data
+            .as_ptr()
+            .ok_or(RuntimeError::new(ErrorKind::BoundsError))?;
 
+        // hash the key
         let mut hasher = FnvHasher::default();
         match *key {
             Value::Symbol(s) => s.hash(guard, &mut hasher),
@@ -84,11 +64,10 @@ impl Dict {
         }
         let hash = hasher.finish();
 
-        let data = self.data.get();
+        // find the next available entry slot
         let mut index = (hash % data.capacity() as u64) as ArraySize;
-
         loop {
-            let mut entry = self.get_item_ref(guard, index)?;
+            let entry = unsafe { &mut *(ptr.offset(index as isize) as *mut DictItem) as &mut DictItem };
 
             if entry.hash == hash || entry.key.is_nil() {
                 return Ok((entry, hash))
@@ -98,15 +77,29 @@ impl Dict {
         }
     }
 
+    /// Scale capacity up if needed
+    fn adjust_capacity<'guard>(
+        &self,
+        guard: &'guard MutatorView
+    ) -> Result<(), RuntimeError> {
+        unimplemented!()
+    }
+
+    /// Reset all slots to a blank entry
     fn fill_with_blank_entries<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
     ) -> Result<(), RuntimeError> {
         let data = self.data.get();
+        let ptr = data
+            .as_ptr()
+            .ok_or(RuntimeError::new(ErrorKind::BoundsError))?;
+
         let blank_entry = DictItem::blank();
 
         for index in 0..data.capacity() {
-            *self.get_item_ref(guard, index)? = blank_entry.clone();
+            let entry = unsafe { &mut *(ptr.offset(index as isize) as *mut DictItem) as &mut DictItem };
+            *entry = blank_entry.clone();
         }
 
         Ok(())
@@ -136,6 +129,7 @@ impl Container<DictItem> for Dict {
     }
 
     fn clear<'guard>(&self, mem: &'guard MutatorView) -> Result<(), RuntimeError> {
+        self.fill_with_blank_entries(mem)?;
         self.length.set(0);
         Ok(())
     }
@@ -152,7 +146,7 @@ impl HashIndexedAnyContainer for Dict {
         guard: &'guard dyn MutatorScope,
         key: TaggedScopedPtr,
     ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-        let (mut entry, hash) = self.find_entry(guard, key)?;
+        let (entry, hash) = self.find_entry(guard, key)?;
 
         if !entry.key.is_nil() {
             Ok(entry.value.get(guard))
@@ -167,7 +161,7 @@ impl HashIndexedAnyContainer for Dict {
         key: TaggedScopedPtr<'guard>,
         value: TaggedScopedPtr<'guard>,
     ) -> Result<(), RuntimeError> {
-        let (mut entry, hash) = self.find_entry(mem, key)?;
+        let (entry, hash) = self.find_entry(mem, key)?;
 
         if entry.key.is_nil() {
             self.length.set(self.length.get() + 1);
@@ -182,10 +176,10 @@ impl HashIndexedAnyContainer for Dict {
 
     fn dissoc<'guard>(
         &self,
-        mem: &'guard MutatorView,
+        guard: &'guard dyn MutatorScope,
         key: TaggedScopedPtr,
     ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-        let (mut entry, hash) = self.find_entry(mem, key)?;
+        let (entry, hash) = self.find_entry(guard, key)?;
 
         if entry.key.is_nil() {
             return Err(RuntimeError::new(ErrorKind::KeyError))
@@ -194,7 +188,7 @@ impl HashIndexedAnyContainer for Dict {
         self.length.set(self.length.get() - 1);
         entry.key.set_to_nil();
 
-        Ok(entry.value.get(mem))
+        Ok(entry.value.get(guard))
     }
 
     fn exists<'guard>(
@@ -202,8 +196,8 @@ impl HashIndexedAnyContainer for Dict {
         guard: &'guard dyn MutatorScope,
         key: TaggedScopedPtr,
     ) -> Result<bool, RuntimeError> {
-
-        Ok(true)
+        let (entry, _) = self.find_entry(guard, key)?;
+        Ok(!entry.key.is_nil())
     }
 }
 
@@ -213,6 +207,6 @@ mod test {
     use crate::error::{ErrorKind, RuntimeError};
     use crate::memory::{Memory, Mutator, MutatorView};
     use crate::pair::Pair;
-    use crate::primitives::ArrayAny;
+    use crate::list::List;
     use crate::taggedptr::Value;
 }
