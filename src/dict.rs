@@ -1,11 +1,12 @@
-/// Basic mutable dict type:
+/// Basic mutable dict type
+/// Implemented from http://craftinginterpreters.com/hash-tables.html
 use std::cell::Cell;
 use std::hash::Hasher;
 
 use fnv::FnvHasher;
 use stickyimmix::ArraySize;
 
-use crate::containers::{Container, ContainerFromPairList, HashIndexedAnyContainer};
+use crate::containers::{Container, HashIndexedAnyContainer};
 use crate::error::{ErrorKind, RuntimeError};
 use crate::hashable::Hashable;
 use crate::memory::MutatorView;
@@ -16,6 +17,7 @@ use crate::taggedptr::Value;
 // max load factor before resizing the table
 const LOAD_FACTOR: f32 = 0.75;
 
+/// Internal entry representation, keeping copy of hash for the key
 #[derive(Clone)]
 struct DictItem {
     key: TaggedCellPtr,
@@ -23,8 +25,6 @@ struct DictItem {
     hash: u64,
 }
 
-/// Internal entry representation, keeping copy of hash for the key
-/// Taken straight from http://craftinginterpreters.com/hash-tables.html
 impl DictItem {
     fn blank() -> DictItem {
         DictItem {
@@ -80,7 +80,7 @@ impl Dict {
     /// Scale capacity up if needed
     fn adjust_capacity<'guard>(
         &self,
-        guard: &'guard MutatorView
+        _guard: &'guard MutatorView
     ) -> Result<(), RuntimeError> {
         unimplemented!()
     }
@@ -88,7 +88,7 @@ impl Dict {
     /// Reset all slots to a blank entry
     fn fill_with_blank_entries<'guard>(
         &self,
-        guard: &'guard dyn MutatorScope,
+        _guard: &'guard dyn MutatorScope,
     ) -> Result<(), RuntimeError> {
         let data = self.data.get();
         let ptr = data
@@ -146,7 +146,7 @@ impl HashIndexedAnyContainer for Dict {
         guard: &'guard dyn MutatorScope,
         key: TaggedScopedPtr,
     ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-        let (entry, hash) = self.find_entry(guard, key)?;
+        let (entry, _) = self.find_entry(guard, key)?;
 
         if !entry.key.is_nil() {
             Ok(entry.value.get(guard))
@@ -179,7 +179,7 @@ impl HashIndexedAnyContainer for Dict {
         guard: &'guard dyn MutatorScope,
         key: TaggedScopedPtr,
     ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-        let (entry, hash) = self.find_entry(guard, key)?;
+        let (entry, _) = self.find_entry(guard, key)?;
 
         if entry.key.is_nil() {
             return Err(RuntimeError::new(ErrorKind::KeyError))
@@ -203,10 +203,199 @@ impl HashIndexedAnyContainer for Dict {
 
 #[cfg(test)]
 mod test {
-    use super::{Container, ContainerFromPairList, Dict, HashIndexedAnyContainer};
+    use super::{Container, Dict, HashIndexedAnyContainer};
     use crate::error::{ErrorKind, RuntimeError};
     use crate::memory::{Memory, Mutator, MutatorView};
     use crate::pair::Pair;
-    use crate::list::List;
     use crate::taggedptr::Value;
+
+    #[test]
+    fn dict_assoc_lookup() {
+        let mem = Memory::new();
+
+        struct Test {}
+        impl Mutator for Test {
+            type Input = ();
+            type Output = ();
+
+            fn run(
+                &self,
+                mem: &MutatorView,
+                _input: Self::Input,
+            ) -> Result<Self::Output, RuntimeError> {
+                let dict = Dict::with_capacity(mem, 256)?;
+
+                let key = mem.lookup_sym("foo");
+                let val = mem.lookup_sym("bar");
+
+                dict.assoc(mem, key, val)?;
+
+                let lookup = dict.lookup(mem, key)?;
+
+                assert!(lookup == val);
+
+                Ok(())
+            }
+        }
+
+        let test = Test {};
+        mem.mutate(&test, ()).unwrap();
+    }
+
+    #[test]
+    fn dict_lookup_fail() {
+        let mem = Memory::new();
+
+        struct Test {}
+        impl Mutator for Test {
+            type Input = ();
+            type Output = ();
+
+            fn run(
+                &self,
+                mem: &MutatorView,
+                _input: Self::Input,
+            ) -> Result<Self::Output, RuntimeError> {
+                let dict = Dict::with_capacity(mem, 256)?;
+
+                let key = mem.lookup_sym("foo");
+
+                let lookup = dict.lookup(mem, key);
+
+                match lookup {
+                    Ok(_) => panic!("Key should not have been found!"),
+                    Err(e) => assert!(*e.error_kind() == ErrorKind::KeyError)
+                }
+
+                Ok(())
+            }
+        }
+
+        let test = Test {};
+        mem.mutate(&test, ()).unwrap();
+    }
+
+    #[test]
+    fn dict_dissoc_lookup() {
+        let mem = Memory::new();
+
+        struct Test {}
+        impl Mutator for Test {
+            type Input = ();
+            type Output = ();
+
+            fn run(
+                &self,
+                mem: &MutatorView,
+                _input: Self::Input,
+            ) -> Result<Self::Output, RuntimeError> {
+                let dict = Dict::with_capacity(mem, 256)?;
+
+                let key = mem.lookup_sym("foo");
+                let val = mem.lookup_sym("bar");
+
+                dict.assoc(mem, key, val)?;
+
+                let value = dict.lookup(mem, key)?;
+                assert!(value == val);
+
+                let value = dict.dissoc(mem, key)?;
+                assert!(value == val);
+
+                let result = dict.lookup(mem,key);
+                match result {
+                    Ok(_) => panic!("Key should not have been found!"),
+                    Err(e) => assert!(*e.error_kind() == ErrorKind::KeyError)
+                }
+
+                Ok(())
+            }
+        }
+
+        let test = Test {};
+        mem.mutate(&test, ()).unwrap();
+    }
+
+    #[test]
+    fn dict_assoc_lookup_256_in_capacity_256() {
+        let mem = Memory::new();
+
+        struct Test {}
+        impl Mutator for Test {
+            type Input = ();
+            type Output = ();
+
+            fn run(
+                &self,
+                mem: &MutatorView,
+                _input: Self::Input,
+            ) -> Result<Self::Output, RuntimeError> {
+                let dict = Dict::with_capacity(mem, 256)?;
+
+                for num in 0..256 {
+                    let key_name = format!("foo_{}", num);
+                    let key = mem.lookup_sym(&key_name);
+
+                    let val_name = format!("val_{}", num);
+                    let val = mem.lookup_sym(&val_name);
+
+                    dict.assoc(mem, key, val)?;
+                }
+
+                for num in 0..100 {
+                    let key_name = format!("foo_{}", num);
+                    let key = mem.lookup_sym(&key_name);
+
+                    let val_name = format!("val_{}", num);
+                    let val = mem.lookup_sym(&val_name);
+
+                    assert!(dict.exists(mem, key)?);
+
+                    let lookup = dict.lookup(mem, key)?;
+
+                    assert!(lookup == val);
+                }
+
+                Ok(())
+            }
+        }
+
+        let test = Test {};
+        mem.mutate(&test, ()).unwrap();
+    }
+
+    #[test]
+    fn dict_unhashable() {
+        let mem = Memory::new();
+
+        struct Test {}
+        impl Mutator for Test {
+            type Input = ();
+            type Output = ();
+
+            fn run(
+                &self,
+                mem: &MutatorView,
+                _input: Self::Input,
+            ) -> Result<Self::Output, RuntimeError> {
+                let dict = Dict::with_capacity(mem, 256)?;
+
+                // a Pair type does not implement Hashable
+                let key = mem.alloc_tagged(Pair::new())?;
+                let val = mem.lookup_sym("bar");
+
+                let result = dict.assoc(mem, key, val);
+
+                match result {
+                    Ok(_) => panic!("Key should not have been found!"),
+                    Err(e) => assert!(*e.error_kind() == ErrorKind::UnhashableError)
+                }
+
+                Ok(())
+            }
+        }
+
+        let test = Test {};
+        mem.mutate(&test, ()).unwrap();
+    }
 }
