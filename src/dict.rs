@@ -37,9 +37,12 @@ impl DictItem {
 }
 
 /// A mutable Dict key/value associative data structure.
-/// TODO: resizing, deleting with tombstone values
+/// TODO: resizing
 struct Dict {
+    /// Absolute number of valid enties
     length: Cell<ArraySize>,
+    /// Total count of entries and tombstones
+    count: Cell<ArraySize>,
     data: Cell<RawArray<DictItem>>,
 }
 
@@ -126,6 +129,7 @@ impl Container<DictItem> for Dict {
     fn new() -> Dict {
         Dict {
             length: Cell::new(0),
+            count: Cell::new(0),
             data: Cell::new(RawArray::new()),
         }
     }
@@ -136,6 +140,7 @@ impl Container<DictItem> for Dict {
     ) -> Result<Self, RuntimeError> {
         let dict = Dict {
             length: Cell::new(0),
+            count: Cell::new(0),
             data: Cell::new(RawArray::with_capacity(mem, capacity)?),
         };
 
@@ -147,6 +152,7 @@ impl Container<DictItem> for Dict {
     fn clear<'guard>(&self, mem: &'guard MutatorView) -> Result<(), RuntimeError> {
         self.fill_with_blank_entries(mem)?;
         self.length.set(0);
+        self.count.set(0);
         Ok(())
     }
 
@@ -181,6 +187,9 @@ impl HashIndexedAnyContainer for Dict {
 
         if entry.key.is_nil() {
             self.length.set(self.length.get() + 1);
+            if entry.hash == 0 {
+                self.count.set(self.count.get() + 1);
+            }
         }
 
         entry.key.set(key);
