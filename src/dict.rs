@@ -16,6 +16,7 @@ use crate::taggedptr::Value;
 
 // max load factor before resizing the table
 const LOAD_FACTOR: f32 = 0.75;
+const TOMBSTONE: u64 = 1;
 
 /// Internal entry representation, keeping copy of hash for the key
 #[derive(Clone)]
@@ -64,13 +65,28 @@ impl Dict {
         }
         let hash = hasher.finish();
 
-        // find the next available entry slot
+        // find the first available or matching entry slot
+        let mut tombstone: Option<&mut DictItem> = None;
         let mut index = (hash % data.capacity() as u64) as ArraySize;
         loop {
             let entry = unsafe { &mut *(ptr.offset(index as isize) as *mut DictItem) as &mut DictItem };
 
-            if entry.hash == hash || entry.key.is_nil() {
+            if entry.hash == TOMBSTONE && entry.key.is_nil() {
+                // this is a tombstone: save the first tombstone reference we find
+                if tombstone.is_none() {
+                    tombstone = Some(entry);
+                }
+            } else if entry.hash == hash {
+                // this is an exact match slot
                 return Ok((entry, hash))
+            } else if entry.key.is_nil() {
+                // this is a non-tombstone empty slot
+                if let Some(earlier_entry) = tombstone {
+                    // if we recorded a tombstone, return _that_ slot to be reused
+                    return Ok((earlier_entry, hash))
+                } else {
+                    return Ok((entry, hash))
+                }
             }
 
             index = (index + 1) % data.capacity();
@@ -186,7 +202,9 @@ impl HashIndexedAnyContainer for Dict {
         }
 
         self.length.set(self.length.get() - 1);
+        // tombstone combo
         entry.key.set_to_nil();
+        entry.hash = TOMBSTONE;
 
         Ok(entry.value.get(guard))
     }
