@@ -10,12 +10,12 @@ use crate::containers::{Container, HashIndexedAnyContainer};
 use crate::error::{ErrorKind, RuntimeError};
 use crate::hashable::Hashable;
 use crate::memory::MutatorView;
-use crate::rawarray::RawArray;
+use crate::rawarray::{default_array_growth, RawArray};
 use crate::safeptr::{MutatorScope, TaggedCellPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
 // max load factor before resizing the table
-const LOAD_FACTOR: f32 = 0.75;
+const LOAD_FACTOR: f32 = 0.80;
 const TOMBSTONE: u64 = 1;
 
 /// Internal entry representation, keeping copy of hash for the key
@@ -36,91 +36,117 @@ impl DictItem {
     }
 }
 
+/// Generate a hash value for a key
+fn hash_key<'guard>(guard: &'guard dyn MutatorScope, key: TaggedScopedPtr) -> Result<u64, RuntimeError> {
+    let mut hasher = FnvHasher::default();
+    match *key {
+        Value::Symbol(s) => s.hash(guard, &mut hasher),
+        _ => return Err(RuntimeError::new(ErrorKind::UnhashableError))
+    }
+    Ok(hasher.finish())
+}
+
+/// Given a key, generate the hash and search for an entry that either matches this hash
+/// or the next available blank entry.
+fn find_entry<'guard>(
+    _guard: &'guard dyn MutatorScope,
+    data: &RawArray<DictItem>,
+    hash: u64,
+) -> Result<&'guard mut DictItem, RuntimeError> {
+    // get raw pointer to base of array
+    let ptr = data
+        .as_ptr()
+        .ok_or(RuntimeError::new(ErrorKind::BoundsError))?;
+
+    // find the first available or matching entry slot
+    let mut tombstone: Option<&mut DictItem> = None;
+    let mut index = (hash % data.capacity() as u64) as ArraySize;
+    loop {
+        let entry = unsafe { &mut *(ptr.offset(index as isize) as *mut DictItem) as &mut DictItem };
+
+        if entry.hash == TOMBSTONE && entry.key.is_nil() {
+            // this is a tombstone: save the first tombstone reference we find
+            if tombstone.is_none() {
+                tombstone = Some(entry);
+            }
+        } else if entry.hash == hash {
+            // this is an exact match slot
+            return Ok(entry)
+        } else if entry.key.is_nil() {
+            // this is a non-tombstone empty slot
+            if let Some(earlier_entry) = tombstone {
+                // if we recorded a tombstone, return _that_ slot to be reused
+                return Ok(earlier_entry)
+            } else {
+                return Ok(entry)
+            }
+        }
+
+        index = (index + 1) % data.capacity();
+    }
+}
+
+/// Reset all slots to a blank entry
+fn fill_with_blank_entries<'guard>(
+    _guard: &'guard dyn MutatorScope,
+    data: &RawArray<DictItem>,
+) -> Result<(), RuntimeError> {
+    let ptr = data
+        .as_ptr()
+        .ok_or(RuntimeError::new(ErrorKind::BoundsError))?;
+
+    let blank_entry = DictItem::blank();
+
+    for index in 0..data.capacity() {
+        let entry = unsafe { &mut *(ptr.offset(index as isize) as *mut DictItem) as &mut DictItem };
+        *entry = blank_entry.clone();
+    }
+
+    Ok(())
+}
+
+/// Returns true if the dict has reached it's defined load factor and needs to be resized before inserting
+/// a new entry.
+fn needs_to_grow(used_entries: ArraySize, capacity: ArraySize) -> bool {
+    let ratio = (used_entries as f32) / (capacity as f32);
+    ratio > LOAD_FACTOR
+}
+
 /// A mutable Dict key/value associative data structure.
 /// TODO: resizing
 struct Dict {
-    /// Absolute number of valid enties
+    /// Number of items stored
     length: Cell<ArraySize>,
-    /// Total count of entries and tombstones
-    count: Cell<ArraySize>,
+    /// Total count of items plus tombstones
+    used_entries: Cell<ArraySize>,
+    /// Backing array for key/value entries
     data: Cell<RawArray<DictItem>>,
 }
 
 impl Dict {
-    /// Given a key, generate the hash and search for an entry that either matches this hash
-    /// or the next available blank entry.
-    fn find_entry<'guard>(
-        &self,
-        guard: &'guard dyn MutatorScope,
-        key: TaggedScopedPtr
-    ) -> Result<(&'guard mut DictItem, u64), RuntimeError> {
-        // get raw pointer to base of array
-        let data = self.data.get();
-        let ptr = data
-            .as_ptr()
-            .ok_or(RuntimeError::new(ErrorKind::BoundsError))?;
-
-        // hash the key
-        let mut hasher = FnvHasher::default();
-        match *key {
-            Value::Symbol(s) => s.hash(guard, &mut hasher),
-            _ => return Err(RuntimeError::new(ErrorKind::UnhashableError))
-        }
-        let hash = hasher.finish();
-
-        // find the first available or matching entry slot
-        let mut tombstone: Option<&mut DictItem> = None;
-        let mut index = (hash % data.capacity() as u64) as ArraySize;
-        loop {
-            let entry = unsafe { &mut *(ptr.offset(index as isize) as *mut DictItem) as &mut DictItem };
-
-            if entry.hash == TOMBSTONE && entry.key.is_nil() {
-                // this is a tombstone: save the first tombstone reference we find
-                if tombstone.is_none() {
-                    tombstone = Some(entry);
-                }
-            } else if entry.hash == hash {
-                // this is an exact match slot
-                return Ok((entry, hash))
-            } else if entry.key.is_nil() {
-                // this is a non-tombstone empty slot
-                if let Some(earlier_entry) = tombstone {
-                    // if we recorded a tombstone, return _that_ slot to be reused
-                    return Ok((earlier_entry, hash))
-                } else {
-                    return Ok((entry, hash))
-                }
-            }
-
-            index = (index + 1) % data.capacity();
-        }
-    }
-
     /// Scale capacity up if needed
-    fn adjust_capacity<'guard>(
+    fn grow_capacity<'guard>(
         &self,
-        _guard: &'guard MutatorView
-    ) -> Result<(), RuntimeError> {
-        unimplemented!()
-    }
-
-    /// Reset all slots to a blank entry
-    fn fill_with_blank_entries<'guard>(
-        &self,
-        _guard: &'guard dyn MutatorScope,
+        mem: &'guard MutatorView
     ) -> Result<(), RuntimeError> {
         let data = self.data.get();
         let ptr = data
             .as_ptr()
             .ok_or(RuntimeError::new(ErrorKind::BoundsError))?;
 
-        let blank_entry = DictItem::blank();
+        let new_capacity = default_array_growth(data.capacity())?;
 
-        for index in 0..data.capacity() {
+        let new_data = RawArray::<DictItem>::with_capacity(mem, new_capacity)?;
+
+        for index in 0 ..data.capacity() {
             let entry = unsafe { &mut *(ptr.offset(index as isize) as *mut DictItem) as &mut DictItem };
-            *entry = blank_entry.clone();
+            if !entry.key.is_nil() {
+                let new_entry = find_entry(mem, &new_data, entry.hash)?;
+                *new_entry = entry.clone();
+            }
         }
 
+        self.data.set(new_data);
         Ok(())
     }
 }
@@ -129,7 +155,7 @@ impl Container<DictItem> for Dict {
     fn new() -> Dict {
         Dict {
             length: Cell::new(0),
-            count: Cell::new(0),
+            used_entries: Cell::new(0),
             data: Cell::new(RawArray::new()),
         }
     }
@@ -140,19 +166,21 @@ impl Container<DictItem> for Dict {
     ) -> Result<Self, RuntimeError> {
         let dict = Dict {
             length: Cell::new(0),
-            count: Cell::new(0),
+            used_entries: Cell::new(0),
             data: Cell::new(RawArray::with_capacity(mem, capacity)?),
         };
 
-        dict.fill_with_blank_entries(mem)?;
+        let data = dict.data.get();
+        fill_with_blank_entries(mem, &data)?;
 
         Ok(dict)
     }
 
     fn clear<'guard>(&self, mem: &'guard MutatorView) -> Result<(), RuntimeError> {
-        self.fill_with_blank_entries(mem)?;
+        let data = self.data.get();
+        fill_with_blank_entries(mem, &data)?;
         self.length.set(0);
-        self.count.set(0);
+        self.used_entries.set(0);
         Ok(())
     }
 
@@ -168,7 +196,9 @@ impl HashIndexedAnyContainer for Dict {
         guard: &'guard dyn MutatorScope,
         key: TaggedScopedPtr,
     ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-        let (entry, _) = self.find_entry(guard, key)?;
+        let hash = hash_key(guard, key)?;
+        let data = self.data.get();
+        let entry = find_entry(guard, &data, hash)?;
 
         if !entry.key.is_nil() {
             Ok(entry.value.get(guard))
@@ -183,12 +213,19 @@ impl HashIndexedAnyContainer for Dict {
         key: TaggedScopedPtr<'guard>,
         value: TaggedScopedPtr<'guard>,
     ) -> Result<(), RuntimeError> {
-        let (entry, hash) = self.find_entry(mem, key)?;
+        let mut data = self.data.get();
+        if needs_to_grow(self.used_entries.get() + 1, data.capacity()) {
+            self.grow_capacity(mem)?;
+            data = self.data.get();
+        }
+
+        let hash = hash_key(mem, key)?;
+        let entry = find_entry(mem, &data, hash)?;
 
         if entry.key.is_nil() {
             self.length.set(self.length.get() + 1);
             if entry.hash == 0 {
-                self.count.set(self.count.get() + 1);
+                self.used_entries.set(self.used_entries.get() + 1);
             }
         }
 
@@ -204,7 +241,9 @@ impl HashIndexedAnyContainer for Dict {
         guard: &'guard dyn MutatorScope,
         key: TaggedScopedPtr,
     ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-        let (entry, _) = self.find_entry(guard, key)?;
+        let hash = hash_key(guard, key)?;
+        let data = self.data.get();
+        let entry = find_entry(guard, &data, hash)?;
 
         if entry.key.is_nil() {
             return Err(RuntimeError::new(ErrorKind::KeyError))
@@ -223,7 +262,9 @@ impl HashIndexedAnyContainer for Dict {
         guard: &'guard dyn MutatorScope,
         key: TaggedScopedPtr,
     ) -> Result<bool, RuntimeError> {
-        let (entry, _) = self.find_entry(guard, key)?;
+        let hash = hash_key(guard, key)?;
+        let data = self.data.get();
+        let entry = find_entry(guard, &data, hash)?;
         Ok(!entry.key.is_nil())
     }
 }
@@ -344,7 +385,9 @@ mod test {
     }
 
     #[test]
-    fn dict_assoc_lookup_256_in_capacity_256() {
+    fn dict_assoc_lookup_50_into_capacity_100() {
+        // this test should not require resizing the internal array, so should simply test that
+        // find_entry() is returning a valid entry for all inserted items
         let mem = Memory::new();
 
         struct Test {}
@@ -357,9 +400,9 @@ mod test {
                 mem: &MutatorView,
                 _input: Self::Input,
             ) -> Result<Self::Output, RuntimeError> {
-                let dict = Dict::with_capacity(mem, 256)?;
+                let dict = Dict::with_capacity(mem, 100)?;
 
-                for num in 0..256 {
+                for num in 0..50 {
                     let key_name = format!("foo_{}", num);
                     let key = mem.lookup_sym(&key_name);
 
@@ -369,7 +412,56 @@ mod test {
                     dict.assoc(mem, key, val)?;
                 }
 
-                for num in 0..100 {
+                for num in 0..50 {
+                    let key_name = format!("foo_{}", num);
+                    let key = mem.lookup_sym(&key_name);
+
+                    let val_name = format!("val_{}", num);
+                    let val = mem.lookup_sym(&val_name);
+
+                    assert!(dict.exists(mem, key)?);
+
+                    let lookup = dict.lookup(mem, key)?;
+
+                    assert!(lookup == val);
+                }
+
+                Ok(())
+            }
+        }
+
+        let test = Test {};
+        mem.mutate(&test, ()).unwrap();
+    }
+
+    #[test]
+    fn dict_assoc_lookup_500_into_capacity_20() {
+        // this test forces several resizings and should test the final state of the dict is as expected
+        let mem = Memory::new();
+
+        struct Test {}
+        impl Mutator for Test {
+            type Input = ();
+            type Output = ();
+
+            fn run(
+                &self,
+                mem: &MutatorView,
+                _input: Self::Input,
+            ) -> Result<Self::Output, RuntimeError> {
+                let dict = Dict::with_capacity(mem, 20)?;
+
+                for num in 0..500 {
+                    let key_name = format!("foo_{}", num);
+                    let key = mem.lookup_sym(&key_name);
+
+                    let val_name = format!("val_{}", num);
+                    let val = mem.lookup_sym(&val_name);
+
+                    dict.assoc(mem, key, val)?;
+                }
+
+                for num in 0..500 {
                     let key_name = format!("foo_{}", num);
                     let key = mem.lookup_sym(&key_name);
 
