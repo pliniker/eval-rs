@@ -484,6 +484,77 @@ mod test {
     }
 
     #[test]
+    fn dict_assoc_dissoc() {
+        // this test should not require resizing the internal array, so should simply test that
+        // find_entry() is returning a valid entry for all inserted items
+        let mem = Memory::new();
+
+        struct Test {}
+        impl Mutator for Test {
+            type Input = ();
+            type Output = ();
+
+            fn run(
+                &self,
+                mem: &MutatorView,
+                _input: Self::Input,
+            ) -> Result<Self::Output, RuntimeError> {
+                let dict = Dict::with_capacity(mem, 100)?;
+
+                for num in 0..50 {
+                    let key_name = format!("foo_{}", num);
+                    let key = mem.lookup_sym(&key_name);
+
+                    let val_name = format!("val_{}", num);
+                    let val = mem.lookup_sym(&val_name);
+
+                    dict.assoc(mem, key, val)?;
+                }
+
+                // delete every other key
+                for num in (0..50).step_by(2) {
+                    let key_name = format!("foo_{}", num);
+                    let key = mem.lookup_sym(&key_name);
+                    dict.dissoc(mem, key)?;
+                }
+
+                // add more stuff
+                for num in 0..20 {
+                    let key_name = format!("ignore_{}", num);
+                    let key = mem.lookup_sym(&key_name);
+
+                    let val_name = format!("val_{}", num);
+                    let val = mem.lookup_sym(&val_name);
+
+                    dict.assoc(mem, key, val)?;
+                }
+
+                // check that the originally inserted keys are discoverable or not as expected
+                for num in 0..50 {
+                    let key_name = format!("foo_{}", num);
+                    let key = mem.lookup_sym(&key_name);
+
+                    let val_name = format!("val_{}", num);
+                    let val = mem.lookup_sym(&val_name);
+
+                    if num % 2 == 0 {
+                        assert!(!dict.exists(mem, key)?);
+                    } else {
+                        assert!(dict.exists(mem, key)?);
+                        let lookup = dict.lookup(mem, key)?;
+                        assert!(lookup == val);
+                    }
+                }
+
+                Ok(())
+            }
+        }
+
+        let test = Test {};
+        mem.mutate(&test, ()).unwrap();
+    }
+
+    #[test]
     fn dict_unhashable() {
         let mem = Memory::new();
 
