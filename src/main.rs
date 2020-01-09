@@ -40,6 +40,7 @@ mod safeptr;
 mod symbol;
 mod symbolmap;
 mod taggedptr;
+mod text;
 mod vm;
 
 use crate::compiler::compile;

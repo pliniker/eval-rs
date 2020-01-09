@@ -37,11 +37,14 @@ impl DictItem {
 }
 
 /// Generate a hash value for a key
-fn hash_key<'guard>(guard: &'guard dyn MutatorScope, key: TaggedScopedPtr) -> Result<u64, RuntimeError> {
+fn hash_key<'guard>(
+    guard: &'guard dyn MutatorScope,
+    key: TaggedScopedPtr,
+) -> Result<u64, RuntimeError> {
     let mut hasher = FnvHasher::default();
     match *key {
         Value::Symbol(s) => s.hash(guard, &mut hasher),
-        _ => return Err(RuntimeError::new(ErrorKind::UnhashableError))
+        _ => return Err(RuntimeError::new(ErrorKind::UnhashableError)),
     }
     Ok(hasher.finish())
 }
@@ -71,14 +74,14 @@ fn find_entry<'guard>(
             }
         } else if entry.hash == hash {
             // this is an exact match slot
-            return Ok(entry)
+            return Ok(entry);
         } else if entry.key.is_nil() {
             // this is a non-tombstone empty slot
             if let Some(earlier_entry) = tombstone {
                 // if we recorded a tombstone, return _that_ slot to be reused
-                return Ok(earlier_entry)
+                return Ok(earlier_entry);
             } else {
-                return Ok(entry)
+                return Ok(entry);
             }
         }
 
@@ -125,10 +128,7 @@ struct Dict {
 
 impl Dict {
     /// Scale capacity up if needed
-    fn grow_capacity<'guard>(
-        &self,
-        mem: &'guard MutatorView
-    ) -> Result<(), RuntimeError> {
+    fn grow_capacity<'guard>(&self, mem: &'guard MutatorView) -> Result<(), RuntimeError> {
         let data = self.data.get();
         let ptr = data
             .as_ptr()
@@ -138,8 +138,9 @@ impl Dict {
 
         let new_data = RawArray::<DictItem>::with_capacity(mem, new_capacity)?;
 
-        for index in 0 ..data.capacity() {
-            let entry = unsafe { &mut *(ptr.offset(index as isize) as *mut DictItem) as &mut DictItem };
+        for index in 0..data.capacity() {
+            let entry =
+                unsafe { &mut *(ptr.offset(index as isize) as *mut DictItem) as &mut DictItem };
             if !entry.key.is_nil() {
                 let new_entry = find_entry(mem, &new_data, entry.hash)?;
                 *new_entry = entry.clone();
@@ -246,7 +247,7 @@ impl HashIndexedAnyContainer for Dict {
         let entry = find_entry(guard, &data, hash)?;
 
         if entry.key.is_nil() {
-            return Err(RuntimeError::new(ErrorKind::KeyError))
+            return Err(RuntimeError::new(ErrorKind::KeyError));
         }
 
         self.length.set(self.length.get() - 1);
@@ -332,7 +333,7 @@ mod test {
 
                 match lookup {
                     Ok(_) => panic!("Key should not have been found!"),
-                    Err(e) => assert!(*e.error_kind() == ErrorKind::KeyError)
+                    Err(e) => assert!(*e.error_kind() == ErrorKind::KeyError),
                 }
 
                 Ok(())
@@ -370,10 +371,10 @@ mod test {
                 let value = dict.dissoc(mem, key)?;
                 assert!(value == val);
 
-                let result = dict.lookup(mem,key);
+                let result = dict.lookup(mem, key);
                 match result {
                     Ok(_) => panic!("Key should not have been found!"),
-                    Err(e) => assert!(*e.error_kind() == ErrorKind::KeyError)
+                    Err(e) => assert!(*e.error_kind() == ErrorKind::KeyError),
                 }
 
                 Ok(())
@@ -578,7 +579,7 @@ mod test {
 
                 match result {
                     Ok(_) => panic!("Key should not have been found!"),
-                    Err(e) => assert!(*e.error_kind() == ErrorKind::UnhashableError)
+                    Err(e) => assert!(*e.error_kind() == ErrorKind::UnhashableError),
                 }
 
                 Ok(())

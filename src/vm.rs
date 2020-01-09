@@ -1,13 +1,16 @@
 use stickyimmix::ArraySize;
 
+use crate::array::Array;
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{Container, IndexedAnyContainer, StackAnyContainer};
 use crate::error::{err_eval, RuntimeError};
 use crate::list::List;
 use crate::memory::{Mutator, MutatorView};
 use crate::pair::Pair;
-use crate::safeptr::{ScopedPtr, TaggedScopedPtr};
+use crate::safeptr::{CellPtr, ScopedPtr, TaggedScopedPtr};
+use crate::symbol::Symbol;
 use crate::taggedptr::Value;
+use crate::text::Text;
 
 /// Control flow flags
 #[derive(PartialEq)]
@@ -195,30 +198,43 @@ pub fn quick_vm_eval<'guard>(
     Err(err_eval("Unexpected end of evaluation"))
 }
 
-/// Mutator that instantiates a VM
-struct VMFactory {}
+// TODO
+//
+// * Global environment (dict)
+// * Call frame stack
+// * Value stack
+// * Function calls
 
-impl Mutator for VMFactory {
-    type Input = ();
-    type Output = VM;
+#[derive(Clone)]
+struct Function {
+    arity: u8,
+    code: CellPtr<ByteCode>,
+    name: CellPtr<Text>,
+}
 
-    fn run(&self, mem: &MutatorView, _: Self::Input) -> Result<VM, RuntimeError> {
-        // initialize stack to 256 nil registers
-        let stack = List::with_capacity(mem, 256)?;
-        for index in 0..256 {
-            stack.set(mem, index, mem.nil())?;
-        }
-
-        Ok(VM { stack: stack })
-    }
+#[derive(Clone)]
+struct CallFrame {
+    function: CellPtr<Function>,
+    ip: ArraySize,
+    base: ArraySize,
 }
 
 /// Mutator that implements the VM
-struct VM {
-    stack: List,
+struct ReadEvalPrint {
+    value_stack: List,
+    frame_stack: Array<CallFrame>,
 }
 
-impl Mutator for VM {
+impl ReadEvalPrint {
+    pub fn new() -> ReadEvalPrint {
+        ReadEvalPrint {
+            value_stack: List::new(),
+            frame_stack: Array::new(),
+        }
+    }
+}
+
+impl Mutator for ReadEvalPrint {
     type Input = ByteCode;
     type Output = ();
 

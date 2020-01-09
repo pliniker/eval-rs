@@ -112,6 +112,7 @@ pub type Code = ArrayU32;
 pub type Literals = List;
 
 /// Byte code consists of the code and any literals used.
+#[derive(Clone)]
 pub struct ByteCode {
     code: Code,
     literals: Literals,

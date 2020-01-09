@@ -31,9 +31,9 @@ Partial Application:
  - Supplied parameters
 
 Coroutine:
- - Arity
- - ReEntry pointer
- - Stack with 1 Activation Record
+ - Next arity
+ - Activation Record
+ - Registers
 
 Activation Record Stack:
  - Closure definition pointer
