@@ -1,11 +1,10 @@
+use crate::array::ArraySize;
 use crate::bytecode::{ByteCode, Opcode, Register};
 use crate::error::{err_eval, RuntimeError};
 use crate::memory::MutatorView;
 use crate::pair::{get_one_from_pair_list, get_two_from_pair_list};
 use crate::safeptr::{ScopedPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
-
-use stickyimmix::ArraySize;
 
 struct Compiler {
     bytecode: ByteCode,

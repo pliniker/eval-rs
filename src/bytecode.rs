@@ -1,9 +1,7 @@
 use std::cell::Cell;
 use std::fmt;
 
-use stickyimmix::ArraySize;
-
-use crate::array::ArrayU32;
+use crate::array::{ArraySize, ArrayU32};
 use crate::containers::{
     Container, IndexedAnyContainer, IndexedContainer, StackAnyContainer, StackContainer,
 };

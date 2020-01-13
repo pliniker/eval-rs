@@ -1,6 +1,4 @@
-use stickyimmix::ArraySize;
-
-use crate::array::Array;
+use crate::array::{Array, ArraySize};
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{Container, IndexedAnyContainer, StackAnyContainer};
 use crate::error::{err_eval, RuntimeError};

@@ -7,7 +7,7 @@ use std::cell::Cell;
 use std::fmt;
 use std::ptr::{read, write};
 
-use stickyimmix::ArraySize;
+pub use stickyimmix::ArraySize;
 
 use crate::containers::{
     Container, ContainerFromPairList, IndexedAnyContainer, IndexedContainer, StackAnyContainer,

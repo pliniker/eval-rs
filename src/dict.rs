@@ -4,13 +4,12 @@ use std::cell::Cell;
 use std::hash::Hasher;
 
 use fnv::FnvHasher;
-use stickyimmix::ArraySize;
 
 use crate::containers::{Container, HashIndexedAnyContainer};
 use crate::error::{ErrorKind, RuntimeError};
 use crate::hashable::Hashable;
 use crate::memory::MutatorView;
-use crate::rawarray::{default_array_growth, RawArray};
+use crate::rawarray::{default_array_growth, ArraySize, RawArray};
 use crate::safeptr::{MutatorScope, TaggedCellPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
