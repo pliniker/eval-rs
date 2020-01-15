@@ -18,7 +18,7 @@ pub struct Text {
 }
 
 impl Text {
-    /// The originating &str must be owned by a SymbolMap hash table
+    /// Create an empty Text string object
     pub fn new_empty() -> Text {
         Text {
             content: RawArray::new(),
@@ -56,6 +56,7 @@ impl Text {
         }
     }
 
+    /// Using scope guarded access, get the Text content as a &str slice
     pub fn as_str<'guard>(&self, _guard: &'guard dyn MutatorScope) -> &str {
         unsafe { self.unguarded_as_str() }
     }

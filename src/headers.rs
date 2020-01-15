@@ -13,6 +13,7 @@ use crate::pair::Pair;
 use crate::pointerops::{AsNonNull, Tagged};
 use crate::symbol::Symbol;
 use crate::taggedptr::FatPtr;
+use crate::text::Text;
 
 /// Recognized heap-allocated types.
 /// This should represent every type native to the runtime with the exception of tagged pointer inline value types.
@@ -22,6 +23,7 @@ pub enum TypeList {
     Pair,
     Symbol,
     NumberObject,
+    Text,
     Array, // type id for array backing bytes
     List,
     ArrayU8,
@@ -53,6 +55,7 @@ impl ObjectHeader {
             TypeList::NumberObject => {
                 FatPtr::NumberObject(RawPtr::untag(object_addr.cast::<NumberObject>()))
             }
+            TypeList::Text => FatPtr::Text(RawPtr::untag(object_addr.cast::<Text>())),
             TypeList::List => FatPtr::List(RawPtr::untag(object_addr.cast::<List>())),
 
             _ => panic!("Invalid ObjectHeader type tag {:?}!", self.type_id),
@@ -120,6 +123,7 @@ macro_rules! declare_allocobject {
 declare_allocobject!(Symbol, Symbol);
 declare_allocobject!(Pair, Pair);
 declare_allocobject!(NumberObject, NumberObject);
+declare_allocobject!(Text, Text);
 declare_allocobject!(List, List);
 declare_allocobject!(ArrayU8, ArrayU8);
 declare_allocobject!(ArrayU32, ArrayU32);

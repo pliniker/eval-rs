@@ -26,6 +26,7 @@ use crate::pointerops::{get_tag, ScopedRef, Tagged, TAG_NUMBER, TAG_OBJECT, TAG_
 use crate::printer::Print;
 use crate::safeptr::MutatorScope;
 use crate::symbol::Symbol;
+use crate::text::Text;
 
 /// A safe interface to GC-heap managed objects. The `'scope` lifetime must be a safe lifetime for
 /// the GC not to move or collect the referenced object.
@@ -37,6 +38,7 @@ pub enum Value<'scope> {
     Symbol(&'scope Symbol),
     Number(isize),
     NumberObject(&'scope NumberObject),
+    Text(&'scope Text),
     List(&'scope List),
     ArrayU8(&'scope ArrayU8),
     ArrayU32(&'scope ArrayU32),
@@ -51,6 +53,7 @@ impl<'scope> fmt::Display for Value<'scope> {
             Value::Pair(p) => p.print(self, f),
             Value::Symbol(s) => s.print(self, f),
             Value::Number(n) => write!(f, "{}", *n),
+            Value::Text(t) => t.print(self, f),
             Value::List(a) => a.print(self, f),
             Value::ArrayU8(a) => a.print(self, f),
             Value::ArrayU32(a) => a.print(self, f),
@@ -67,6 +70,7 @@ impl<'scope> fmt::Debug for Value<'scope> {
             Value::Pair(p) => p.debug(self, f),
             Value::Symbol(s) => s.debug(self, f),
             Value::Number(n) => write!(f, "{}", *n),
+            Value::Text(t) => t.debug(self, f),
             Value::List(a) => a.debug(self, f),
             Value::ArrayU8(a) => a.debug(self, f),
             Value::ArrayU32(a) => a.debug(self, f),
@@ -87,6 +91,7 @@ pub enum FatPtr {
     Symbol(RawPtr<Symbol>),
     Number(isize),
     NumberObject(RawPtr<NumberObject>),
+    Text(RawPtr<Text>),
     List(RawPtr<List>),
     ArrayU8(RawPtr<ArrayU8>),
     ArrayU32(RawPtr<ArrayU32>),
@@ -103,6 +108,7 @@ impl FatPtr {
             FatPtr::Symbol(raw_ptr) => Value::Symbol(raw_ptr.scoped_ref(guard)),
             FatPtr::Number(num) => Value::Number(*num),
             FatPtr::NumberObject(raw_ptr) => Value::NumberObject(raw_ptr.scoped_ref(guard)),
+            FatPtr::Text(raw_ptr) => Value::Text(raw_ptr.scoped_ref(guard)),
             FatPtr::List(raw_ptr) => Value::List(raw_ptr.scoped_ref(guard)),
             FatPtr::ArrayU8(raw_ptr) => Value::ArrayU8(raw_ptr.scoped_ref(guard)),
             FatPtr::ArrayU32(raw_ptr) => Value::ArrayU32(raw_ptr.scoped_ref(guard)),
@@ -125,6 +131,7 @@ macro_rules! fatptr_from_rawptr {
 fatptr_from_rawptr!(Pair, Pair);
 fatptr_from_rawptr!(Symbol, Symbol);
 fatptr_from_rawptr!(NumberObject, NumberObject);
+fatptr_from_rawptr!(Text, Text);
 fatptr_from_rawptr!(List, List);
 fatptr_from_rawptr!(ArrayU8, ArrayU8);
 fatptr_from_rawptr!(ArrayU32, ArrayU32);
@@ -235,6 +242,7 @@ impl From<FatPtr> for TaggedPtr {
             FatPtr::Symbol(raw) => TaggedPtr::symbol(raw),
             FatPtr::Pair(raw) => TaggedPtr::pair(raw),
             FatPtr::NumberObject(raw) => TaggedPtr::object(raw),
+            FatPtr::Text(raw) => TaggedPtr::object(raw),
             FatPtr::List(raw) => TaggedPtr::object(raw),
             FatPtr::ArrayU8(raw) => TaggedPtr::object(raw),
             FatPtr::ArrayU32(raw) => TaggedPtr::object(raw),
