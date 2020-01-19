@@ -110,7 +110,7 @@ mod test {
     }
 
     #[test]
-    fn text_nonempty_string() {
+    fn text_from_static_str() {
         let mem = Memory::new();
 
         struct Test {}
@@ -125,6 +125,34 @@ mod test {
             ) -> Result<Self::Output, RuntimeError> {
                 let expected = "こんにちは";
                 let text = Text::new_from_str(view, expected)?;
+                let got = text.as_str(view);
+
+                assert!(got == expected);
+
+                Ok(())
+            }
+        }
+
+        let test = Test {};
+        mem.mutate(&test, ()).unwrap();
+    }
+
+    #[test]
+    fn text_from_string() {
+        let mem = Memory::new();
+
+        struct Test {}
+        impl Mutator for Test {
+            type Input = ();
+            type Output = ();
+
+            fn run(
+                &self,
+                view: &MutatorView,
+                _input: Self::Input,
+            ) -> Result<Self::Output, RuntimeError> {
+                let expected = String::from("こんにちは");
+                let text = Text::new_from_str(view, &expected)?;
                 let got = text.as_str(view);
 
                 assert!(got == expected);

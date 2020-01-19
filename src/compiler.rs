@@ -66,6 +66,7 @@ impl Compiler {
                 "cons" => self.push_op3(mem, Opcode::CONS, params),
                 "cond" => self.compile_apply_cond(mem, params),
                 "eq" => self.push_op3(mem, Opcode::EQ, params),
+                "defn" => self.compile_defn(mem, params),
 
                 _ => Err(err_eval("Symbol is not bound to a function")),
             },
@@ -141,6 +142,16 @@ impl Compiler {
         }
 
         Ok(result)
+    }
+
+    fn compile_defn<'guard>(
+        &mut self,
+        mem: &'guard MutatorView,
+        params: TaggedScopedPtr<'guard>,
+    ) -> Result<Register, RuntimeError> {
+        // Expected:
+        // (defn funcion-name (param list) (expresion))
+        Ok(0)
     }
 
     fn push_op0<'guard>(

@@ -1,6 +1,7 @@
 use crate::array::{Array, ArraySize};
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{Container, IndexedAnyContainer, StackAnyContainer};
+use crate::dict::Dict;
 use crate::error::{err_eval, RuntimeError};
 use crate::list::List;
 use crate::memory::{Mutator, MutatorView};
@@ -8,7 +9,6 @@ use crate::pair::Pair;
 use crate::safeptr::{CellPtr, ScopedPtr, TaggedScopedPtr};
 use crate::symbol::Symbol;
 use crate::taggedptr::Value;
-use crate::text::Text;
 
 /// Control flow flags
 #[derive(PartialEq)]
@@ -207,7 +207,7 @@ pub fn quick_vm_eval<'guard>(
 struct Function {
     arity: u8,
     code: CellPtr<ByteCode>,
-    name: CellPtr<Text>,
+    name: CellPtr<Symbol>,
 }
 
 #[derive(Clone)]
@@ -221,6 +221,7 @@ struct CallFrame {
 struct ReadEvalPrint {
     value_stack: List,
     frame_stack: Array<CallFrame>,
+    globals: Dict,
 }
 
 impl ReadEvalPrint {
@@ -228,6 +229,7 @@ impl ReadEvalPrint {
         ReadEvalPrint {
             value_stack: List::new(),
             frame_stack: Array::new(),
+            globals: Dict::new(),
         }
     }
 }

@@ -12,6 +12,7 @@ const TAB: char = '\t';
 const CR: char = '\r';
 const LF: char = '\n';
 const DOT: char = '.';
+const DOUBLE_QUOTE: char = '"';
 
 #[derive(Debug, PartialEq)]
 pub enum TokenType {
@@ -19,6 +20,7 @@ pub enum TokenType {
     CloseParen,
     Symbol(String),
     Dot,
+    Text(String),
 }
 
 #[derive(Debug, PartialEq)]
@@ -41,7 +43,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, RuntimeError> {
     use self::TokenType::*;
 
     // characters that terminate a symbol
-    let terminating = [OPEN_PAREN, CLOSE_PAREN, SPACE, TAB, CR, LF];
+    let terminating = [OPEN_PAREN, CLOSE_PAREN, SPACE, TAB, CR, LF, DOUBLE_QUOTE];
     let is_terminating = |c: char| terminating.iter().any(|t| c == *t);
 
     // return value
@@ -100,6 +102,28 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, RuntimeError> {
             Some(CLOSE_PAREN) => {
                 tokens.push(Token::new(spos(lineno, charno), CloseParen));
                 current = chars.next();
+            }
+
+            Some(DOUBLE_QUOTE) => {
+                let text_begin = charno;
+
+                let mut text = String::from("");
+
+                loop {
+                    current = chars.next();
+                    if let Some(c) = current {
+                        if c == DOUBLE_QUOTE {
+                            break;
+                        } else {
+                            text.push(c);
+                            charno += 1;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                tokens.push(Token::new(spos(lineno, text_begin), Text(text)))
             }
 
             Some(non_terminating) => {
@@ -207,6 +231,13 @@ mod test {
             }
         } else {
             assert!(false, "expected ParseEvalError for tab character");
+        }
+    }
+
+    #[test]
+    fn lexer_text() {
+        if let Ok(tokens) = tokenize("(foo \"text\" bar)") {
+            // TODO
         }
     }
 }

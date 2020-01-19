@@ -19,7 +19,7 @@ const TOMBSTONE: u64 = 1;
 
 /// Internal entry representation, keeping copy of hash for the key
 #[derive(Clone)]
-struct DictItem {
+pub struct DictItem {
     key: TaggedCellPtr,
     value: TaggedCellPtr,
     hash: u64,
@@ -116,7 +116,7 @@ fn needs_to_grow(used_entries: ArraySize, capacity: ArraySize) -> bool {
 
 /// A mutable Dict key/value associative data structure.
 /// TODO: resizing
-struct Dict {
+pub struct Dict {
     /// Number of items stored
     length: Cell<ArraySize>,
     /// Total count of items plus tombstones

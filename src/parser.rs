@@ -7,6 +7,7 @@ use crate::memory::MutatorView;
 use crate::pair::Pair;
 use crate::safeptr::{MutatorScope, TaggedCellPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
+use crate::text;
 
 // A linked list, internal to the parser to simplify the code and is stored on the Rust stack
 struct PairList<'guard> {
@@ -173,6 +174,14 @@ where
                 break;
             }
 
+            Some(&&Token {
+                token: Text(ref string),
+                pos,
+            }) => {
+                let text = mem.alloc_tagged(text::Text::new_from_str(mem, &string)?)?;
+                list.push(mem, text, pos)?;
+            }
+
             None => {
                 return Err(err_parser("Unexpected end of code stream"));
             }
@@ -226,6 +235,11 @@ where
         }) => Err(err_parser_wpos(pos, "Unmatched close parenthesis")),
 
         Some(&&Token { token: Dot, pos }) => Err(err_parser_wpos(pos, "Invalid symbol '.'")),
+
+        Some(&&Token {
+            token: Text(ref string),
+            pos: _,
+        }) => mem.alloc_tagged(text::Text::new_from_str(mem, &string)?),
 
         None => {
             tokens.next();
