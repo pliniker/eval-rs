@@ -113,6 +113,8 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, RuntimeError> {
                     current = chars.next();
                     if let Some(c) = current {
                         if c == DOUBLE_QUOTE {
+                            current = chars.next();
+                            charno += 1;
                             break;
                         } else {
                             text.push(c);

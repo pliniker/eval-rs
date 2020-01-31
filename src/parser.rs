@@ -167,19 +167,19 @@ where
             }
 
             Some(&&Token {
-                token: CloseParen,
-                pos: _,
-            }) => {
-                tokens.next();
-                break;
-            }
-
-            Some(&&Token {
                 token: Text(ref string),
                 pos,
             }) => {
                 let text = mem.alloc_tagged(text::Text::new_from_str(mem, &string)?)?;
                 list.push(mem, text, pos)?;
+            }
+
+            Some(&&Token {
+                token: CloseParen,
+                pos: _,
+            }) => {
+                tokens.next();
+                break;
             }
 
             None => {
@@ -239,7 +239,11 @@ where
         Some(&&Token {
             token: Text(ref string),
             pos: _,
-        }) => mem.alloc_tagged(text::Text::new_from_str(mem, &string)?),
+        }) => {
+            let tobj = text::Text::new_from_str(mem, &string)?;
+            let allocd = mem.alloc_tagged(tobj)?;
+            Ok(allocd)
+        }
 
         None => {
             tokens.next();

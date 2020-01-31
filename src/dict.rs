@@ -1,5 +1,4 @@
 /// Basic mutable dict type
-/// Implemented from http://craftinginterpreters.com/hash-tables.html
 use std::cell::Cell;
 use std::hash::Hasher;
 

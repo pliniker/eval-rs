@@ -12,7 +12,7 @@ use crate::rawarray::{ArraySize, RawArray};
 use crate::safeptr::MutatorScope;
 
 /// While Text is somewhat similar to Symbol, it is instead garbage-collected heap allocated and not interned.
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct Text {
     content: RawArray<u8>,
 }
@@ -152,8 +152,11 @@ mod test {
                 _input: Self::Input,
             ) -> Result<Self::Output, RuntimeError> {
                 let expected = String::from("こんにちは");
+
                 let text = Text::new_from_str(view, &expected)?;
-                let got = text.as_str(view);
+                let heap_text = view.alloc_tagged(text)?;
+
+                let got = format!("{}", heap_text.value());
 
                 assert!(got == expected);
 
