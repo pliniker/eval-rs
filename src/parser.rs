@@ -144,6 +144,16 @@ where
                 }
             }
 
+            Some(&&Token {
+                token: Text(ref string),
+                pos,
+            }) => {
+                tokens.next();
+
+                let text = mem.alloc_tagged(text::Text::new_from_str(mem, &string)?)?;
+                list.push(mem, text, pos)?;
+            }
+
             Some(&&Token { token: Dot, pos }) => {
                 tokens.next();
                 list.dot(mem, parse_sexpr(mem, tokens)?, pos);
@@ -164,14 +174,6 @@ where
 
                     None => return Err(err_parser("Unexpected end of code stream")),
                 }
-            }
-
-            Some(&&Token {
-                token: Text(ref string),
-                pos,
-            }) => {
-                let text = mem.alloc_tagged(text::Text::new_from_str(mem, &string)?)?;
-                list.push(mem, text, pos)?;
             }
 
             Some(&&Token {

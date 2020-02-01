@@ -77,7 +77,6 @@ impl Mutator for ReadEvalPrint {
     fn run(&self, mem: &MutatorView, line: String) -> Result<(), RuntimeError> {
         match parse(mem, &line) {
             Ok(value) => {
-                println!("DBG {}", value);
                 match compile(mem, value) {
                     Ok(result) => {
                         // println!("{}", result);  // prints bytecode

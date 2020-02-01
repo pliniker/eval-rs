@@ -68,7 +68,7 @@ impl Print for Text {
         guard: &'guard dyn MutatorScope,
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
-        write!(f, "{}", self.as_str(guard))
+        write!(f, "\"{}\"", self.as_str(guard))
     }
 }
 
