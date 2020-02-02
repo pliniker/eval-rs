@@ -151,9 +151,10 @@ mod test {
                 view: &MutatorView,
                 _input: Self::Input,
             ) -> Result<Self::Output, RuntimeError> {
-                let expected = String::from("こんにちは");
+                let input = String::from("こんにちは");
+                let expected = format!("\"{}\"", input);
 
-                let text = Text::new_from_str(view, &expected)?;
+                let text = Text::new_from_str(view, &input)?;
                 let heap_text = view.alloc_tagged(text)?;
 
                 let got = format!("{}", heap_text.value());
