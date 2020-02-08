@@ -68,6 +68,7 @@ impl Print for Text {
         guard: &'guard dyn MutatorScope,
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
+        // TODO this will need to be printed with certain string escape codes embedded
         write!(f, "\"{}\"", self.as_str(guard))
     }
 }
@@ -138,7 +139,7 @@ mod test {
     }
 
     #[test]
-    fn text_from_string() {
+    fn value_from_string() {
         let mem = Memory::new();
 
         struct Test {}
@@ -152,6 +153,7 @@ mod test {
                 _input: Self::Input,
             ) -> Result<Self::Output, RuntimeError> {
                 let input = String::from("こんにちは");
+                // the Value representation of the object is wrapped in quotes
                 let expected = format!("\"{}\"", input);
 
                 let text = Text::new_from_str(view, &input)?;

@@ -28,6 +28,8 @@ pub enum Opcode {
     JMPT = 0x0A,
     JMPNT = 0x0B,
     LOADNIL = 0x0C,
+//    LOADGLOBAL = 0x0D,
+    STOREGLOBAL = 0x0E,
 }
 
 /// A register can be in the range 0..255

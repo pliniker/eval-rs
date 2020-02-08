@@ -149,6 +149,13 @@ fn eval_next_instr<'guard>(
             let reg = instr.get_reg1() as ArraySize;
             stack.set(mem, reg, mem.nil())?;
         }
+
+        Opcode::STOREGLOBAL => {
+            let assign_to_reg = instr.get_reg_acc() as ArraySize;
+            let reg1 = instr.get_reg1() as ArraySize;
+
+            unimplemented!()
+        }
     }
 
     Ok(EvalStatus::Pending)
@@ -220,7 +227,7 @@ struct CallFrame {
 /// Mutator that implements the VM
 struct ReadEvalPrint {
     value_stack: List,
-    frame_stack: Array<CallFrame>,
+    //frame_stack: Array<CallFrame>,
     globals: Dict,
 }
 
@@ -228,7 +235,7 @@ impl ReadEvalPrint {
     pub fn new() -> ReadEvalPrint {
         ReadEvalPrint {
             value_stack: List::new(),
-            frame_stack: Array::new(),
+            //frame_stack: Array::new(),
             globals: Dict::new(),
         }
     }

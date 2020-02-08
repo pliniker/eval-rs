@@ -66,6 +66,7 @@ impl Compiler {
                 "cons" => self.push_op3(mem, Opcode::CONS, params),
                 "cond" => self.compile_apply_cond(mem, params),
                 "eq" => self.push_op3(mem, Opcode::EQ, params),
+                "set" => self.compile_apply_assign(mem, params),
                 "defn" => self.compile_defn(mem, params),
 
                 _ => Err(err_eval("Symbol is not bound to a function")),
@@ -144,14 +145,24 @@ impl Compiler {
         Ok(result)
     }
 
+    fn compile_apply_assign<'guard>(
+        &mut self,
+        mem: &'guard MutatorView,
+        params: TaggedScopedPtr<'guard>,
+    ) -> Result<Register, RuntimeError> {
+        let (first, second) = get_two_from_pair_list(mem, params)?;
+        let assign_to = self.compile_eval(mem, first)?;
+        let expr = self.compile_eval(mem, second)?;
+        self.bytecode.push_op2(mem, Opcode::STOREGLOBAL, assign_to, expr)?;
+        Ok(expr)
+    }
+
     fn compile_defn<'guard>(
         &mut self,
         mem: &'guard MutatorView,
         params: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
-        // Expected:
-        // (defn funcion-name (param list) (expresion))
-        Ok(0)
+        unimplemented!()
     }
 
     fn push_op0<'guard>(
