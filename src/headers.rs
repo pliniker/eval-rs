@@ -6,6 +6,7 @@ use stickyimmix::{
 
 use crate::array::{ArrayU32, ArrayU8};
 use crate::bytecode::{ByteCode, InstructionStream};
+use crate::dict::Dict;
 use crate::list::List;
 use crate::memory::HeapStorage;
 use crate::number::NumberObject;
@@ -28,6 +29,7 @@ pub enum TypeList {
     List,
     ArrayU8,
     ArrayU32,
+    Dict,
     ByteCode,
     InstructionStream,
 }
@@ -127,5 +129,6 @@ declare_allocobject!(Text, Text);
 declare_allocobject!(List, List);
 declare_allocobject!(ArrayU8, ArrayU8);
 declare_allocobject!(ArrayU32, ArrayU32);
+declare_allocobject!(Dict, Dict);
 declare_allocobject!(ByteCode, ByteCode);
 declare_allocobject!(InstructionStream, InstructionStream);

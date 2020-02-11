@@ -1,26 +1,34 @@
+use crate::compiler::compile;
+use crate::containers::{Container, StackAnyContainer};
+use crate::dict::Dict;
+use crate::error::{ErrorKind, RuntimeError};
+use crate::memory::{Mutator, MutatorView};
+use crate::list::List;
+use crate::parser::parse;
+use crate::safeptr::CellPtr;
+use crate::vm::quick_vm_eval;
+
 /// Mutator that implements the VM
-struct ReadEvalPrint {
-    value_stack: List,
-    //frame_stack: Array<CallFrame>,
-    globals: Dict,
+pub struct ReadEvalPrint {
+    value_stack: CellPtr<List>,
+    //frame_stack: CellPtr<Array<CallFrame>>,
+    globals: CellPtr<Dict>,
 }
 
 impl ReadEvalPrint {
-    pub fn new() -> ReadEvalPrint {
-        ReadEvalPrint {
-            value_stack: List::new(),
-            //frame_stack: Array::new(),
-            globals: Dict::new(),
+    pub fn new(mem: &MutatorView) -> Result<ReadEvalPrint, RuntimeError> {
+        let stack = mem.alloc(List::with_capacity(mem, 256)?)?;
+        for _ in 0..256 {
+            stack.push(mem, mem.nil())?;
         }
-    }
-}
 
-impl Mutator for ReadEvalPrint {
-    type Input = ByteCode;
-    type Output = ();
+        let globals = mem.alloc(Dict::new())?;
 
-    fn run(&self, mem: &MutatorView, code: Self::Input) -> Result<Self::Output, RuntimeError> {
-        Ok(())
+        Ok(
+        ReadEvalPrint {
+            value_stack: CellPtr::new_with(stack),
+            globals: CellPtr::new_with(globals),
+        })
     }
 }
 
@@ -29,19 +37,19 @@ impl Mutator for ReadEvalPrint {
     type Output = ();
 
     fn run(&self, mem: &MutatorView, line: String) -> Result<(), RuntimeError> {
+
+        let stack = self.value_stack.get(mem);
+        let globals = self.globals.get(mem);
+
         match parse(mem, &line) {
             Ok(value) => {
                 match compile(mem, value) {
-                    Ok(result) => {
-                        // println!("{}", result);  // prints bytecode
-                        let value = quick_vm_eval(mem, result)?;
+                    Ok(code) => {
+                        let value = quick_vm_eval(mem, stack, globals, code)?;
                         println!("{}", value);
                     }
                     Err(e) => e.print_with_source(&line),
                 }
-
-                // println!("{}", printer::print(*value));
-
                 Ok(())
             }
 

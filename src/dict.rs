@@ -1,5 +1,6 @@
 /// Basic mutable dict type
 use std::cell::Cell;
+use std::fmt;
 use std::hash::Hasher;
 
 use fnv::FnvHasher;
@@ -8,6 +9,7 @@ use crate::containers::{Container, HashIndexedAnyContainer};
 use crate::error::{ErrorKind, RuntimeError};
 use crate::hashable::Hashable;
 use crate::memory::MutatorView;
+use crate::printer::Print;
 use crate::rawarray::{default_array_growth, ArraySize, RawArray};
 use crate::safeptr::{MutatorScope, TaggedCellPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
@@ -265,6 +267,17 @@ impl HashIndexedAnyContainer for Dict {
         let data = self.data.get();
         let entry = find_entry(guard, &data, hash)?;
         Ok(!entry.key.is_nil())
+    }
+}
+
+impl Print for Dict {
+    fn print<'guard>(
+        &self,
+        _guard: &'guard dyn MutatorScope,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
+        // TODO
+        write!(f, "Dict[...]")
     }
 }
 

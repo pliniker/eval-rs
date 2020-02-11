@@ -181,14 +181,11 @@ pub fn vm_eval_stream<'guard>(
 /// Evaluate a whole block of byte code
 pub fn quick_vm_eval<'guard>(
     mem: &'guard MutatorView,
+    stack: ScopedPtr<'guard, List>,
+    globals: ScopedPtr<'guard, Dict>,
     code: ScopedPtr<'_, ByteCode>,
 ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
     let stream = mem.alloc(InstructionStream::new(code))?;
-
-    let stack = mem.alloc(List::with_capacity(mem, 256)?)?;
-    for _ in 0..256 {
-        stack.push(mem, mem.nil())?;
-    }
 
     let mut status = EvalStatus::Pending;
     while status == EvalStatus::Pending {
@@ -222,30 +219,4 @@ struct CallFrame {
     function: CellPtr<Function>,
     ip: ArraySize,
     base: ArraySize,
-}
-
-/// Mutator that implements the VM
-struct ReadEvalPrint {
-    value_stack: List,
-    //frame_stack: Array<CallFrame>,
-    globals: Dict,
-}
-
-impl ReadEvalPrint {
-    pub fn new() -> ReadEvalPrint {
-        ReadEvalPrint {
-            value_stack: List::new(),
-            //frame_stack: Array::new(),
-            globals: Dict::new(),
-        }
-    }
-}
-
-impl Mutator for ReadEvalPrint {
-    type Input = ByteCode;
-    type Output = ();
-
-    fn run(&self, mem: &MutatorView, code: Self::Input) -> Result<Self::Output, RuntimeError> {
-        Ok(())
-    }
 }

@@ -18,6 +18,7 @@ use stickyimmix::{AllocRaw, RawPtr};
 
 use crate::array::{ArrayU32, ArrayU8};
 use crate::bytecode::ByteCode;
+use crate::dict::Dict;
 use crate::list::List;
 use crate::memory::HeapStorage;
 use crate::number::NumberObject;
@@ -42,6 +43,7 @@ pub enum Value<'scope> {
     List(&'scope List),
     ArrayU8(&'scope ArrayU8),
     ArrayU32(&'scope ArrayU32),
+    Dict(&'scope Dict),
     ByteCode(&'scope ByteCode),
 }
 
@@ -57,6 +59,7 @@ impl<'scope> fmt::Display for Value<'scope> {
             Value::List(a) => a.print(self, f),
             Value::ArrayU8(a) => a.print(self, f),
             Value::ArrayU32(a) => a.print(self, f),
+            Value::Dict(d) => d.print(self, f),
             Value::ByteCode(c) => c.print(self, f),
             _ => write!(f, "<unidentified-object-type>"),
         }
@@ -74,6 +77,7 @@ impl<'scope> fmt::Debug for Value<'scope> {
             Value::List(a) => a.debug(self, f),
             Value::ArrayU8(a) => a.debug(self, f),
             Value::ArrayU32(a) => a.debug(self, f),
+            Value::Dict(d) => d.debug(self, f),
             Value::ByteCode(c) => c.debug(self, f),
             _ => write!(f, "<unidentified-object-type>"),
         }
@@ -95,6 +99,7 @@ pub enum FatPtr {
     List(RawPtr<List>),
     ArrayU8(RawPtr<ArrayU8>),
     ArrayU32(RawPtr<ArrayU32>),
+    Dict(RawPtr<Dict>),
     ByteCode(RawPtr<ByteCode>),
 }
 
@@ -112,6 +117,7 @@ impl FatPtr {
             FatPtr::List(raw_ptr) => Value::List(raw_ptr.scoped_ref(guard)),
             FatPtr::ArrayU8(raw_ptr) => Value::ArrayU8(raw_ptr.scoped_ref(guard)),
             FatPtr::ArrayU32(raw_ptr) => Value::ArrayU32(raw_ptr.scoped_ref(guard)),
+            FatPtr::Dict(raw_ptr) => Value::Dict(raw_ptr.scoped_ref(guard)),
             FatPtr::ByteCode(raw_ptr) => Value::ByteCode(raw_ptr.scoped_ref(guard)),
         }
     }
@@ -135,6 +141,7 @@ fatptr_from_rawptr!(Text, Text);
 fatptr_from_rawptr!(List, List);
 fatptr_from_rawptr!(ArrayU8, ArrayU8);
 fatptr_from_rawptr!(ArrayU32, ArrayU32);
+fatptr_from_rawptr!(Dict, Dict);
 fatptr_from_rawptr!(ByteCode, ByteCode);
 
 /// Conversion from a TaggedPtr type
@@ -246,6 +253,7 @@ impl From<FatPtr> for TaggedPtr {
             FatPtr::List(raw) => TaggedPtr::object(raw),
             FatPtr::ArrayU8(raw) => TaggedPtr::object(raw),
             FatPtr::ArrayU32(raw) => TaggedPtr::object(raw),
+            FatPtr::Dict(raw) => TaggedPtr::object(raw),
             FatPtr::ByteCode(raw) => TaggedPtr::object(raw),
         }
     }

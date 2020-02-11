@@ -36,6 +36,7 @@ mod parser;
 mod pointerops;
 mod printer;
 mod rawarray;
+mod repl;
 mod safeptr;
 mod symbol;
 mod symbolmap;
@@ -43,11 +44,9 @@ mod taggedptr;
 mod text;
 mod vm;
 
-use crate::compiler::compile;
-use crate::error::{ErrorKind, RuntimeError};
-use crate::memory::{Memory, Mutator, MutatorView};
-use crate::parser::parse;
-use crate::vm::quick_vm_eval;
+use crate::error::RuntimeError;
+use crate::memory::Memory;
+use crate::repl::ReadEvalPrint;
 
 /// Read a file into a String
 fn load_file(filename: &str) -> Result<String, io::Error> {
@@ -65,44 +64,6 @@ fn read_file(filename: &str) -> Result<(), RuntimeError> {
     // TODO
 
     Ok(())
-}
-
-/// Implements an iteration of a REPL
-struct ReadEvalPrint {}
-
-impl Mutator for ReadEvalPrint {
-    type Input = String;
-    type Output = ();
-
-    fn run(&self, mem: &MutatorView, line: String) -> Result<(), RuntimeError> {
-        match parse(mem, &line) {
-            Ok(value) => {
-                match compile(mem, value) {
-                    Ok(result) => {
-                        // println!("{}", result);  // prints bytecode
-                        let value = quick_vm_eval(mem, result)?;
-                        println!("{}", value);
-                    }
-                    Err(e) => e.print_with_source(&line),
-                }
-
-                // println!("{}", printer::print(*value));
-
-                Ok(())
-            }
-
-            Err(e) => {
-                match e.error_kind() {
-                    // non-fatal repl errors
-                    ErrorKind::LexerError(_) => e.print_with_source(&line),
-                    ErrorKind::ParseError(_) => e.print_with_source(&line),
-                    ErrorKind::EvalError(_) => e.print_with_source(&line),
-                    _ => return Err(e),
-                }
-                Ok(())
-            }
-        }
-    }
 }
 
 /// Read a line at a time, printing the input back out
@@ -127,7 +88,7 @@ fn read_print_loop() -> Result<(), RuntimeError> {
     }
 
     let mem = Memory::new();
-    let rep = ReadEvalPrint {};
+    let rep = ReadEvalPrint::new(mem)?;
 
     // repl
     loop {
