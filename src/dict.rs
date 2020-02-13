@@ -130,20 +130,19 @@ impl Dict {
     /// Scale capacity up if needed
     fn grow_capacity<'guard>(&self, mem: &'guard MutatorView) -> Result<(), RuntimeError> {
         let data = self.data.get();
-        let ptr = data
-            .as_ptr()
-            .ok_or(RuntimeError::new(ErrorKind::BoundsError))?;
 
         let new_capacity = default_array_growth(data.capacity())?;
-
         let new_data = RawArray::<DictItem>::with_capacity(mem, new_capacity)?;
 
-        for index in 0..data.capacity() {
-            let entry =
-                unsafe { &mut *(ptr.offset(index as isize) as *mut DictItem) as &mut DictItem };
-            if !entry.key.is_nil() {
-                let new_entry = find_entry(mem, &new_data, entry.hash)?;
-                *new_entry = entry.clone();
+        let maybe_ptr = data.as_ptr();
+        if let Some(ptr) = maybe_ptr {
+            for index in 0..data.capacity() {
+                let entry =
+                    unsafe { &mut *(ptr.offset(index as isize) as *mut DictItem) as &mut DictItem };
+                if !entry.key.is_nil() {
+                    let new_entry = find_entry(mem, &new_data, entry.hash)?;
+                    *new_entry = entry.clone();
+                }
             }
         }
 
@@ -288,6 +287,39 @@ mod test {
     use crate::memory::{Memory, Mutator, MutatorView};
     use crate::pair::Pair;
     use crate::taggedptr::Value;
+
+    #[test]
+    fn dict_empty_assoc_lookup() {
+        let mem = Memory::new();
+
+        struct Test {}
+        impl Mutator for Test {
+            type Input = ();
+            type Output = ();
+
+            fn run(
+                &self,
+                mem: &MutatorView,
+                _input: Self::Input,
+            ) -> Result<Self::Output, RuntimeError> {
+                let dict = Dict::new();
+
+                let key = mem.lookup_sym("foo");
+                let val = mem.lookup_sym("bar");
+
+                dict.assoc(mem, key, val)?;
+
+                let lookup = dict.lookup(mem, key)?;
+
+                assert!(lookup == val);
+
+                Ok(())
+            }
+        }
+
+        let test = Test {};
+        mem.mutate(&test, ()).unwrap();
+    }
 
     #[test]
     fn dict_assoc_lookup() {

@@ -2,11 +2,23 @@ use crate::compiler::compile;
 use crate::containers::{Container, StackAnyContainer};
 use crate::dict::Dict;
 use crate::error::{ErrorKind, RuntimeError};
-use crate::memory::{Mutator, MutatorView};
 use crate::list::List;
+use crate::memory::{Mutator, MutatorView};
 use crate::parser::parse;
 use crate::safeptr::CellPtr;
 use crate::vm::quick_vm_eval;
+
+/// A mutator that returns a Repl instance
+pub struct MakeReadEvalPrint {}
+
+impl Mutator for MakeReadEvalPrint {
+    type Input = ();
+    type Output = ReadEvalPrint;
+
+    fn run(&self, mem: &MutatorView, _input: ()) -> Result<ReadEvalPrint, RuntimeError> {
+        ReadEvalPrint::new(mem)
+    }
+}
 
 /// Mutator that implements the VM
 pub struct ReadEvalPrint {
@@ -24,8 +36,7 @@ impl ReadEvalPrint {
 
         let globals = mem.alloc(Dict::new())?;
 
-        Ok(
-        ReadEvalPrint {
+        Ok(ReadEvalPrint {
             value_stack: CellPtr::new_with(stack),
             globals: CellPtr::new_with(globals),
         })
@@ -37,7 +48,6 @@ impl Mutator for ReadEvalPrint {
     type Output = ();
 
     fn run(&self, mem: &MutatorView, line: String) -> Result<(), RuntimeError> {
-
         let stack = self.value_stack.get(mem);
         let globals = self.globals.get(mem);
 

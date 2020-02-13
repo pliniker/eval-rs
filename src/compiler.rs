@@ -38,13 +38,19 @@ impl Compiler {
             Value::Pair(p) => self.compile_apply(mem, p.first.get(mem), p.second.get(mem)),
 
             Value::Symbol(s) => {
-                let literal = match s.as_str(mem) {
-                    "nil" => mem.nil(),
+                match s.as_str(mem) {
+                    "nil" => {
+                        mem.nil();
+                        self.push_load_literal(mem, mem.nil())
+                    },
                     // TODO there will be an environment where symbols will be bound, this shouldn't be
                     // a literal but an environment lookup
-                    _ => ast_node,
-                };
-                self.push_load_literal(mem, literal)
+                    _ => {
+                        let reg1 = self.push_load_literal(mem, ast_node)?;
+                        self.bytecode.push_op2(mem, Opcode::LOADGLOBAL, reg1, reg1)?;
+                        Ok(reg1)
+                     }
+                }
             }
 
             _ => self.push_load_literal(mem, ast_node),
@@ -145,15 +151,18 @@ impl Compiler {
         Ok(result)
     }
 
+    /// Assignment expression - evaluate the two expressions, binding the result of the first
+    /// to the (hopefully) symbol provided by the second
     fn compile_apply_assign<'guard>(
         &mut self,
         mem: &'guard MutatorView,
         params: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         let (first, second) = get_two_from_pair_list(mem, params)?;
-        let assign_to = self.compile_eval(mem, first)?;
         let expr = self.compile_eval(mem, second)?;
-        self.bytecode.push_op2(mem, Opcode::STOREGLOBAL, assign_to, expr)?;
+        let assign_to = self.compile_eval(mem, first)?;
+        self.bytecode
+            .push_op2(mem, Opcode::STOREGLOBAL, assign_to, expr)?;
         Ok(expr)
     }
 

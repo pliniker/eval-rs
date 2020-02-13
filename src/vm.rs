@@ -1,6 +1,8 @@
 use crate::array::{Array, ArraySize};
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
-use crate::containers::{Container, IndexedAnyContainer, StackAnyContainer};
+use crate::containers::{
+    Container, HashIndexedAnyContainer, IndexedAnyContainer, StackAnyContainer,
+};
 use crate::dict::Dict;
 use crate::error::{err_eval, RuntimeError};
 use crate::list::List;
@@ -22,6 +24,7 @@ pub enum EvalStatus<'guard> {
 fn eval_next_instr<'guard>(
     mem: &'guard MutatorView,
     stack: ScopedPtr<'guard, List>,
+    globals: ScopedPtr<'guard, Dict>,
     instr: ScopedPtr<'guard, InstructionStream>,
 ) -> Result<EvalStatus<'guard>, RuntimeError> {
     let opcode = instr.get_next_opcode(mem)?;
@@ -150,11 +153,33 @@ fn eval_next_instr<'guard>(
             stack.set(mem, reg, mem.nil())?;
         }
 
+        Opcode::LOADGLOBAL => {
+            let reg1 = instr.get_reg1() as ArraySize;
+            let reg1_val = stack.get(mem, reg1)?;
+
+            if let Value::Symbol(s) = *reg1_val {
+                let lookup_result = globals.lookup(mem, reg1_val);
+
+                match lookup_result {
+                    Ok(binding) => stack.set(mem, reg1, binding)?,
+                    Err(_) => return Err(err_eval("Symbol not bound to value"))
+                }
+            } else {
+                return Err(err_eval("Cannot lookup value for non-symbol type"))
+            }
+        }
+
         Opcode::STOREGLOBAL => {
-            let assign_to_reg = instr.get_reg_acc() as ArraySize;
+            let assign_reg = instr.get_reg_acc() as ArraySize;
             let reg1 = instr.get_reg1() as ArraySize;
 
-            unimplemented!()
+            let assign_reg_val = stack.get(mem, assign_reg)?;
+            if let Value::Symbol(_) = *assign_reg_val {
+                let reg1_val = stack.get(mem, reg1)?;
+                globals.assoc(mem, assign_reg_val, reg1_val)?;
+            } else {
+                return Err(err_eval("Cannot bind value to non-symbol type"));
+            }
         }
     }
 
@@ -165,11 +190,12 @@ fn eval_next_instr<'guard>(
 pub fn vm_eval_stream<'guard>(
     mem: &'guard MutatorView,
     stack: ScopedPtr<'guard, List>,
+    globals: ScopedPtr<'guard, Dict>,
     instr: ScopedPtr<'guard, InstructionStream>,
     max_instr: ArraySize,
 ) -> Result<EvalStatus<'guard>, RuntimeError> {
     for _ in 0..max_instr {
-        match eval_next_instr(mem, stack, instr)? {
+        match eval_next_instr(mem, stack, globals, instr)? {
             EvalStatus::Return(value) => return Ok(EvalStatus::Return(value)),
             EvalStatus::Halt => return Ok(EvalStatus::Halt),
             _ => (),
@@ -189,7 +215,7 @@ pub fn quick_vm_eval<'guard>(
 
     let mut status = EvalStatus::Pending;
     while status == EvalStatus::Pending {
-        status = vm_eval_stream(mem, stack, stream, 1024)?;
+        status = vm_eval_stream(mem, stack, globals, stream, 1024)?;
         match status {
             EvalStatus::Return(value) => return Ok(value),
             EvalStatus::Halt => return Err(err_eval("Program halted")),
