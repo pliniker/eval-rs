@@ -61,8 +61,11 @@ impl Print for Pair {
             write!(f, " {}", tail.first.get(guard))?;
         }
 
-        if let Value::Symbol(ptr) = *tail.second.get(guard) {
-            write!(f, " . {}", ptr.as_str(guard))?;
+        // clunky way to print anything but nil
+        let second = *tail.second.get(guard);
+        match second {
+            Value::Nil => (),
+            _ => write!(f, " . {}", second)?
         }
 
         write!(f, ")")

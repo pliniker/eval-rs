@@ -232,20 +232,20 @@ where
         }
 
         Some(&&Token {
-            token: CloseParen,
-            pos,
-        }) => Err(err_parser_wpos(pos, "Unmatched close parenthesis")),
+            token: Text(ref string),
+            pos: _,
+        }) => {
+            tokens.next();
+            let text = mem.alloc_tagged(text::Text::new_from_str(mem, &string)?)?;
+            Ok(text)
+        }
 
         Some(&&Token { token: Dot, pos }) => Err(err_parser_wpos(pos, "Invalid symbol '.'")),
 
         Some(&&Token {
-            token: Text(ref string),
-            pos: _,
-        }) => {
-            let tobj = text::Text::new_from_str(mem, &string)?;
-            let allocd = mem.alloc_tagged(tobj)?;
-            Ok(allocd)
-        }
+            token: CloseParen,
+            pos,
+        }) => Err(err_parser_wpos(pos, "Unmatched close parenthesis")),
 
         None => {
             tokens.next();
