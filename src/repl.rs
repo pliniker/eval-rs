@@ -5,13 +5,13 @@ use crate::error::{ErrorKind, RuntimeError};
 use crate::list::List;
 use crate::memory::{Mutator, MutatorView};
 use crate::parser::parse;
-use crate::safeptr::CellPtr;
+use crate::safeptr::{CellPtr, TaggedScopedPtr};
 use crate::vm::quick_vm_eval;
 
 /// A mutator that returns a Repl instance
-pub struct MakeReadEvalPrint {}
+pub struct RepMaker {}
 
-impl Mutator for MakeReadEvalPrint {
+impl Mutator for RepMaker {
     type Input = ();
     type Output = ReadEvalPrint;
 
@@ -51,17 +51,14 @@ impl Mutator for ReadEvalPrint {
         let stack = self.value_stack.get(mem);
         let globals = self.globals.get(mem);
 
-        match parse(mem, &line) {
-            Ok(value) => {
-                match compile(mem, value) {
-                    Ok(code) => {
-                        let value = quick_vm_eval(mem, stack, globals, code)?;
-                        println!("{}", value);
-                    }
-                    Err(e) => e.print_with_source(&line),
-                }
-                Ok(())
-            }
+        match (|mem, line| -> Result<TaggedScopedPtr, RuntimeError> {
+            let value = parse(mem, line)?;
+            let code = compile(mem, value)?;
+            let value = quick_vm_eval(mem, stack, globals, code)?;
+            Ok(value)
+        })(mem, &line)
+        {
+            Ok(value) => println!("{}", value),
 
             Err(e) => {
                 match e.error_kind() {
@@ -71,8 +68,9 @@ impl Mutator for ReadEvalPrint {
                     ErrorKind::EvalError(_) => e.print_with_source(&line),
                     _ => return Err(e),
                 }
-                Ok(())
             }
         }
+
+        Ok(())
     }
 }

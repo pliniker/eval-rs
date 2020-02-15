@@ -46,7 +46,7 @@ mod vm;
 
 use crate::error::RuntimeError;
 use crate::memory::Memory;
-use crate::repl::{MakeReadEvalPrint, ReadEvalPrint};
+use crate::repl::{ReadEvalPrint, RepMaker};
 
 /// Read a file into a String
 fn load_file(filename: &str) -> Result<String, io::Error> {
@@ -88,7 +88,7 @@ fn read_print_loop() -> Result<(), RuntimeError> {
     }
 
     let mem = Memory::new();
-    let rep_maker = MakeReadEvalPrint {};
+    let rep_maker = RepMaker {};
     let rep = mem.mutate(&rep_maker, ())?;
 
     // repl

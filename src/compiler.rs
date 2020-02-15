@@ -42,14 +42,15 @@ impl Compiler {
                     "nil" => {
                         mem.nil();
                         self.push_load_literal(mem, mem.nil())
-                    },
+                    }
                     // TODO there will be an environment where symbols will be bound, this shouldn't be
                     // a literal but an environment lookup
                     _ => {
                         let reg1 = self.push_load_literal(mem, ast_node)?;
-                        self.bytecode.push_op2(mem, Opcode::LOADGLOBAL, reg1, reg1)?;
+                        self.bytecode
+                            .push_op2(mem, Opcode::LOADGLOBAL, reg1, reg1)?;
                         Ok(reg1)
-                     }
+                    }
                 }
             }
 

@@ -162,10 +162,10 @@ fn eval_next_instr<'guard>(
 
                 match lookup_result {
                     Ok(binding) => stack.set(mem, reg1, binding)?,
-                    Err(_) => return Err(err_eval("Symbol not bound to value"))
+                    Err(_) => return Err(err_eval("Symbol not bound to value")),
                 }
             } else {
-                return Err(err_eval("Cannot lookup value for non-symbol type"))
+                return Err(err_eval("Cannot lookup value for non-symbol type"));
             }
         }
 
