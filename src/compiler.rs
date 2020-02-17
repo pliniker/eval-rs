@@ -43,8 +43,8 @@ impl Compiler {
                         mem.nil();
                         self.push_load_literal(mem, mem.nil())
                     }
-                    // TODO there will be an environment where symbols will be bound, this shouldn't be
-                    // a literal but an environment lookup
+
+                    // lookup value bound to symbol
                     _ => {
                         let reg1 = self.push_load_literal(mem, ast_node)?;
                         self.bytecode

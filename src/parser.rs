@@ -31,25 +31,27 @@ impl<'guard> PairList<'guard> {
         &mut self,
         mem: &'guard MutatorView,
         value: TaggedScopedPtr<'guard>,
-        _pos: SourcePos,
+        pos: SourcePos,
     ) -> Result<(), RuntimeError> {
         if let Value::Pair(old_tail) = *self.tail.get(mem) {
             let new_tail = old_tail.append(mem, value)?;
             self.tail.set(new_tail);
 
-        // set source code line/char
-        //new_tail.set_first_source_pos(pos);
-        //old_tail.set_second_source_pos(pos);
+            // set source code line/char
+            old_tail.set_second_source_code_pos(pos);
+
+            if let Value::Pair(new_tail) = *new_tail {
+                new_tail.set_first_source_code_pos(pos);
+            }
         } else {
             let pair = Pair::new();
             pair.first.set(value);
 
+            // set source code line/char
+            pair.set_first_source_code_pos(pos);
+
             self.head.set(mem.alloc_tagged(pair)?);
             self.tail.copy_from(&self.head);
-
-            // set source code line/char
-            //pair.set_first_source_pos(pos);
-            //pair.set_second_source_pos(pos);
         }
 
         Ok(())
@@ -60,11 +62,11 @@ impl<'guard> PairList<'guard> {
         &mut self,
         guard: &'guard dyn MutatorScope,
         value: TaggedScopedPtr<'guard>,
-        _pos: SourcePos,
+        pos: SourcePos,
     ) {
         if let Value::Pair(pair) = *self.tail.get(guard) {
             pair.dot(value);
-        //pair.set_second_source_pos(pos);
+            pair.set_second_source_code_pos(pos);
         } else {
             panic!("Cannot dot an empty PairList::tail!")
         }

@@ -1,12 +1,12 @@
-use crate::array::{Array, ArraySize};
+use crate::array::ArraySize;
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{
-    Container, HashIndexedAnyContainer, IndexedAnyContainer, StackAnyContainer,
+    HashIndexedAnyContainer, IndexedAnyContainer, StackAnyContainer,
 };
 use crate::dict::Dict;
 use crate::error::{err_eval, RuntimeError};
 use crate::list::List;
-use crate::memory::{Mutator, MutatorView};
+use crate::memory::MutatorView;
 use crate::pair::Pair;
 use crate::safeptr::{CellPtr, ScopedPtr, TaggedScopedPtr};
 use crate::symbol::Symbol;

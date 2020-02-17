@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::fmt;
 
 use crate::error::{err_eval, RuntimeError, SourcePos};
@@ -11,8 +12,8 @@ pub struct Pair {
     pub first: TaggedCellPtr,
     pub second: TaggedCellPtr,
     // Possible source code positions of the first and second values
-    pub first_pos: Option<SourcePos>,
-    pub second_pos: Option<SourcePos>,
+    pub first_pos: Cell<Option<SourcePos>>,
+    pub second_pos: Cell<Option<SourcePos>>,
 }
 
 impl Pair {
@@ -21,8 +22,8 @@ impl Pair {
         Pair {
             first: TaggedCellPtr::new_nil(),
             second: TaggedCellPtr::new_nil(),
-            first_pos: None,
-            second_pos: None,
+            first_pos: Cell::new(None),
+            second_pos: Cell::new(None),
         }
     }
 
@@ -44,6 +45,14 @@ impl Pair {
     /// Set Pair.second to the given value
     pub fn dot<'guard>(&self, value: TaggedScopedPtr<'guard>) {
         self.second.set(value);
+    }
+
+    pub fn set_first_source_code_pos(&self, pos: SourcePos) {
+        self.first_pos.set(Some(pos));
+    }
+
+    pub fn set_second_source_code_pos(&self, pos: SourcePos) {
+        self.second_pos.set(Some(pos));
     }
 }
 
