@@ -130,28 +130,17 @@ where
             }
 
             Some(&&Token {
-                token: Symbol(ref name),
+                token: Symbol(_),
                 pos,
             }) => {
-                tokens.next();
-
-                // the symbol 'nil' is reinterpreted as a literal nil value
-                if name == "nil" {
-                    list.push(mem, mem.nil(), pos)?;
-                } else {
-                    let sym = mem.lookup_sym(name);
-                    list.push(mem, sym, pos)?;
-                }
+                list.push(mem, parse_sexpr(mem, tokens)?, pos)?;
             }
 
             Some(&&Token {
-                token: Text(ref string),
+                token: Text(_),
                 pos,
             }) => {
-                tokens.next();
-
-                let text = mem.alloc_tagged(text::Text::new_from_str(mem, &string)?)?;
-                list.push(mem, text, pos)?;
+                list.push(mem, parse_sexpr(mem, tokens)?, pos)?;
             }
 
             Some(&&Token {
@@ -249,7 +238,7 @@ where
 
         Some(&&Token {
             token: Quote,
-            pos: pos,
+            pos,
         }) => {
             tokens.next();
             // create a (quote x) pair here
