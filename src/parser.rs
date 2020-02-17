@@ -154,6 +154,13 @@ where
                 list.push(mem, text, pos)?;
             }
 
+            Some(&&Token {
+                token: Quote,
+                pos,
+            }) => {
+                list.push(mem, parse_sexpr(mem, tokens)?, pos)?;
+            }
+
             Some(&&Token { token: Dot, pos }) => {
                 tokens.next();
                 list.dot(mem, parse_sexpr(mem, tokens)?, pos);
@@ -239,6 +246,20 @@ where
             let text = mem.alloc_tagged(text::Text::new_from_str(mem, &string)?)?;
             Ok(text)
         }
+
+        Some(&&Token {
+            token: Quote,
+            pos: pos,
+        }) => {
+            tokens.next();
+            // create a (quote x) pair here
+            // parse_sexpr() for x
+            let mut list = PairList::open(mem);
+            let sym = mem.lookup_sym("quote");
+            list.push(mem, sym, pos)?;
+            list.push(mem, parse_sexpr(mem, tokens)?, pos)?;
+            Ok(list.close(mem))
+          }
 
         Some(&&Token { token: Dot, pos }) => Err(err_parser_wpos(pos, "Invalid symbol '.'")),
 

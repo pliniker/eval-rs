@@ -13,6 +13,7 @@ const CR: char = '\r';
 const LF: char = '\n';
 const DOT: char = '.';
 const DOUBLE_QUOTE: char = '"';
+const SINGLE_QUOTE: char = '\'';
 
 #[derive(Debug, PartialEq)]
 pub enum TokenType {
@@ -21,6 +22,7 @@ pub enum TokenType {
     Symbol(String),
     Dot,
     Text(String),
+    Quote,
 }
 
 #[derive(Debug, PartialEq)]
@@ -129,6 +131,11 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, RuntimeError> {
                 }
 
                 tokens.push(Token::new(spos(lineno, text_begin), Text(text)))
+            }
+
+            Some(SINGLE_QUOTE) => {
+                tokens.push(Token::new(spos(lineno, charno), Quote));
+                current = chars.next();
             }
 
             Some(non_terminating) => {
