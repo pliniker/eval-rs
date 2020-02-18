@@ -62,8 +62,8 @@ fn eval_next_instr<'guard>(
             let reg1_val = stack.get(mem, reg1)?;
 
             match *reg1_val {
-                Value::Nil => stack.set(mem, acc, mem.nil())?,
                 Value::Pair(_) => stack.set(mem, acc, mem.nil())?,
+                Value::Nil => stack.set(mem, acc, mem.nil())?,
                 _ => stack.set(mem, acc, mem.lookup_sym("true"))?,
             }
         }
@@ -76,6 +76,7 @@ fn eval_next_instr<'guard>(
 
             match *reg1_val {
                 Value::Pair(p) => stack.set(mem, acc, p.first.get(mem))?,
+                Value::Nil => stack.set(mem, acc, mem.nil())?,
                 _ => return Err(err_eval("Parameter to CAR is not a list")),
             }
         }
@@ -88,6 +89,7 @@ fn eval_next_instr<'guard>(
 
             match *reg1_val {
                 Value::Pair(p) => stack.set(mem, acc, p.second.get(mem))?,
+                Value::Nil => stack.set(mem, acc, mem.nil())?,
                 _ => return Err(err_eval("Parameter to CDR is not a list")),
             }
         }
@@ -107,7 +109,7 @@ fn eval_next_instr<'guard>(
             stack.set(mem, acc, mem.alloc_tagged(new_pair)?)?
         }
 
-        Opcode::EQ => {
+        Opcode::IS => {
             let acc = instr.get_reg_acc() as ArraySize;
             let reg1 = instr.get_reg1() as ArraySize;
             let reg2 = instr.get_reg2() as ArraySize;

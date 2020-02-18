@@ -67,12 +67,13 @@ impl Compiler {
         match *function {
             Value::Symbol(s) => match s.as_str(mem) {
                 "quote" => self.push_load_literal(mem, get_one_from_pair_list(mem, params)?),
-                "atom" => self.push_op2(mem, Opcode::ATOM, params),
+                "atom?" => self.push_op2(mem, Opcode::ATOM, params),
+                "nil?" => self.push_op2(mem, Opcode::NIL, params),
                 "car" => self.push_op2(mem, Opcode::CAR, params),
                 "cdr" => self.push_op2(mem, Opcode::CDR, params),
                 "cons" => self.push_op3(mem, Opcode::CONS, params),
                 "cond" => self.compile_apply_cond(mem, params),
-                "eq" => self.push_op3(mem, Opcode::EQ, params),
+                "is?" => self.push_op3(mem, Opcode::IS, params),
                 "set" => self.compile_apply_assign(mem, params),
                 "defn" => self.compile_defn(mem, params),
 

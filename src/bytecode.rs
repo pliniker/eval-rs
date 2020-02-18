@@ -23,7 +23,7 @@ pub enum Opcode {
     CAR = 0x05,
     CDR = 0x06,
     CONS = 0x07,
-    EQ = 0x08,
+    IS = 0x08,
     JMP = 0x09,
     JMPT = 0x0A,
     JMPNT = 0x0B,
