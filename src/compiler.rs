@@ -40,8 +40,11 @@ impl Compiler {
             Value::Symbol(s) => {
                 match s.as_str(mem) {
                     "nil" => {
-                        mem.nil();
                         self.push_load_literal(mem, mem.nil())
+                    }
+
+                    "true" => {
+                        self.push_load_literal(mem, mem.lookup_sym("true"))
                     }
 
                     // lookup value bound to symbol
