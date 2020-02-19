@@ -336,7 +336,7 @@ mod test {
 
     #[test]
     fn code_encode_3() {
-        let code = encode_3(Opcode::EQ, 0x10, 0x11, 0x12);
+        let code = encode_3(Opcode::IS, 0x10, 0x11, 0x12);
         assert!(code == 0x08101112);
     }
 

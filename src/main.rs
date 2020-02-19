@@ -25,6 +25,7 @@ mod compiler;
 mod containers;
 mod dict;
 mod error;
+mod function;
 mod hashable;
 mod headers;
 mod lexer;
@@ -46,7 +47,7 @@ mod vm;
 
 use crate::error::RuntimeError;
 use crate::memory::Memory;
-use crate::repl::{ReadEvalPrint, RepMaker};
+use crate::repl::RepMaker;
 
 /// Read a file into a String
 fn load_file(filename: &str) -> Result<String, io::Error> {
@@ -59,7 +60,7 @@ fn load_file(filename: &str) -> Result<String, io::Error> {
 
 /// Read and evaluate an entire file
 fn read_file(filename: &str) -> Result<(), RuntimeError> {
-    let contents = load_file(&filename)?;
+    let _contents = load_file(&filename)?;
 
     // TODO
 
@@ -124,7 +125,7 @@ fn read_print_loop() -> Result<(), RuntimeError> {
 fn main() {
     // parse command line argument, an optional filename
     let matches = App::new("Eval-R-Us")
-        .about("Evaluate the expressions!")
+        .about("Evaluate expressions")
         .arg(
             Arg::with_name("filename")
                 .help("Optional filename to read in")

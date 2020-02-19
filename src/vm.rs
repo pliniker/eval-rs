@@ -188,6 +188,15 @@ fn eval_next_instr<'guard>(
     Ok(EvalStatus::Pending)
 }
 
+/*
+#[derive(Clone)]
+struct CallFrame {
+function: CellPtr<Function>,
+ip: ArraySize,
+base: ArraySize,
+}
+*/
+
 /// Given an InstructionStream, execute up to max_instr more instructions
 pub fn vm_eval_stream<'guard>(
     mem: &'guard MutatorView,
@@ -226,25 +235,4 @@ pub fn quick_vm_eval<'guard>(
     }
 
     Err(err_eval("Unexpected end of evaluation"))
-}
-
-// TODO
-//
-// * Global environment (dict)
-// * Call frame stack
-// * Value stack
-// * Function calls
-
-#[derive(Clone)]
-struct Function {
-    arity: u8,
-    code: CellPtr<ByteCode>,
-    name: CellPtr<Symbol>,
-}
-
-#[derive(Clone)]
-struct CallFrame {
-    function: CellPtr<Function>,
-    ip: ArraySize,
-    base: ArraySize,
 }
