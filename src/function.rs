@@ -7,9 +7,9 @@ use crate::symbol::Symbol;
 
 #[derive(Clone)]
 pub struct Function {
-    arity: u8,
-    code: CellPtr<ByteCode>,
-    name: CellPtr<Symbol>,
+    pub arity: u8,
+    pub code: CellPtr<ByteCode>,
+    pub name: CellPtr<Symbol>,
 }
 
 impl Print for Function {

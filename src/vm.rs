@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use crate::array::ArraySize;
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{
@@ -5,11 +7,11 @@ use crate::containers::{
 };
 use crate::dict::Dict;
 use crate::error::{err_eval, RuntimeError};
+use crate::function::Function;
 use crate::list::List;
 use crate::memory::MutatorView;
 use crate::pair::Pair;
 use crate::safeptr::{CellPtr, ScopedPtr, TaggedScopedPtr};
-use crate::symbol::Symbol;
 use crate::taggedptr::Value;
 
 /// Control flow flags
@@ -18,6 +20,13 @@ pub enum EvalStatus<'guard> {
     Pending,
     Return(TaggedScopedPtr<'guard>),
     Halt,
+}
+
+#[derive(Clone)]
+struct CallFrame {
+    function: CellPtr<Function>,
+    ip: Cell<ArraySize>,
+    base: ArraySize,
 }
 
 /// Execute the next instruction and return
@@ -187,15 +196,6 @@ fn eval_next_instr<'guard>(
 
     Ok(EvalStatus::Pending)
 }
-
-/*
-#[derive(Clone)]
-struct CallFrame {
-function: CellPtr<Function>,
-ip: ArraySize,
-base: ArraySize,
-}
-*/
 
 /// Given an InstructionStream, execute up to max_instr more instructions
 pub fn vm_eval_stream<'guard>(
