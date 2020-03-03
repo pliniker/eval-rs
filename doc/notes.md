@@ -5,38 +5,35 @@
 Glue language:
  - Immutable values and data structures, structural sharing
  - Mutable concurrency-safe variables?
- - Mutable stack-pinned resource/state/io management - 'with'
- - Closures with upvalues
- - Coroutines
- - Currying
+ - Mutable stack-pinned resource/state/io management - 'with' (needs escape analysis?)
+ - Closures with lambda lifting
+ - Partial application
  - Tail call recursion (continuations)
  - Duck typed? Traits/interfaces
  - Types: scalar, tuple, record, enum, map, array, list
  - Pattern matching, destructuring
+ - Coroutines?
 
- Function Prototype Definition:
-  - Arity
-  - Free variable symbol list
-  - Code
+ Function Prototype Definition (lambda lifted):
   - Name
+  - Arity
+  - Code
+  - Parameter name list
   - Docstring
 
-Closure:
- - Function Prototype pointer
- - Upvalues
-
 Partial Application:
- - Closure pointer
  - Arity
- - Supplied parameters
+ - Parameter Count
+ - Parameter value list
+ - Function Prototype Definition
 
-Coroutine:
+Coroutine: (?)
  - Next arity
  - Activation Record
  - Registers
 
 Activation Record Stack:
- - Closure definition pointer
+ - Function Prototype Definition pointer
  - IP
  - Stack base pointer
 
@@ -45,7 +42,8 @@ Activation Record Stack:
  - parameters [1..n]
  - registers [n..255]
 
- ## Virtual Machine
+
+## Virtual Machine
 
 ### eval/apply
 
@@ -131,22 +129,25 @@ Bytecode:
 
 
 
-# --- samples ---
-
-```
-/// This represents a pointer to a window of registers on the stack.
-/// A mutator-lifetime limited view
-struct ActivationFramePtr<'guard> {
-    function: &'guard TaggedCellPtr,
-    ip: &'guard TaggedCellPtr,
-    regs: &'guard [TaggedCellPtr; 256],
-}
-```
-
 ### Type System
 
 Trait based?  Duck typed?
 
 Dispatch?
- * Multiple dispatch: partial functions?
  * Single dispatch: x.y() === X::y(x)
+
+
+### Lambda lifting and partial applications
+
+def make_adder(x, y):
+    def adder():
+        return x + y
+    return adder
+
+becomes
+
+def adder(x, y):
+    return x + y
+
+def make_adder(x, y):
+    return partial(adder, x, y)

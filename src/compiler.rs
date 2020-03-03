@@ -6,6 +6,18 @@ use crate::pair::{get_one_from_pair_list, get_two_from_pair_list};
 use crate::safeptr::{ScopedPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
+/*
+A Function has name, arity, code
+
+struct FunctionCompiler {
+    name: CellPtr<Symbol>,
+    arity: u8,
+    bytecode: ByteCode,
+    next_reg: Register,
+    //parent: Option<&FunctionCompiler>,
+}
+*/
+
 struct Compiler {
     bytecode: ByteCode,
     next_reg: Register,
@@ -78,7 +90,7 @@ impl Compiler {
                 "cond" => self.compile_apply_cond(mem, params),
                 "is?" => self.push_op3(mem, Opcode::IS, params),
                 "set" => self.compile_apply_assign(mem, params),
-                "defn" => self.compile_defn(mem, params),
+                "def" => self.compile_apply_def(mem, params),
 
                 _ => Err(err_eval("Symbol is not bound to a function")),
             },
@@ -171,7 +183,7 @@ impl Compiler {
         Ok(expr)
     }
 
-    fn compile_defn<'guard>(
+    fn compile_apply_def<'guard>(
         &mut self,
         mem: &'guard MutatorView,
         params: TaggedScopedPtr<'guard>,
