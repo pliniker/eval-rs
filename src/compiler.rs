@@ -6,21 +6,20 @@ use crate::pair::{get_one_from_pair_list, get_two_from_pair_list};
 use crate::safeptr::{ScopedPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
-/*
-A Function has name, arity, code
-
-struct FunctionCompiler {
-    name: CellPtr<Symbol>,
-    arity: u8,
-    bytecode: ByteCode,
-    next_reg: Register,
-    //parent: Option<&FunctionCompiler>,
+struct Scope {
+    //  bindings: HashMap<String, u8>, // # symbol -> register mapping
 }
-*/
 
 struct Compiler {
     bytecode: ByteCode,
     next_reg: Register,
+    // TODO:
+    // optional function name
+    //  * name: Option<CellPtr<Symbol>>
+    // optional link to parent scope
+    //  * parent: Option<&Compiler>
+    // function-local nested scopes bindings list (including parameters at outer level)
+    //  * locals: Vec<Scope>
 }
 
 impl Compiler {
@@ -60,6 +59,7 @@ impl Compiler {
                     }
 
                     // lookup value bound to symbol
+                    // TODO: check for local variable and return register number first
                     _ => {
                         let reg1 = self.push_load_literal(mem, ast_node)?;
                         self.bytecode
@@ -90,7 +90,7 @@ impl Compiler {
                 "cond" => self.compile_apply_cond(mem, params),
                 "is?" => self.push_op3(mem, Opcode::IS, params),
                 "set" => self.compile_apply_assign(mem, params),
-                "def" => self.compile_apply_def(mem, params),
+                "def" => self.compile_apply_def_function(mem, params),
 
                 _ => Err(err_eval("Symbol is not bound to a function")),
             },
@@ -183,7 +183,7 @@ impl Compiler {
         Ok(expr)
     }
 
-    fn compile_apply_def<'guard>(
+    fn compile_apply_def_function<'guard>(
         &mut self,
         mem: &'guard MutatorView,
         params: TaggedScopedPtr<'guard>,

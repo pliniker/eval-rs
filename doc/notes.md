@@ -19,6 +19,7 @@ Glue language:
   - Arity
   - Code
   - Parameter name list
+  - Local variable register indeces?
   - Docstring
 
 Partial Application:
