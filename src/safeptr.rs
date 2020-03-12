@@ -104,6 +104,10 @@ impl<'guard> TaggedScopedPtr<'guard> {
         }
     }
 
+    pub fn as_unscoped(&self) -> TaggedPtr {
+        self.ptr
+    }
+
     pub fn value(&self) -> Value<'guard> {
         self.value
     }

@@ -18,8 +18,6 @@ Glue language:
   - Name
   - Arity
   - Code
-  - Parameter name list
-  - Local variable register indeces?
   - Docstring
 
 Partial Application:
@@ -140,8 +138,8 @@ Dispatch?
 
 ### Lambda lifting and partial applications
 
-def make_adder(x, y):
-    def adder():
+def make_adder(x):
+    def adder(y):
         return x + y
     return adder
 
@@ -150,5 +148,5 @@ becomes
 def adder(x, y):
     return x + y
 
-def make_adder(x, y):
-    return partial(adder, x, y)
+def make_adder(x):
+    return partial(adder, x)

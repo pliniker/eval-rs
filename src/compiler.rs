@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::array::ArraySize;
 use crate::bytecode::{ByteCode, Opcode, Register};
 use crate::error::{err_eval, RuntimeError};
@@ -6,8 +8,11 @@ use crate::pair::{get_one_from_pair_list, get_two_from_pair_list};
 use crate::safeptr::{ScopedPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
+/// A compile-time intermediate data structure, hence can be discarded immediately after use and
+/// be built on std
 struct Scope {
-    //  bindings: HashMap<String, u8>, // # symbol -> register mapping
+    // symbol -> register mapping
+    pub bindings: HashMap<String, u8>,
 }
 
 struct Compiler {
@@ -50,13 +55,9 @@ impl Compiler {
 
             Value::Symbol(s) => {
                 match s.as_str(mem) {
-                    "nil" => {
-                        self.push_load_literal(mem, mem.nil())
-                    }
+                    "nil" => self.push_load_literal(mem, mem.nil()),
 
-                    "true" => {
-                        self.push_load_literal(mem, mem.lookup_sym("true"))
-                    }
+                    "true" => self.push_load_literal(mem, mem.lookup_sym("true")),
 
                     // lookup value bound to symbol
                     // TODO: check for local variable and return register number first

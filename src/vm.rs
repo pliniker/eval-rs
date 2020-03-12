@@ -2,9 +2,7 @@ use std::cell::Cell;
 
 use crate::array::ArraySize;
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
-use crate::containers::{
-    HashIndexedAnyContainer, IndexedAnyContainer, StackAnyContainer,
-};
+use crate::containers::{HashIndexedAnyContainer, IndexedAnyContainer, StackAnyContainer};
 use crate::dict::Dict;
 use crate::error::{err_eval, RuntimeError};
 use crate::function::Function;

@@ -123,10 +123,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, RuntimeError> {
                             charno += 1;
                         }
                     } else {
-                        return Err(err_lexer(
-                            spos(lineno, charno),
-                            "Unterminated string",
-                        ));
+                        return Err(err_lexer(spos(lineno, charno), "Unterminated string"));
                     }
                 }
 

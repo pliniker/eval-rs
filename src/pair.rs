@@ -74,7 +74,7 @@ impl Print for Pair {
         let second = *tail.second.get(guard);
         match second {
             Value::Nil => (),
-            _ => write!(f, " . {}", second)?
+            _ => write!(f, " . {}", second)?,
         }
 
         write!(f, ")")

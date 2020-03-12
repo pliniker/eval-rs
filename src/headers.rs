@@ -7,7 +7,7 @@ use stickyimmix::{
 use crate::array::{ArrayU32, ArrayU8};
 use crate::bytecode::{ByteCode, InstructionStream};
 use crate::dict::Dict;
-use crate::function::Function;
+use crate::function::{Function, PartialApplication};
 use crate::list::List;
 use crate::memory::HeapStorage;
 use crate::number::NumberObject;
@@ -34,6 +34,7 @@ pub enum TypeList {
     ByteCode,
     InstructionStream,
     Function,
+    PartialApplication,
 }
 
 // Mark this as a Stickyimmix type-identifier type
@@ -135,3 +136,4 @@ declare_allocobject!(Dict, Dict);
 declare_allocobject!(ByteCode, ByteCode);
 declare_allocobject!(InstructionStream, InstructionStream);
 declare_allocobject!(Function, Function);
+declare_allocobject!(PartialApplication, PartialApplication);

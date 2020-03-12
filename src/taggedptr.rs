@@ -17,9 +17,8 @@ use std::ptr::NonNull;
 use stickyimmix::{AllocRaw, RawPtr};
 
 use crate::array::{ArrayU32, ArrayU8};
-use crate::bytecode::ByteCode;
 use crate::dict::Dict;
-use crate::function::Function;
+use crate::function::{Function, PartialApplication};
 use crate::list::List;
 use crate::memory::HeapStorage;
 use crate::number::NumberObject;
@@ -45,8 +44,8 @@ pub enum Value<'scope> {
     ArrayU8(&'scope ArrayU8),
     ArrayU32(&'scope ArrayU32),
     Dict(&'scope Dict),
-    ByteCode(&'scope ByteCode),
     Function(&'scope Function),
+    PartialApplication(&'scope PartialApplication),
 }
 
 /// `Value` can have a safe `Display` implementation
@@ -62,8 +61,8 @@ impl<'scope> fmt::Display for Value<'scope> {
             Value::ArrayU8(a) => a.print(self, f),
             Value::ArrayU32(a) => a.print(self, f),
             Value::Dict(d) => d.print(self, f),
-            Value::ByteCode(c) => c.print(self, f),
             Value::Function(n) => n.print(self, f),
+            Value::PartialApplication(p) => p.print(self, f),
             _ => write!(f, "<unidentified-object-type>"),
         }
     }
@@ -81,8 +80,8 @@ impl<'scope> fmt::Debug for Value<'scope> {
             Value::ArrayU8(a) => a.debug(self, f),
             Value::ArrayU32(a) => a.debug(self, f),
             Value::Dict(d) => d.debug(self, f),
-            Value::ByteCode(c) => c.debug(self, f),
             Value::Function(n) => n.debug(self, f),
+            Value::PartialApplication(p) => p.debug(self, f),
             _ => write!(f, "<unidentified-object-type>"),
         }
     }
@@ -104,8 +103,8 @@ pub enum FatPtr {
     ArrayU8(RawPtr<ArrayU8>),
     ArrayU32(RawPtr<ArrayU32>),
     Dict(RawPtr<Dict>),
-    ByteCode(RawPtr<ByteCode>),
     Function(RawPtr<Function>),
+    PartialApplication(RawPtr<PartialApplication>),
 }
 
 impl FatPtr {
@@ -123,8 +122,8 @@ impl FatPtr {
             FatPtr::ArrayU8(raw_ptr) => Value::ArrayU8(raw_ptr.scoped_ref(guard)),
             FatPtr::ArrayU32(raw_ptr) => Value::ArrayU32(raw_ptr.scoped_ref(guard)),
             FatPtr::Dict(raw_ptr) => Value::Dict(raw_ptr.scoped_ref(guard)),
-            FatPtr::ByteCode(raw_ptr) => Value::ByteCode(raw_ptr.scoped_ref(guard)),
             FatPtr::Function(raw_ptr) => Value::Function(raw_ptr.scoped_ref(guard)),
+            FatPtr::PartialApplication(raw_ptr) => Value::PartialApplication(raw_ptr.scoped_ref(guard)),
         }
     }
 }
@@ -148,8 +147,8 @@ fatptr_from_rawptr!(List, List);
 fatptr_from_rawptr!(ArrayU8, ArrayU8);
 fatptr_from_rawptr!(ArrayU32, ArrayU32);
 fatptr_from_rawptr!(Dict, Dict);
-fatptr_from_rawptr!(ByteCode, ByteCode);
 fatptr_from_rawptr!(Function, Function);
+fatptr_from_rawptr!(PartialApplication, PartialApplication);
 
 /// Conversion from a TaggedPtr type
 impl From<TaggedPtr> for FatPtr {
@@ -261,8 +260,8 @@ impl From<FatPtr> for TaggedPtr {
             FatPtr::ArrayU8(raw) => TaggedPtr::object(raw),
             FatPtr::ArrayU32(raw) => TaggedPtr::object(raw),
             FatPtr::Dict(raw) => TaggedPtr::object(raw),
-            FatPtr::ByteCode(raw) => TaggedPtr::object(raw),
             FatPtr::Function(raw) => TaggedPtr::object(raw),
+            FatPtr::PartialApplication(raw) => TaggedPtr::object(raw),
         }
     }
 }

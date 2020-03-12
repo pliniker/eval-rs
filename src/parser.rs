@@ -145,10 +145,7 @@ where
                 list.push(mem, parse_sexpr(mem, tokens)?, pos)?;
             }
 
-            Some(&&Token {
-                token: Quote,
-                pos,
-            }) => {
+            Some(&&Token { token: Quote, pos }) => {
                 list.push(mem, parse_sexpr(mem, tokens)?, pos)?;
             }
 
@@ -238,10 +235,7 @@ where
             Ok(text)
         }
 
-        Some(&&Token {
-            token: Quote,
-            pos,
-        }) => {
+        Some(&&Token { token: Quote, pos }) => {
             tokens.next();
             // create a (quote x) pair here
             // parse_sexpr() for x
@@ -250,7 +244,7 @@ where
             list.push(mem, sym, pos)?;
             list.push(mem, parse_sexpr(mem, tokens)?, pos)?;
             Ok(list.close(mem))
-          }
+        }
 
         Some(&&Token { token: Dot, pos }) => Err(err_parser_wpos(pos, "Invalid symbol '.'")),
 
