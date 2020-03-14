@@ -20,11 +20,11 @@ struct Compiler {
     next_reg: Register,
     // TODO:
     // optional function name
-    //  * name: Option<CellPtr<Symbol>>
+    name: Option<String>,
     // optional link to parent scope
     //  * parent: Option<&Compiler>
     // function-local nested scopes bindings list (including parameters at outer level)
-    //  * locals: Vec<Scope>
+    locals: Vec<Scope>,
 }
 
 impl Compiler {
@@ -32,6 +32,8 @@ impl Compiler {
         Compiler {
             bytecode: ByteCode::new(),
             next_reg: 0,
+            name: None,
+            locals: Vec::new(),
         }
     }
 

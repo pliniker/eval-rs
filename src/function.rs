@@ -12,7 +12,7 @@ use crate::taggedptr::{TaggedPtr, Value};
 #[derive(Clone)]
 pub struct Function {
     // name could be a Symbol, or nil if it is an anonymous fn
-    pub name: TaggedPtr,
+    name: TaggedPtr,
     pub arity: u8,
     pub code: CellPtr<ByteCode>,
 }
@@ -30,6 +30,14 @@ impl Function {
             code: CellPtr::new_with(code),
         })
     }
+
+    pub fn name<'guard>(&self, guard: &'guard dyn MutatorScope) -> &'guard str {
+        let name = TaggedScopedPtr::new(guard, self.name);
+        match *name {
+            Value::Symbol(s) => s.as_str(guard),
+            _ => "<lambda>",
+        }
+    }
 }
 
 impl Print for Function {
@@ -38,31 +46,32 @@ impl Print for Function {
         guard: &'guard dyn MutatorScope,
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
-        let name = if let Value::Symbol(s) = TaggedScopedPtr::new(guard, self.name).value() {
-            s.as_str(guard)
-        } else {
-            "anonymous_function"
-        };
-
-        write!(f, "Function({}, {})", name, self.arity)
+        write!(f, "Function({}, {})", self.name(guard), self.arity)
     }
 }
 
 /// A partial function application object type
 #[derive(Clone)]
-pub struct PartialApplication {
+pub struct Partial {
     pub arity: u8,
     pub used: u8,
     pub args: CellPtr<List>,
     pub func: CellPtr<Function>,
 }
 
-impl Print for PartialApplication {
+impl Print for Partial {
     fn print<'guard>(
         &self,
-        _guard: &'guard dyn MutatorScope,
+        guard: &'guard dyn MutatorScope,
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
-        write!(f, "PartialApplication({}/{})", self.used, self.arity)
+        let function = self.func.get(guard);
+        write!(
+            f,
+            "Partial({}, {}/{})",
+            function.name(guard),
+            self.used,
+            self.arity
+        )
     }
 }

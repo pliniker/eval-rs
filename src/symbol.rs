@@ -27,13 +27,13 @@ impl Symbol {
         }
     }
 
-    /// Unsafe because Symbol does not own the &str
-    pub unsafe fn unguarded_as_str(&self) -> &str {
+    /// Unsafe because Symbol does not own the &str nor can it know anything about the actual lifetime
+    pub unsafe fn unguarded_as_str<'desired_lifetime>(&self) -> &'desired_lifetime str {
         let slice = slice::from_raw_parts(self.name_ptr, self.name_len);
         str::from_utf8(slice).unwrap()
     }
 
-    pub fn as_str<'guard>(&self, _guard: &'guard dyn MutatorScope) -> &str {
+    pub fn as_str<'guard>(&self, _guard: &'guard dyn MutatorScope) -> &'guard str {
         unsafe { self.unguarded_as_str() }
     }
 }

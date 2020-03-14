@@ -29,11 +29,6 @@ pub struct Array<T: Sized + Clone> {
 
 /// Internal implementation
 impl<T: Sized + Clone> Array<T> {
-    /// Return a pointer to the array storage
-    pub fn as_ptr(&self) -> Option<*const T> {
-        self.data.get().as_ptr()
-    }
-
     /// Return a bounds-checked pointer to the object at the given index
     fn get_offset(&self, index: ArraySize) -> Result<*mut T, RuntimeError> {
         if index >= self.length.get() {

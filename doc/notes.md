@@ -79,12 +79,6 @@ Bytecode:
  - call sym(fn)
  - return reg
 
-### v3
- - make-closure
- - get-upvalue
- - set-upvalue
- - close-upvalue
-
 ### vn
  - tailcall/cont sym(fn)
  - construct sym(type)
