@@ -95,47 +95,102 @@ impl Print for Pair {
     }
 }
 
-/// Given a pointer to a Pair linked list, assert that the list is of length 1 and return that 1 value
-pub fn get_one_from_pair_list<'guard>(
-    guard: &'guard dyn MutatorScope,
-    ptr: TaggedScopedPtr<'guard>,
+/// Link the two values `head` and `rest` into a Pair instance
+pub fn cons<'guard>(
+    mem: &'guard MutatorView,
+    head: TaggedScopedPtr<'guard>,
+    rest: TaggedScopedPtr<'guard>,
 ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-    match *ptr {
-        Value::Pair(pair) => {
-            if pair.second.is_nil() {
-                Ok(pair.first.get(guard))
-            } else {
-                Err(err_eval("Expected no more than one value in Pair list"))
-            }
-        }
-        _ => Err(err_eval("Expected a Pair list")),
-    }
+    let pair = Pair::new();
+    pair.first.set(head);
+    pair.second.set(rest);
+    mem.alloc_tagged(pair)
 }
 
-/// Given a pointer to a Pair linked list, assert that the list is of length 2 and return the 2 values
-pub fn get_two_from_pair_list<'guard>(
+/// Unpack a list of Pair instances into a Vec
+pub fn vec_from_pairs<'guard>(
     guard: &'guard dyn MutatorScope,
-    ptr: TaggedScopedPtr<'guard>,
-) -> Result<(TaggedScopedPtr<'guard>, TaggedScopedPtr<'guard>), RuntimeError> {
-    match *ptr {
+    pair_list: TaggedScopedPtr<'guard>,
+) -> Result<Vec<TaggedScopedPtr<'guard>>, RuntimeError> {
+    match *pair_list {
         Value::Pair(pair) => {
-            let first_param = pair.first.get(guard);
+            let mut result = Vec::new();
 
-            match *pair.second.get(guard) {
-                Value::Pair(pair) => {
-                    if let Value::Nil = *pair.second.get(guard) {
-                        let second_param = pair.first.get(guard);
-                        Ok((first_param, second_param))
-                    } else {
-                        Err(err_eval("Expected no more than two values in Pair list"))
-                    }
-                }
-                _ => Err(err_eval("Expected no less than two values in Pair list")),
+            result.push(pair.first.get(guard));
+
+            let mut next = pair.second.get(guard);
+            while let Value::Pair(next_pair) = *next {
+                result.push(next_pair.first.get(guard));
+                next = next_pair.second.get(guard);
             }
+
+            // we've terminated the list, but correctly?
+            match *next {
+                Value::Nil => Ok(result),
+                _ => Err(err_eval("Incorrectly terminated Pair list"))
+            }
+        },
+        Value::Nil => {
+            Ok(Vec::new())
         }
-        _ => Err(err_eval("Expected a Pair list")),
+        _ => Err(err_eval("Expected a Pair"))
     }
 }
+
+/// Unpack a list of Pair instances into a Vec, expecting n values
+pub fn vec_from_n_pairs<'guard>(
+    guard: &'guard dyn MutatorScope,
+    pair_list: TaggedScopedPtr<'guard>,
+    expect_length: usize,
+) -> Result<Vec<TaggedScopedPtr<'guard>>, RuntimeError> {
+    let result = vec_from_pairs(guard, pair_list)?;
+
+    if result.len() != expect_length {
+        return Err(err_eval(&format!("Pair list has {} items, expected {}", result.len(), expect_length)))
+    }
+
+    Ok(result)
+}
+
+/// Convenience function for unpacking a list of Pair instances into one value
+pub fn value_from_1_pair<'guard>(
+    guard: &'guard dyn MutatorScope,
+    pair_list: TaggedScopedPtr<'guard>,
+) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
+    let result = vec_from_pairs(guard, pair_list)?;
+
+    match result.as_slice() {
+        [first] => Ok(*first),
+        _ => Err(err_eval(&format!("Pair list has {} items, expected 1", result.len())))
+    }
+}
+
+/// Convenience function for unpacking a list of Pair instances into two values
+pub fn values_from_2_pairs<'guard>(
+    guard: &'guard dyn MutatorScope,
+    pair_list: TaggedScopedPtr<'guard>,
+) -> Result<(TaggedScopedPtr<'guard>, TaggedScopedPtr<'guard>), RuntimeError> {
+    let result = vec_from_pairs(guard, pair_list)?;
+
+    match result.as_slice() {
+        [first, second] => Ok((*first, *second)),
+        _ => Err(err_eval(&format!("Pair list has {} items, expected 2", result.len())))
+    }
+}
+
+/// Convenience function for unpacking a list of Pair instances into three values
+pub fn values_from_3_pairs<'guard>(
+    guard: &'guard dyn MutatorScope,
+    pair_list: TaggedScopedPtr<'guard>,
+) -> Result<(TaggedScopedPtr<'guard>, TaggedScopedPtr<'guard>, TaggedScopedPtr<'guard>), RuntimeError> {
+    let result = vec_from_pairs(guard, pair_list)?;
+
+    match result.as_slice() {
+        [first, second, third] => Ok((*first, *second, *third)),
+        _ => Err(err_eval(&format!("Pair list has {} items, expected 3", result.len())))
+    }
+}
+
 
 #[cfg(test)]
 mod test {
@@ -166,16 +221,14 @@ mod test {
     }
 
     #[test]
-    fn pair_list_length_1() {
+    fn unpack_pair_list_bad() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
-            let thing = mem.lookup_sym("thing");
+            // this is not a Pair, it's an error to convert it to a Vec
+            let thing = mem.lookup_sym("nothing");
 
-            let head = Pair::new();
-            head.first.set(thing);
+            let result = vec_from_pairs(mem, thing);
 
-            let head = mem.alloc_tagged(head)?;
-
-            assert!(get_one_from_pair_list(mem, head).unwrap() == thing);
+            assert!(result.is_err());
 
             Ok(())
         }
@@ -184,16 +237,26 @@ mod test {
     }
 
     #[test]
-    fn pair_list_length_0_should_be_1() {
+    fn unpack_pair_list_n_values() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
-            let thing = mem.nil();
+            let mut head = cons(mem, mem.lookup_sym("alice"), mem.nil())?;
+            head = cons(mem, mem.lookup_sym("bob"), head)?;
+            head = cons(mem, mem.lookup_sym("carlos"), head)?;
+            head = cons(mem, mem.lookup_sym("dave"), head)?;
+            head = cons(mem, mem.lookup_sym("eve"), head)?;
 
-            match get_one_from_pair_list(mem, thing) {
-                Ok(_) => panic!("No list given, no value should have been found!"),
-                Err(e) => assert!(
-                    *e.error_kind() == ErrorKind::EvalError(String::from("Expected a Pair list"))
-                ),
-            }
+            let result = vec_from_pairs(mem, head);
+
+            assert!(result.is_ok());
+
+            let inside = result.unwrap();
+            assert!(inside == vec![
+                mem.lookup_sym("eve"),
+                mem.lookup_sym("dave"),
+                mem.lookup_sym("carlos"),
+                mem.lookup_sym("bob"),
+                mem.lookup_sym("alice")
+            ]);
 
             Ok(())
         }
@@ -202,22 +265,17 @@ mod test {
     }
 
     #[test]
-    fn pair_list_length_2_should_be_1() {
+    fn unpack_pair_list_bad_terminator() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
-            let head = Pair::new();
-            head.append(mem, mem.nil())?;
+            let mut head = cons(mem, mem.lookup_sym("alice"), mem.lookup_sym("non-terminator"))?;
+            head = cons(mem, mem.lookup_sym("bob"), head)?;
+            head = cons(mem, mem.lookup_sym("carlos"), head)?;
+            head = cons(mem, mem.lookup_sym("dave"), head)?;
+            head = cons(mem, mem.lookup_sym("eve"), head)?;
 
-            let head = mem.alloc_tagged(head)?;
+            let result = vec_from_pairs(mem, head);
 
-            match get_one_from_pair_list(mem, head) {
-                Ok(_) => panic!("Too-long list given, no value should have been returned!"),
-                Err(e) => assert!(
-                    *e.error_kind()
-                        == ErrorKind::EvalError(String::from(
-                            "Expected no more than one value in Pair list"
-                        ))
-                ),
-            }
+            assert!(result.is_err());
 
             Ok(())
         }
@@ -226,18 +284,22 @@ mod test {
     }
 
     #[test]
-    fn pair_list_length_2() {
+    fn unpack_pair_list_n_values_expected() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
-            let thing1 = mem.lookup_sym("thing1");
-            let thing2 = mem.lookup_sym("thing2");
+            let mut head = cons(mem, mem.lookup_sym("alice"), mem.nil())?;
+            head = cons(mem, mem.lookup_sym("bob"), head)?;
+            head = cons(mem, mem.lookup_sym("carlos"), head)?;
+            head = cons(mem, mem.lookup_sym("dave"), head)?;
+            head = cons(mem, mem.lookup_sym("eve"), head)?;
 
-            let head = Pair::new();
-            head.first.set(thing1);
-            head.append(mem, thing2)?;
+            let result = vec_from_n_pairs(mem, head, 5);
+            assert!(result.is_ok());
 
-            let head = mem.alloc_tagged(head)?;
+            let result = vec_from_n_pairs(mem, head, 3);
+            assert!(result.is_err());
 
-            assert!(get_two_from_pair_list(mem, head).unwrap() == (thing1, thing2));
+            let result = vec_from_n_pairs(mem, head, 6);
+            assert!(result.is_err());
 
             Ok(())
         }
@@ -245,67 +307,4 @@ mod test {
         test_helper(test_inner)
     }
 
-    #[test]
-    fn pair_list_length_0_should_be_2() {
-        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
-            let thing = mem.nil();
-
-            match get_two_from_pair_list(mem, thing) {
-                Ok(_) => panic!("No list given, no values could have been found!"),
-                Err(e) => assert!(
-                    *e.error_kind() == ErrorKind::EvalError(String::from("Expected a Pair list"))
-                ),
-            }
-
-            Ok(())
-        }
-
-        test_helper(test_inner)
-    }
-
-    #[test]
-    fn pair_list_length_1_should_be_2() {
-        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
-            let head = mem.alloc_tagged(Pair::new())?;
-
-            match get_two_from_pair_list(mem, head) {
-                Ok(_) => panic!("Too-short list given, no values should have been found!"),
-                Err(e) => assert!(
-                    *e.error_kind()
-                        == ErrorKind::EvalError(String::from(
-                            "Expected no less than two values in Pair list"
-                        ))
-                ),
-            }
-
-            Ok(())
-        }
-
-        test_helper(test_inner)
-    }
-
-    #[test]
-    fn pair_list_length_3_should_be_2() {
-        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
-            let pair = Pair::new();
-            pair.append(mem, mem.nil())?;
-            let head = Pair::new();
-            head.dot(mem.alloc_tagged(pair)?);
-            let head = mem.alloc_tagged(head)?;
-
-            match get_two_from_pair_list(mem, head) {
-                Ok(_) => panic!("Too-long list given, no values should have been returned!"),
-                Err(e) => assert!(
-                    *e.error_kind()
-                        == ErrorKind::EvalError(String::from(
-                            "Expected no more than two values in Pair list"
-                        ))
-                ),
-            }
-
-            Ok(())
-        }
-
-        test_helper(test_inner)
-    }
 }

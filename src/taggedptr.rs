@@ -123,8 +123,7 @@ impl FatPtr {
             FatPtr::ArrayU32(raw_ptr) => Value::ArrayU32(raw_ptr.scoped_ref(guard)),
             FatPtr::Dict(raw_ptr) => Value::Dict(raw_ptr.scoped_ref(guard)),
             FatPtr::Function(raw_ptr) => Value::Function(raw_ptr.scoped_ref(guard)),
-            FatPtr::Partial(raw_ptr) => {Value::Partial(raw_ptr.scoped_ref(guard))
-            }
+            FatPtr::Partial(raw_ptr) => Value::Partial(raw_ptr.scoped_ref(guard)),
         }
     }
 }

@@ -4,7 +4,7 @@ use crate::array::ArraySize;
 use crate::bytecode::{ByteCode, Opcode, Register};
 use crate::error::{err_eval, RuntimeError};
 use crate::memory::MutatorView;
-use crate::pair::{get_one_from_pair_list, get_two_from_pair_list};
+use crate::pair::{value_from_1_pair, values_from_2_pairs};
 use crate::safeptr::{ScopedPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
@@ -84,7 +84,7 @@ impl Compiler {
     ) -> Result<Register, RuntimeError> {
         match *function {
             Value::Symbol(s) => match s.as_str(mem) {
-                "quote" => self.push_load_literal(mem, get_one_from_pair_list(mem, params)?),
+                "quote" => self.push_load_literal(mem, value_from_1_pair(mem, params)?),
                 "atom?" => self.push_op2(mem, Opcode::ATOM, params),
                 "nil?" => self.push_op2(mem, Opcode::NIL, params),
                 "car" => self.push_op2(mem, Opcode::CAR, params),
@@ -178,7 +178,7 @@ impl Compiler {
         mem: &'guard MutatorView,
         params: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
-        let (first, second) = get_two_from_pair_list(mem, params)?;
+        let (first, second) = values_from_2_pairs(mem, params)?;
         let expr = self.compile_eval(mem, second)?;
         let assign_to = self.compile_eval(mem, first)?;
         self.bytecode
@@ -220,7 +220,7 @@ impl Compiler {
         params: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         let result = self.acquire_reg();
-        let reg1 = self.compile_eval(mem, get_one_from_pair_list(mem, params)?)?;
+        let reg1 = self.compile_eval(mem, value_from_1_pair(mem, params)?)?;
         self.bytecode.push_op2(mem, op, result, reg1)?;
         Ok(result)
     }
@@ -232,7 +232,7 @@ impl Compiler {
         params: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         let result = self.acquire_reg();
-        let (first, second) = get_two_from_pair_list(mem, params)?;
+        let (first, second) = values_from_2_pairs(mem, params)?;
         let reg1 = self.compile_eval(mem, first)?;
         let reg2 = self.compile_eval(mem, second)?;
         self.bytecode.push_op3(mem, op, result, reg1, reg2)?;
