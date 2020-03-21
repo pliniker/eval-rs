@@ -127,13 +127,11 @@ pub fn vec_from_pairs<'guard>(
             // we've terminated the list, but correctly?
             match *next {
                 Value::Nil => Ok(result),
-                _ => Err(err_eval("Incorrectly terminated Pair list"))
+                _ => Err(err_eval("Incorrectly terminated Pair list")),
             }
-        },
-        Value::Nil => {
-            Ok(Vec::new())
         }
-        _ => Err(err_eval("Expected a Pair"))
+        Value::Nil => Ok(Vec::new()),
+        _ => Err(err_eval("Expected a Pair")),
     }
 }
 
@@ -146,7 +144,11 @@ pub fn vec_from_n_pairs<'guard>(
     let result = vec_from_pairs(guard, pair_list)?;
 
     if result.len() != expect_length {
-        return Err(err_eval(&format!("Pair list has {} items, expected {}", result.len(), expect_length)))
+        return Err(err_eval(&format!(
+            "Pair list has {} items, expected {}",
+            result.len(),
+            expect_length
+        )));
     }
 
     Ok(result)
@@ -161,7 +163,10 @@ pub fn value_from_1_pair<'guard>(
 
     match result.as_slice() {
         [first] => Ok(*first),
-        _ => Err(err_eval(&format!("Pair list has {} items, expected 1", result.len())))
+        _ => Err(err_eval(&format!(
+            "Pair list has {} items, expected 1",
+            result.len()
+        ))),
     }
 }
 
@@ -174,7 +179,10 @@ pub fn values_from_2_pairs<'guard>(
 
     match result.as_slice() {
         [first, second] => Ok((*first, *second)),
-        _ => Err(err_eval(&format!("Pair list has {} items, expected 2", result.len())))
+        _ => Err(err_eval(&format!(
+            "Pair list has {} items, expected 2",
+            result.len()
+        ))),
     }
 }
 
@@ -182,15 +190,24 @@ pub fn values_from_2_pairs<'guard>(
 pub fn values_from_3_pairs<'guard>(
     guard: &'guard dyn MutatorScope,
     pair_list: TaggedScopedPtr<'guard>,
-) -> Result<(TaggedScopedPtr<'guard>, TaggedScopedPtr<'guard>, TaggedScopedPtr<'guard>), RuntimeError> {
+) -> Result<
+    (
+        TaggedScopedPtr<'guard>,
+        TaggedScopedPtr<'guard>,
+        TaggedScopedPtr<'guard>,
+    ),
+    RuntimeError,
+> {
     let result = vec_from_pairs(guard, pair_list)?;
 
     match result.as_slice() {
         [first, second, third] => Ok((*first, *second, *third)),
-        _ => Err(err_eval(&format!("Pair list has {} items, expected 3", result.len())))
+        _ => Err(err_eval(&format!(
+            "Pair list has {} items, expected 3",
+            result.len()
+        ))),
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -250,13 +267,16 @@ mod test {
             assert!(result.is_ok());
 
             let inside = result.unwrap();
-            assert!(inside == vec![
-                mem.lookup_sym("eve"),
-                mem.lookup_sym("dave"),
-                mem.lookup_sym("carlos"),
-                mem.lookup_sym("bob"),
-                mem.lookup_sym("alice")
-            ]);
+            assert!(
+                inside
+                    == vec![
+                        mem.lookup_sym("eve"),
+                        mem.lookup_sym("dave"),
+                        mem.lookup_sym("carlos"),
+                        mem.lookup_sym("bob"),
+                        mem.lookup_sym("alice")
+                    ]
+            );
 
             Ok(())
         }
@@ -267,7 +287,11 @@ mod test {
     #[test]
     fn unpack_pair_list_bad_terminator() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
-            let mut head = cons(mem, mem.lookup_sym("alice"), mem.lookup_sym("non-terminator"))?;
+            let mut head = cons(
+                mem,
+                mem.lookup_sym("alice"),
+                mem.lookup_sym("non-terminator"),
+            )?;
             head = cons(mem, mem.lookup_sym("bob"), head)?;
             head = cons(mem, mem.lookup_sym("carlos"), head)?;
             head = cons(mem, mem.lookup_sym("dave"), head)?;
@@ -306,5 +330,4 @@ mod test {
 
         test_helper(test_inner)
     }
-
 }

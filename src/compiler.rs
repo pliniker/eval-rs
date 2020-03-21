@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use crate::array::ArraySize;
 use crate::bytecode::{ByteCode, Opcode, Register};
 use crate::error::{err_eval, RuntimeError};
+use crate::function::Function;
 use crate::memory::MutatorView;
-use crate::pair::{value_from_1_pair, values_from_2_pairs};
+use crate::pair::{value_from_1_pair, values_from_2_pairs, vec_from_pairs};
 use crate::safeptr::{ScopedPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
@@ -61,8 +62,8 @@ impl Compiler {
 
                     "true" => self.push_load_literal(mem, mem.lookup_sym("true")),
 
-                    // lookup value bound to symbol
                     // TODO: check for local variable and return register number first
+
                     _ => {
                         let reg1 = self.push_load_literal(mem, ast_node)?;
                         self.bytecode
@@ -93,7 +94,7 @@ impl Compiler {
                 "cond" => self.compile_apply_cond(mem, params),
                 "is?" => self.push_op3(mem, Opcode::IS, params),
                 "set" => self.compile_apply_assign(mem, params),
-                "def" => self.compile_apply_def_function(mem, params),
+                "def" => self.compile_named_function(mem, params),
 
                 _ => Err(err_eval("Symbol is not bound to a function")),
             },
@@ -186,12 +187,33 @@ impl Compiler {
         Ok(expr)
     }
 
-    fn compile_apply_def_function<'guard>(
+    fn compile_named_function<'guard>(
         &mut self,
         mem: &'guard MutatorView,
         params: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
-        unimplemented!()
+        let items = vec_from_pairs(mem, params)?;
+
+        if items.len() < 3 {
+            return Err(err_eval(
+                "A function definition must have at least (name params expr)",
+            ));
+        }
+
+        // a function consists of (name (params) expr1 .. exprn)
+        let fn_name = items[0];
+        let fn_params = vec_from_pairs(mem, items[1])?;
+        let fn_exprs = &items[2..];
+
+        // compile the function to a Function object
+        let fn_object = compile_lambda(mem, Some(fn_name), &fn_params, fn_exprs)?;
+
+        // load the function object as a literal and associate it with a global name
+        let name_reg = self.push_load_literal(mem, fn_name)?;
+        let function_reg = self.push_load_literal(mem, fn_object)?;
+        self.bytecode.push_op2(mem, Opcode::STOREGLOBAL, name_reg, function_reg)?;
+
+        Ok(function_reg)
     }
 
     fn push_op0<'guard>(
@@ -262,6 +284,16 @@ impl Compiler {
     fn reset_reg(&mut self, reg: Register) {
         self.next_reg = reg
     }
+}
+
+/// Compile a lambda - parameters and expression, returning a Function object
+fn compile_lambda<'guard>(
+    mem: &'guard MutatorView,
+    name: Option<TaggedScopedPtr<'guard>>,
+    params: &[TaggedScopedPtr<'guard>],
+    expr: &[TaggedScopedPtr<'guard>]
+) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
+    unimplemented!()
 }
 
 /// Compile the given AST and return a bytecode structure
