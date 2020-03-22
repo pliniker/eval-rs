@@ -38,12 +38,30 @@ impl Compiler {
         }
     }
 
+    /// Compile an outermost-level expression, at the 'main' function level
     fn compile<'guard>(
         &mut self,
         mem: &'guard MutatorView,
         ast: TaggedScopedPtr<'guard>,
     ) -> Result<(), RuntimeError> {
         let result_reg = self.compile_eval(mem, ast)?;
+        self.bytecode.push_op1(mem, Opcode::RETURN, result_reg)?;
+        Ok(())
+    }
+
+    /// Compile an expression that has parameters and possibly a name
+    fn compile_function<'guard>(
+        &mut self,
+        mem: &'guard MutatorView,
+        params: &[TaggedScopedPtr<'guard>],  // TODO make use of params in scopes
+        exprs: &[TaggedScopedPtr<'guard>],
+    ) -> Result<(), RuntimeError> {
+        let mut result_reg = 0;
+
+        for expr in exprs.iter() {
+            result_reg = self.compile_eval(mem, *expr)?;
+        }
+
         self.bytecode.push_op1(mem, Opcode::RETURN, result_reg)?;
         Ok(())
     }
@@ -63,7 +81,6 @@ impl Compiler {
                     "true" => self.push_load_literal(mem, mem.lookup_sym("true")),
 
                     // TODO: check for local variable and return register number first
-
                     _ => {
                         let reg1 = self.push_load_literal(mem, ast_node)?;
                         self.bytecode
@@ -206,12 +223,13 @@ impl Compiler {
         let fn_exprs = &items[2..];
 
         // compile the function to a Function object
-        let fn_object = compile_lambda(mem, Some(fn_name), &fn_params, fn_exprs)?;
+        let fn_object = compile_function(mem, fn_name, &fn_params, fn_exprs)?;
 
         // load the function object as a literal and associate it with a global name
         let name_reg = self.push_load_literal(mem, fn_name)?;
         let function_reg = self.push_load_literal(mem, fn_object)?;
-        self.bytecode.push_op2(mem, Opcode::STOREGLOBAL, name_reg, function_reg)?;
+        self.bytecode
+            .push_op2(mem, Opcode::STOREGLOBAL, name_reg, function_reg)?;
 
         Ok(function_reg)
     }
@@ -275,6 +293,7 @@ impl Compiler {
 
     // this is a naive way of allocating registers - every result gets it's own register
     fn acquire_reg(&mut self) -> Register {
+        // TODO check overflow
         let reg = self.next_reg;
         self.next_reg += 1;
         reg
@@ -286,14 +305,39 @@ impl Compiler {
     }
 }
 
-/// Compile a lambda - parameters and expression, returning a Function object
-fn compile_lambda<'guard>(
+/// Compile a function - parameters and expression, returning a Function object
+fn compile_function<'guard>(
     mem: &'guard MutatorView,
-    name: Option<TaggedScopedPtr<'guard>>,
+    name: TaggedScopedPtr<'guard>,
     params: &[TaggedScopedPtr<'guard>],
-    expr: &[TaggedScopedPtr<'guard>]
+    exprs: &[TaggedScopedPtr<'guard>],
 ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-    unimplemented!()
+    // validate function name
+    match *name {
+        Value::Symbol(_) => (),
+        Value::Nil => (),
+        _ => return Err(err_eval("A function name may be nil (anonymous) or a symbol (named)"))
+    };
+    let fn_name = name.as_unscoped();
+
+    // validate arity
+    let fn_arity = if params.len() > 254 {
+        return Err(err_eval("A function cannot have more than 254 parameters"));
+    } else {
+        params.len() as u8
+    };
+
+    // validate expression list
+    if exprs.len() == 0 {
+        return Err(err_eval("A function must have at least one expression"))
+    }
+
+    // compile the expresssions
+    let mut compiler = Compiler::new();
+    compiler.compile_function(mem, params, exprs)?;
+    let fn_bytecode = mem.alloc(compiler.bytecode)?;
+
+    Function::new(mem, fn_name, fn_arity, fn_bytecode)
 }
 
 /// Compile the given AST and return a bytecode structure

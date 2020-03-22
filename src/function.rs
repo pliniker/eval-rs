@@ -23,8 +23,8 @@ impl Function {
         name: TaggedPtr,
         arity: u8,
         code: ScopedPtr<'guard, ByteCode>,
-    ) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
-        mem.alloc(Function {
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
+        mem.alloc_tagged(Function {
             name,
             arity,
             code: CellPtr::new_with(code),
