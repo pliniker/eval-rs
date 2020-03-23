@@ -61,7 +61,12 @@ impl ObjectHeader {
                 FatPtr::NumberObject(RawPtr::untag(object_addr.cast::<NumberObject>()))
             }
             TypeList::Text => FatPtr::Text(RawPtr::untag(object_addr.cast::<Text>())),
+            TypeList::ArrayU8 => FatPtr::ArrayU8(RawPtr::untag(object_addr.cast::<ArrayU8>())),
+            TypeList::ArrayU32 => FatPtr::ArrayU32(RawPtr::untag(object_addr.cast::<ArrayU32>())),
             TypeList::List => FatPtr::List(RawPtr::untag(object_addr.cast::<List>())),
+            TypeList::Dict => FatPtr::Dict(RawPtr::untag(object_addr.cast::<Dict>())),
+            TypeList::Function => FatPtr::Function(RawPtr::untag(object_addr.cast::<Function>())),
+            TypeList::Partial => FatPtr::Partial(RawPtr::untag(object_addr.cast::<Partial>())),
 
             _ => panic!("Invalid ObjectHeader type tag {:?}!", self.type_id),
         }

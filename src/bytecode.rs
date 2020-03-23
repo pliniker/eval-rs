@@ -30,6 +30,7 @@ pub enum Opcode {
     LOADNIL = 0x0C,
     LOADGLOBAL = 0x0D,
     STOREGLOBAL = 0x0E,
+    CALL = 0x0F,
 }
 
 /// A register can be in the range 0..255

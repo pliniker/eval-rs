@@ -190,6 +190,10 @@ fn eval_next_instr<'guard>(
                 return Err(err_eval("Cannot bind value to non-symbol type"));
             }
         }
+
+        Opcode::CALL => {
+            unimplemented!()  // TODO
+        }
     }
 
     Ok(EvalStatus::Pending)

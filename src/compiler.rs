@@ -53,7 +53,7 @@ impl Compiler {
     fn compile_function<'guard>(
         &mut self,
         mem: &'guard MutatorView,
-        params: &[TaggedScopedPtr<'guard>],  // TODO make use of params in scopes
+        params: &[TaggedScopedPtr<'guard>], // TODO make use of params in scopes
         exprs: &[TaggedScopedPtr<'guard>],
     ) -> Result<(), RuntimeError> {
         let mut result_reg = 0;
@@ -113,7 +113,13 @@ impl Compiler {
                 "set" => self.compile_apply_assign(mem, params),
                 "def" => self.compile_named_function(mem, params),
 
-                _ => Err(err_eval("Symbol is not bound to a function")),
+                _ => {
+                    // TODO params
+                    let result = self.acquire_reg();
+                    let fn_name_reg = self.compile_eval(mem, function)?;
+                    self.bytecode.push_op2(mem, Opcode::CALL, result, fn_name_reg)?;
+                    Ok(result)
+                }
             },
 
             _ => Err(err_eval("Non symbol in function-call position")),
@@ -316,20 +322,24 @@ fn compile_function<'guard>(
     match *name {
         Value::Symbol(_) => (),
         Value::Nil => (),
-        _ => return Err(err_eval("A function name may be nil (anonymous) or a symbol (named)"))
+        _ => {
+            return Err(err_eval(
+                "A function name may be nil (anonymous) or a symbol (named)",
+            ))
+        }
     };
     let fn_name = name.as_unscoped();
 
     // validate arity
-    let fn_arity = if params.len() > 254 {
-        return Err(err_eval("A function cannot have more than 254 parameters"));
+    let fn_arity = if params.len() > 250 {
+        return Err(err_eval("A function cannot have more than 250 parameters"));
     } else {
         params.len() as u8
     };
 
     // validate expression list
     if exprs.len() == 0 {
-        return Err(err_eval("A function must have at least one expression"))
+        return Err(err_eval("A function must have at least one expression"));
     }
 
     // compile the expresssions
