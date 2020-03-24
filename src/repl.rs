@@ -1,12 +1,12 @@
 use crate::compiler::compile;
-use crate::containers::{Container, StackAnyContainer};
+use crate::containers::{Container, StackAnyContainer, StackContainer};
 use crate::dict::Dict;
 use crate::error::{ErrorKind, RuntimeError};
 use crate::list::List;
 use crate::memory::{Mutator, MutatorView};
 use crate::parser::parse;
 use crate::safeptr::{CellPtr, TaggedScopedPtr};
-use crate::vm::quick_vm_eval;
+use crate::vm::{quick_vm_eval, CallFrame, CallFrameList};
 
 /// A mutator that returns a Repl instance
 pub struct RepMaker {}
@@ -23,21 +23,27 @@ impl Mutator for RepMaker {
 /// Mutator that implements the VM
 pub struct ReadEvalPrint {
     value_stack: CellPtr<List>,
-    //frame_stack: CellPtr<Array<CallFrame>>,
+    frame_stack: CellPtr<CallFrameList>,
     globals: CellPtr<Dict>,
 }
 
 impl ReadEvalPrint {
     pub fn new(mem: &MutatorView) -> Result<ReadEvalPrint, RuntimeError> {
+        // create a minimal value stack
         let stack = mem.alloc(List::with_capacity(mem, 256)?)?;
         for _ in 0..256 {
-            stack.push(mem, mem.nil())?;
+            StackAnyContainer::push(&*stack, mem, mem.nil())?;
         }
 
+        // create an empty stack frame list
+        let frames = mem.alloc(CallFrameList::with_capacity(mem, 32)?)?;
+
+        // create an empty globals dict
         let globals = mem.alloc(Dict::new())?;
 
         Ok(ReadEvalPrint {
             value_stack: CellPtr::new_with(stack),
+            frame_stack: CellPtr::new_with(frames),
             globals: CellPtr::new_with(globals),
         })
     }
@@ -49,12 +55,13 @@ impl Mutator for ReadEvalPrint {
 
     fn run(&self, mem: &MutatorView, line: String) -> Result<(), RuntimeError> {
         let stack = self.value_stack.get(mem);
+        let frames = self.frame_stack.get(mem);
         let globals = self.globals.get(mem);
 
         match (|mem, line| -> Result<TaggedScopedPtr, RuntimeError> {
             let value = parse(mem, line)?;
             let code = compile(mem, value)?;
-            let value = quick_vm_eval(mem, stack, globals, code)?;
+            let value = quick_vm_eval(mem, frames, stack, globals, code)?;
             Ok(value)
         })(mem, &line)
         {

@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use crate::array::ArraySize;
+use crate::array::{Array, ArraySize};
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{HashIndexedAnyContainer, IndexedAnyContainer, StackAnyContainer};
 use crate::dict::Dict;
@@ -20,16 +20,30 @@ pub enum EvalStatus<'guard> {
     Halt,
 }
 
+/// A call frame, separate from the register stack
 #[derive(Clone)]
-struct CallFrame {
+pub struct CallFrame {
     function: CellPtr<Function>,
     ip: Cell<ArraySize>,
     base: ArraySize,
 }
 
+impl CallFrame {
+    pub fn new_main() -> CallFrame {
+        CallFrame {
+            function: None,
+            ip: Cell::new(0),
+            base: 0,
+        }
+    }
+}
+
+pub type CallFrameList = Array<CallFrame>;
+
 /// Execute the next instruction and return
 fn eval_next_instr<'guard>(
     mem: &'guard MutatorView,
+    frames: ScopedPtr<'guard, CallFrameList>,
     stack: ScopedPtr<'guard, List>,
     globals: ScopedPtr<'guard, Dict>,
     instr: ScopedPtr<'guard, InstructionStream>,
@@ -192,7 +206,15 @@ fn eval_next_instr<'guard>(
         }
 
         Opcode::CALL => {
-            unimplemented!()  // TODO
+            // TODO params
+
+            let result_reg = instr.get_reg_acc() as ArraySize;
+            let function_reg = instr.get_reg1() as ArraySize;
+
+            let function = stack.get(mem, function_reg)?;
+
+            // TODO push new call frame, move stack reg window
+            unimplemented!()
         }
     }
 
@@ -202,13 +224,14 @@ fn eval_next_instr<'guard>(
 /// Given an InstructionStream, execute up to max_instr more instructions
 pub fn vm_eval_stream<'guard>(
     mem: &'guard MutatorView,
+    frames: ScopedPtr<'guard, CallFrameList>,
     stack: ScopedPtr<'guard, List>,
     globals: ScopedPtr<'guard, Dict>,
     instr: ScopedPtr<'guard, InstructionStream>,
     max_instr: ArraySize,
 ) -> Result<EvalStatus<'guard>, RuntimeError> {
     for _ in 0..max_instr {
-        match eval_next_instr(mem, stack, globals, instr)? {
+        match eval_next_instr(mem, frames, stack, globals, instr)? {
             EvalStatus::Return(value) => return Ok(EvalStatus::Return(value)),
             EvalStatus::Halt => return Ok(EvalStatus::Halt),
             _ => (),
@@ -220,6 +243,7 @@ pub fn vm_eval_stream<'guard>(
 /// Evaluate a whole block of byte code
 pub fn quick_vm_eval<'guard>(
     mem: &'guard MutatorView,
+    frames: ScopedPtr<'guard, CallFrameList>,
     stack: ScopedPtr<'guard, List>,
     globals: ScopedPtr<'guard, Dict>,
     code: ScopedPtr<'_, ByteCode>,
@@ -228,7 +252,7 @@ pub fn quick_vm_eval<'guard>(
 
     let mut status = EvalStatus::Pending;
     while status == EvalStatus::Pending {
-        status = vm_eval_stream(mem, stack, globals, stream, 1024)?;
+        status = vm_eval_stream(mem, frames, stack, globals, stream, 1024)?;
         match status {
             EvalStatus::Return(value) => return Ok(value),
             EvalStatus::Halt => return Err(err_eval("Program halted")),

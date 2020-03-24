@@ -114,10 +114,11 @@ impl Compiler {
                 "def" => self.compile_named_function(mem, params),
 
                 _ => {
-                    // TODO params
+                    // TODO params - use register to pass in parameter count?
                     let result = self.acquire_reg();
                     let fn_name_reg = self.compile_eval(mem, function)?;
-                    self.bytecode.push_op2(mem, Opcode::CALL, result, fn_name_reg)?;
+                    self.bytecode
+                        .push_op2(mem, Opcode::CALL, result, fn_name_reg)?;
                     Ok(result)
                 }
             },
