@@ -4,7 +4,7 @@ use std::fmt;
 use crate::error::{err_eval, RuntimeError, SourcePos};
 use crate::memory::MutatorView;
 use crate::printer::Print;
-use crate::safeptr::{MutatorScope, TaggedCellPtr, TaggedScopedPtr};
+use crate::safeptr::{MutatorScope, ScopedPtr, TaggedCellPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
 /// A Pair of pointers, like a Cons cell of old
@@ -62,7 +62,8 @@ impl Print for Pair {
         guard: &'guard dyn MutatorScope,
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
-        let mut tail = self;
+        let mut tail = ScopedPtr::new(guard, self);
+
         write!(f, "({}", tail.first.get(guard))?;
 
         while let Value::Pair(next) = *tail.second.get(guard) {

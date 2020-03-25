@@ -261,6 +261,12 @@ impl InstructionStream {
         }
     }
 
+    /// Change to a different stack frame, either as a function call or a return
+    pub fn switch_frame(&self, code: ScopedPtr<'_, ByteCode>, ip: ArraySize) {
+        self.instructions.set(code);
+        self.ip.set(ip);
+    }
+
     /// Retrieve the next instruction and return the Opcode, if it correctly decodes
     pub fn get_next_opcode<'guard>(
         &self,
@@ -302,6 +308,11 @@ impl InstructionStream {
             guard,
             lit_id as ArraySize,
         )
+    }
+
+    /// Return the next instruction pointer
+    pub fn get_next_ip(&self) -> ArraySize {
+        self.ip.get()
     }
 
     /// Adjust the instruction pointer by the given signed offset from the current ip

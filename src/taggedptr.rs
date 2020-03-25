@@ -25,31 +25,31 @@ use crate::number::NumberObject;
 use crate::pair::Pair;
 use crate::pointerops::{get_tag, ScopedRef, Tagged, TAG_NUMBER, TAG_OBJECT, TAG_PAIR, TAG_SYMBOL};
 use crate::printer::Print;
-use crate::safeptr::MutatorScope;
+use crate::safeptr::{MutatorScope, ScopedPtr};
 use crate::symbol::Symbol;
 use crate::text::Text;
 
-/// A safe interface to GC-heap managed objects. The `'scope` lifetime must be a safe lifetime for
+/// A safe interface to GC-heap managed objects. The `'guard` lifetime must be a safe lifetime for
 /// the GC not to move or collect the referenced object.
 /// This should represent every type native to the runtime.
 #[derive(Copy, Clone)]
-pub enum Value<'scope> {
+pub enum Value<'guard> {
     Nil,
-    Pair(&'scope Pair),
-    Symbol(&'scope Symbol),
+    Pair(ScopedPtr<'guard, Pair>),
+    Symbol(ScopedPtr<'guard, Symbol>),
     Number(isize),
-    NumberObject(&'scope NumberObject),
-    Text(&'scope Text),
-    List(&'scope List),
-    ArrayU8(&'scope ArrayU8),
-    ArrayU32(&'scope ArrayU32),
-    Dict(&'scope Dict),
-    Function(&'scope Function),
-    Partial(&'scope Partial),
+    NumberObject(ScopedPtr<'guard, NumberObject>),
+    Text(ScopedPtr<'guard, Text>),
+    List(ScopedPtr<'guard, List>),
+    ArrayU8(ScopedPtr<'guard, ArrayU8>),
+    ArrayU32(ScopedPtr<'guard, ArrayU32>),
+    Dict(ScopedPtr<'guard, Dict>),
+    Function(ScopedPtr<'guard, Function>),
+    Partial(ScopedPtr<'guard, Partial>),
 }
 
 /// `Value` can have a safe `Display` implementation
-impl<'scope> fmt::Display for Value<'scope> {
+impl<'guard> fmt::Display for Value<'guard> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Value::Nil => write!(f, "nil"),
@@ -68,7 +68,7 @@ impl<'scope> fmt::Display for Value<'scope> {
     }
 }
 
-impl<'scope> fmt::Debug for Value<'scope> {
+impl<'guard> fmt::Debug for Value<'guard> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Value::Nil => write!(f, "nil"),
@@ -87,7 +87,7 @@ impl<'scope> fmt::Debug for Value<'scope> {
     }
 }
 
-impl<'scope> MutatorScope for Value<'scope> {}
+impl<'guard> MutatorScope for Value<'guard> {}
 
 /// An unpacked tagged Fat Pointer that carries the type information in the enum structure.
 /// This should represent every type native to the runtime.
@@ -110,20 +110,32 @@ pub enum FatPtr {
 impl FatPtr {
     /// Given a lifetime, convert to a `Value` type. Unsafe because anything can provide a lifetime
     /// without any safety guarantee that it's valid.
-    pub fn as_value<'scope>(&self, guard: &'scope dyn MutatorScope) -> Value<'scope> {
+    pub fn as_value<'guard>(&self, guard: &'guard dyn MutatorScope) -> Value<'guard> {
         match self {
             FatPtr::Nil => Value::Nil,
-            FatPtr::Pair(raw_ptr) => Value::Pair(raw_ptr.scoped_ref(guard)),
-            FatPtr::Symbol(raw_ptr) => Value::Symbol(raw_ptr.scoped_ref(guard)),
+            FatPtr::Pair(raw_ptr) => Value::Pair(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard))),
+            FatPtr::Symbol(raw_ptr) => {
+                Value::Symbol(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
+            }
             FatPtr::Number(num) => Value::Number(*num),
-            FatPtr::NumberObject(raw_ptr) => Value::NumberObject(raw_ptr.scoped_ref(guard)),
-            FatPtr::Text(raw_ptr) => Value::Text(raw_ptr.scoped_ref(guard)),
-            FatPtr::List(raw_ptr) => Value::List(raw_ptr.scoped_ref(guard)),
-            FatPtr::ArrayU8(raw_ptr) => Value::ArrayU8(raw_ptr.scoped_ref(guard)),
-            FatPtr::ArrayU32(raw_ptr) => Value::ArrayU32(raw_ptr.scoped_ref(guard)),
-            FatPtr::Dict(raw_ptr) => Value::Dict(raw_ptr.scoped_ref(guard)),
-            FatPtr::Function(raw_ptr) => Value::Function(raw_ptr.scoped_ref(guard)),
-            FatPtr::Partial(raw_ptr) => Value::Partial(raw_ptr.scoped_ref(guard)),
+            FatPtr::NumberObject(raw_ptr) => {
+                Value::NumberObject(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
+            }
+            FatPtr::Text(raw_ptr) => Value::Text(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard))),
+            FatPtr::List(raw_ptr) => Value::List(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard))),
+            FatPtr::ArrayU8(raw_ptr) => {
+                Value::ArrayU8(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
+            }
+            FatPtr::ArrayU32(raw_ptr) => {
+                Value::ArrayU32(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
+            }
+            FatPtr::Dict(raw_ptr) => Value::Dict(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard))),
+            FatPtr::Function(raw_ptr) => {
+                Value::Function(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
+            }
+            FatPtr::Partial(raw_ptr) => {
+                Value::Partial(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
+            }
         }
     }
 }
