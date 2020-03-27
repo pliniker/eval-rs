@@ -39,6 +39,9 @@ pub trait StackContainer<T: Sized + Clone>: Container<T> {
     /// Pop returns a bounds error if the container is empty, otherwise moves the last item of the
     /// array out to the caller.
     fn pop<'guard>(&self, _guard: &'guard dyn MutatorScope) -> Result<T, RuntimeError>;
+
+    /// Return the value at the top of the stack without removing it
+    fn top<'guard>(&self, _guard: &'guard dyn MutatorScope) -> Result<T, RuntimeError>;
 }
 
 /// Specialized stack trait. If implemented, the container can function as a stack
@@ -53,6 +56,12 @@ pub trait StackAnyContainer: StackContainer<TaggedCellPtr> {
     /// Pop returns a bounds error if the container is empty, otherwise moves the last item of the
     /// array out to the caller.
     fn pop<'guard>(
+        &self,
+        _guard: &'guard dyn MutatorScope,
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError>;
+
+    /// Return the value at the top of the stack without removing it
+    fn top<'guard>(
         &self,
         _guard: &'guard dyn MutatorScope,
     ) -> Result<TaggedScopedPtr<'guard>, RuntimeError>;
@@ -74,6 +83,20 @@ pub trait IndexedContainer<T: Sized + Clone>: Container<T> {
         index: ArraySize,
         item: T,
     ) -> Result<(), RuntimeError>;
+}
+
+/// A trait that is implemented for containers that can represent their contents as a slice.
+pub trait SliceableContainer<T: Sized + Clone>: IndexedContainer<T> {
+    /// This function allows access to the interior of a container as a slice by way of a
+    /// closure, permitting direct access to the memory locations of objects in the container
+    /// for the lifetime of the closure call.
+    ///
+    /// It is important to understand that the 'guard lifetime is not the same safe duration
+    /// as the slice lifetime - the slice may be invalidated during the 'guard lifetime
+    /// by operations on the container that cause reallocation.
+    fn access_slice<'guard, F, R>(&self, _guard: &'guard dyn MutatorScope, f: F) -> R
+    where
+        F: FnOnce(&mut [T]) -> R;
 }
 
 /// Specialized indexable interface for where TaggedCellPtr is used as T
@@ -141,42 +164,3 @@ pub trait ContainerFromPairList: Container<TaggedCellPtr> {
 pub trait VersionedContainer<T: Sized + Clone>: Container<T> {}
 
 pub trait ImmutableContainer<T: Sized + Clone>: Container<T> {}
-
-/// Experimental
-pub trait SliceSafeContainer<T: Sized + Clone>: ImmutableContainer<T> {
-    /// Give a closure a view of the container as a slice.
-    /// Restricting to `Fn` means interior mutability rules can be maintained. The closure cannot
-    /// safely escape a reference to an object inside the array.
-    /// It _is_ possible to reallocate the array while a slice is held - the slice will continue
-    /// to refer to the old memory. This is a problem but strictly not unsafe because the
-    /// lifetime limitation guarantee is non-invalidation of memory during the mutator lifetime.
-    fn slice_apply<'guard, F>(
-        &self,
-        _guard: &'guard dyn MutatorScope,
-        op: F,
-    ) -> Result<(), RuntimeError>
-    where
-        F: Fn(&[T]) -> Result<(), RuntimeError>;
-}
-/*
-/// Experimental
-/// Give a closure a view of the container as a slice.
-/// Restricting to `Fn` means interior mutability rules can be maintained. The closure cannot
-/// safely escape a reference to an object inside the array.
-fn slice_apply<'guard, F>(
-&self,
-_guard: &'guard dyn MutatorScope,
-op: F,
-    ) -> Result<(), RuntimeError>
-    where
-        F: Fn(&[T]) -> Result<(), RuntimeError>,
-    {
-        if let Some(ptr) = self.data.get().as_ptr() {
-            let as_slice = unsafe { from_raw_parts(ptr, self.length.get() as usize) };
-
-            op(as_slice)
-        } else {
-            Ok(())
-        }
-    }
-*/

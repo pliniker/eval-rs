@@ -6,12 +6,13 @@
 use std::cell::Cell;
 use std::fmt;
 use std::ptr::{read, write};
+use std::slice::from_raw_parts_mut;
 
 pub use stickyimmix::ArraySize;
 
 use crate::containers::{
-    Container, ContainerFromPairList, IndexedAnyContainer, IndexedContainer, StackAnyContainer,
-    StackContainer,
+    Container, ContainerFromPairList, IndexedAnyContainer, IndexedContainer, SliceableContainer,
+    StackAnyContainer, StackContainer,
 };
 use crate::error::{ErrorKind, RuntimeError};
 use crate::memory::MutatorView;
@@ -83,6 +84,17 @@ impl<T: Sized + Clone> Array<T> {
             Ok(&*dest as &T)
         }
     }
+
+    /// Represent the array as a slice. This is necessarily unsafe even for the 'guard lifetime
+    /// duration because while a slice is held, other code can cause array internals to change
+    /// that might cause the slice pointer and length to become invalid.
+    pub unsafe fn as_slice<'guard>(&self, _guard: &'guard dyn MutatorScope) -> &mut [T] {
+        if let Some(ptr) = self.data.get().as_ptr() {
+            from_raw_parts_mut(ptr as *mut T, self.length.get() as usize)
+        } else {
+            &mut []
+        }
+    }
 }
 
 impl<T: Sized + Clone> Container<T> for Array<T> {
@@ -138,15 +150,28 @@ impl<T: Sized + Clone> StackContainer<T> for Array<T> {
 
     /// Pop returns None if the container is empty, otherwise moves the last item of the array
     /// out to the caller.
-    fn pop<'guard>(&self, _guard: &'guard dyn MutatorScope) -> Result<T, RuntimeError> {
+    fn pop<'guard>(&self, guard: &'guard dyn MutatorScope) -> Result<T, RuntimeError> {
         let length = self.length.get();
 
         if length == 0 {
             Err(RuntimeError::new(ErrorKind::BoundsError))
         } else {
             let last = length - 1;
-            let item = self.read(_guard, last)?;
+            let item = self.read(guard, last)?;
             self.length.set(last);
+            Ok(item)
+        }
+    }
+
+    /// Return the value at the top of the stack without removing it
+    fn top<'guard>(&self, guard: &'guard dyn MutatorScope) -> Result<T, RuntimeError> {
+        let length = self.length.get();
+
+        if length == 0 {
+            Err(RuntimeError::new(ErrorKind::BoundsError))
+        } else {
+            let last = length - 1;
+            let item = self.read(guard, last)?;
             Ok(item)
         }
     }
@@ -171,6 +196,16 @@ impl<T: Sized + Clone> IndexedContainer<T> for Array<T> {
     ) -> Result<(), RuntimeError> {
         self.write(guard, index, item)?;
         Ok(())
+    }
+}
+
+impl<T: Sized + Clone> SliceableContainer<T> for Array<T> {
+    fn access_slice<'guard, F, R>(&self, guard: &'guard dyn MutatorScope, f: F) -> R
+    where
+        F: FnOnce(&mut [T]) -> R,
+    {
+        let slice = unsafe { self.as_slice(guard) };
+        f(slice)
     }
 }
 
@@ -221,6 +256,14 @@ impl StackAnyContainer for Array<TaggedCellPtr> {
         guard: &'guard dyn MutatorScope,
     ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
         Ok(StackContainer::<TaggedCellPtr>::pop(self, guard)?.get(guard))
+    }
+
+    /// Return the value at the top of the stack without removing it
+    fn top<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
+        Ok(StackContainer::<TaggedCellPtr>::top(self, guard)?.get(guard))
     }
 }
 

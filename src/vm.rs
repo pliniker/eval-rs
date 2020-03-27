@@ -3,7 +3,8 @@ use std::cell::Cell;
 use crate::array::{Array, ArraySize};
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{
-    HashIndexedAnyContainer, IndexedAnyContainer, StackAnyContainer, StackContainer,
+    HashIndexedAnyContainer, IndexedAnyContainer, SliceableContainer, StackAnyContainer,
+    StackContainer,
 };
 use crate::dict::Dict;
 use crate::error::{err_eval, RuntimeError};
@@ -240,10 +241,23 @@ impl Thread {
 
                 let binding = stack.get(mem, function_reg)?;
 
-                match *binding{
+                match *binding {
                     Value::Function(function) => {
-                        let new_stack_base = self.stack_base.get() + result_reg;
+                        // create a new call frame:
+                        //   function being called
+                        //   base = current base + index of result register
+                        //
+                        // get current ip
+                        //
+                        // modify current call frame:
+                        //   set ip to current ip
+                        //
+                        // represent current register window as a slice, run this
+                        // function as an SliceableContainer::access_slice() function
 
+                        let current_frame_ip = instr.get_next_ip();
+
+                        let new_stack_base = self.stack_base.get() + result_reg;
                         let frame = CallFrame::new(function, 0, new_stack_base);
 
                         let code = function.code.get(mem);
@@ -256,7 +270,7 @@ impl Thread {
 
                     Value::Partial(_p) => unimplemented!(),
 
-                    _ => return Err(err_eval("Cannot call a non function type")),
+                    _ => return Err(err_eval("Type is not callable")),
                 }
             }
         }
