@@ -256,6 +256,7 @@ impl Thread {
                         // function as an SliceableContainer::access_slice() function
 
                         let current_frame_ip = instr.get_next_ip();
+                        frames.access_slice(mem, |f| f.last().unwrap().ip.set(current_frame_ip));
 
                         let new_stack_base = self.stack_base.get() + result_reg;
                         let frame = CallFrame::new(function, 0, new_stack_base);

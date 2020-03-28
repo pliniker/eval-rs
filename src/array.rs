@@ -12,7 +12,7 @@ pub use stickyimmix::ArraySize;
 
 use crate::containers::{
     Container, ContainerFromPairList, IndexedAnyContainer, IndexedContainer, SliceableContainer,
-    StackAnyContainer, StackContainer,
+    SliceOp, StackAnyContainer, StackContainer,
 };
 use crate::error::{ErrorKind, RuntimeError};
 use crate::memory::MutatorView;
@@ -200,9 +200,7 @@ impl<T: Sized + Clone> IndexedContainer<T> for Array<T> {
 }
 
 impl<T: Sized + Clone> SliceableContainer<T> for Array<T> {
-    fn access_slice<'guard, F, R>(&self, guard: &'guard dyn MutatorScope, f: F) -> R
-    where
-        F: FnOnce(&mut [T]) -> R,
+    fn access_slice<'guard, R>(&self, guard: &'guard dyn MutatorScope, f: SliceOp<T, R>) -> R
     {
         let slice = unsafe { self.as_slice(guard) };
         f(slice)

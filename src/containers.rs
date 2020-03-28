@@ -85,18 +85,25 @@ pub trait IndexedContainer<T: Sized + Clone>: Container<T> {
     ) -> Result<(), RuntimeError>;
 }
 
+/// A function pointer that takes a slice of type T and returns a value of type R.
+pub type SliceOp<T, R> = fn(&mut [T]) -> R;
+
 /// A trait that is implemented for containers that can represent their contents as a slice.
 pub trait SliceableContainer<T: Sized + Clone>: IndexedContainer<T> {
     /// This function allows access to the interior of a container as a slice by way of a
-    /// closure, permitting direct access to the memory locations of objects in the container
+    /// function, permitting direct access to the memory locations of objects in the container
     /// for the lifetime of the closure call.
     ///
     /// It is important to understand that the 'guard lifetime is not the same safe duration
     /// as the slice lifetime - the slice may be invalidated during the 'guard lifetime
     /// by operations on the container that cause reallocation.
-    fn access_slice<'guard, F, R>(&self, _guard: &'guard dyn MutatorScope, f: F) -> R
-    where
-        F: FnOnce(&mut [T]) -> R;
+    ///
+    /// To prevent the function from modifying the container outside of the slice reference,
+    /// the function may not capture it's environment: hence the requirement for a plain
+    /// function pointer.
+    ///
+    /// This retains the core requirement of interior mutability.
+    fn access_slice<'guard, R>(&self, _guard: &'guard dyn MutatorScope, f: SliceOp<T, R>) -> R;
 }
 
 /// Specialized indexable interface for where TaggedCellPtr is used as T
