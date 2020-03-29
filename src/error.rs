@@ -31,6 +31,7 @@ pub enum ErrorKind {
     BoundsError,
     KeyError,
     UnhashableError,
+    MutableBorrowError,
 }
 
 /// An Eval-rs runtime error type
@@ -98,6 +99,10 @@ impl fmt::Display for RuntimeError {
             ErrorKind::BoundsError => write!(f, "Indexing bounds error"),
             ErrorKind::KeyError => write!(f, "Key does not exist in Dict"),
             ErrorKind::UnhashableError => write!(f, "Attempt to access Dict with unhashable key"),
+            ErrorKind::MutableBorrowError => write!(
+                f,
+                "Attempt to modify a container that is already mutably borrowed"
+            ),
         }
     }
 }

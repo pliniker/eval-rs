@@ -99,11 +99,12 @@ pub trait SliceableContainer<T: Sized + Clone>: IndexedContainer<T> {
     /// by operations on the container that cause reallocation.
     ///
     /// To prevent the function from modifying the container outside of the slice reference,
-    /// the function may not capture it's environment: hence the requirement for a plain
-    /// function pointer.
-    ///
-    /// This retains the core requirement of interior mutability.
-    fn access_slice<'guard, R>(&self, _guard: &'guard dyn MutatorScope, f: SliceOp<T, R>) -> R;
+    /// the implementing container must maintain a RefCell-style flag to catch runtime
+    /// container modifications that would render the slice invalid or cause undefined
+    /// behavior.
+    fn access_slice<'guard, F, R>(&self, _guard: &'guard dyn MutatorScope, f: F) -> R
+    where
+        F: FnOnce(&mut [T]) -> R;
 }
 
 /// Specialized indexable interface for where TaggedCellPtr is used as T

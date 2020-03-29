@@ -11,8 +11,8 @@ use std::slice::from_raw_parts_mut;
 pub use stickyimmix::ArraySize;
 
 use crate::containers::{
-    Container, ContainerFromPairList, IndexedAnyContainer, IndexedContainer, SliceableContainer,
-    SliceOp, StackAnyContainer, StackContainer,
+    Container, ContainerFromPairList, IndexedAnyContainer, IndexedContainer, SliceOp,
+    SliceableContainer, StackAnyContainer, StackContainer,
 };
 use crate::error::{ErrorKind, RuntimeError};
 use crate::memory::MutatorView;
@@ -21,11 +21,22 @@ use crate::rawarray::{default_array_growth, RawArray, DEFAULT_ARRAY_SIZE};
 use crate::safeptr::{MutatorScope, TaggedCellPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
-/// An array, like Vec
+// RefCell interior mutability pattern
+type BorrowFlag = isize;
+const INTERIOR_ONLY: isize = 0;
+const EXPOSED_MUTABLY: isize = 1;
+
+/// An array, like Vec, but applying an interior mutability pattern.
+///
+/// Implements Container traits, including SliceableContainer.
+/// Since SliceableContainer allows mutable access to the interior
+/// of the array, RefCell-style runtime semantics are employed to
+/// prevent the array being modified outside of the slice borrow.
 #[derive(Clone)]
 pub struct Array<T: Sized + Clone> {
     length: Cell<ArraySize>,
     data: Cell<RawArray<T>>,
+    borrow: Cell<BorrowFlag>,
 }
 
 /// Internal implementation
@@ -102,6 +113,7 @@ impl<T: Sized + Clone> Container<T> for Array<T> {
         Array {
             length: Cell::new(0),
             data: Cell::new(RawArray::new()),
+            borrow: Cell::new(INTERIOR_ONLY),
         }
     }
 
@@ -112,12 +124,17 @@ impl<T: Sized + Clone> Container<T> for Array<T> {
         Ok(Array {
             length: Cell::new(0),
             data: Cell::new(RawArray::with_capacity(mem, capacity)?),
+            borrow: Cell::new(INTERIOR_ONLY),
         })
     }
 
     fn clear<'guard>(&self, _guard: &'guard MutatorView) -> Result<(), RuntimeError> {
-        self.length.set(0);
-        Ok(())
+        if self.borrow.get() != INTERIOR_ONLY {
+            Err(RuntimeError::new(ErrorKind::MutableBorrowError))
+        } else {
+            self.length.set(0);
+            Ok(())
+        }
     }
 
     fn length(&self) -> ArraySize {
@@ -128,6 +145,10 @@ impl<T: Sized + Clone> Container<T> for Array<T> {
 impl<T: Sized + Clone> StackContainer<T> for Array<T> {
     /// Push can trigger an underlying array resize, hence it requires the ability to allocate
     fn push<'guard>(&self, mem: &'guard MutatorView, item: T) -> Result<(), RuntimeError> {
+        if self.borrow.get() != INTERIOR_ONLY {
+            return Err(RuntimeError::new(ErrorKind::MutableBorrowError));
+        }
+
         let length = self.length.get();
         let mut array = self.data.get(); // Takes a copy
 
@@ -151,6 +172,10 @@ impl<T: Sized + Clone> StackContainer<T> for Array<T> {
     /// Pop returns None if the container is empty, otherwise moves the last item of the array
     /// out to the caller.
     fn pop<'guard>(&self, guard: &'guard dyn MutatorScope) -> Result<T, RuntimeError> {
+        if self.borrow.get() != INTERIOR_ONLY {
+            return Err(RuntimeError::new(ErrorKind::MutableBorrowError));
+        }
+
         let length = self.length.get();
 
         if length == 0 {
@@ -200,10 +225,17 @@ impl<T: Sized + Clone> IndexedContainer<T> for Array<T> {
 }
 
 impl<T: Sized + Clone> SliceableContainer<T> for Array<T> {
-    fn access_slice<'guard, R>(&self, guard: &'guard dyn MutatorScope, f: SliceOp<T, R>) -> R
+    fn access_slice<'guard, F, R>(&self, guard: &'guard dyn MutatorScope, f: F) -> R
+    where
+        F: FnOnce(&mut [T]) -> R,
     {
+        // protect the slice from any backing-array modification while allowing
+        // the closure to access it's environment
+        self.borrow.set(EXPOSED_MUTABLY);
         let slice = unsafe { self.as_slice(guard) };
-        f(slice)
+        let result = f(slice);
+        self.borrow.set(INTERIOR_ONLY);
+        result
     }
 }
 
