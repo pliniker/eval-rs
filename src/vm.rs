@@ -3,7 +3,7 @@ use std::cell::Cell;
 use crate::array::{Array, ArraySize};
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{
-    HashIndexedAnyContainer, IndexedAnyContainer, SliceableContainer, StackAnyContainer,
+    Container, HashIndexedAnyContainer, IndexedAnyContainer, SliceableContainer, StackAnyContainer,
     StackContainer,
 };
 use crate::dict::Dict;
@@ -66,23 +66,25 @@ pub struct Thread {
 }
 
 impl Thread {
-    pub fn new<'guard>(mem: &'guard MutatorView) -> Result<ScopedPtr<'guard, Thread>, RuntimeError> {
+    pub fn new<'guard>(
+        mem: &'guard MutatorView,
+    ) -> Result<ScopedPtr<'guard, Thread>, RuntimeError> {
+        // create an empty stack frame list
+        let frames = mem.alloc(CallFrameList::with_capacity(mem, 32)?)?;
+
         // create a minimal value stack
         let stack = mem.alloc(List::with_capacity(mem, 256)?)?;
         for _ in 0..256 {
             StackAnyContainer::push(&*stack, mem, mem.nil())?;
         }
 
-        // create an empty stack frame list
-        let frames = mem.alloc(CallFrameList::with_capacity(mem, 32)?)?;
-
         // create an empty globals dict
         let globals = mem.alloc(Dict::new())?;
 
         mem.alloc(Thread {
-            frames,
-            stack,
-            globals,
+            frames: CellPtr::new_with(frames),
+            stack: CellPtr::new_with(stack),
+            globals: CellPtr::new_with(globals),
             instr,
             stack_base: Cell::new(0),
         })

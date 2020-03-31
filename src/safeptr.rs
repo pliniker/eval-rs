@@ -11,6 +11,23 @@ use crate::taggedptr::{FatPtr, TaggedPtr, Value};
 /// Type that provides a generic anchor for mutator timeslice lifetimes
 pub trait MutatorScope {}
 
+// Copy On Write semantics? Maybe the below...
+// TODO, add MutatorView methods that can return MutScopedPtr?
+//
+// pub trait CopyOnWrite {
+//     fn copy_mut<'guard>(&self, _guard: &'guard MutatorView) -> MutScopedPtr<'guard, Self>;
+// }
+//
+// pub struct MutScopedPtr<'guard, T: Sized> {
+//     value: &mut 'guard T
+// }
+//
+// impl Deref, DerefMut for MutScopedPtr
+//
+// impl<'guard, T: Sized> MutScopedPtr<'guard, T> {
+//    pub fn into_immut(self) -> ScopedPtr<'guard, T> {}
+// }
+
 /// An untagged compile-time typed pointer with scope limited by `MutatorScope`
 pub struct ScopedPtr<'guard, T: Sized> {
     value: &'guard T,

@@ -16,7 +16,7 @@ use crate::pointerops::{AsNonNull, Tagged};
 use crate::symbol::Symbol;
 use crate::taggedptr::FatPtr;
 use crate::text::Text;
-use crate::vm::CallFrameList;
+use crate::vm::{CallFrameList, Thread};
 
 /// Recognized heap-allocated types.
 /// This should represent every type native to the runtime with the exception of tagged pointer inline value types.
@@ -37,6 +37,7 @@ pub enum TypeList {
     Function,
     Partial,
     CallFrameList,
+    Thread,
 }
 
 // Mark this as a Stickyimmix type-identifier type
@@ -145,3 +146,4 @@ declare_allocobject!(InstructionStream, InstructionStream);
 declare_allocobject!(Function, Function);
 declare_allocobject!(Partial, Partial);
 declare_allocobject!(CallFrameList, CallFrameList);
+declare_allocobject!(Thread, Thread);
