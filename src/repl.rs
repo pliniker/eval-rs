@@ -1,8 +1,5 @@
 use crate::compiler::compile;
-use crate::containers::{Container, StackAnyContainer, StackContainer};
-use crate::dict::Dict;
 use crate::error::{ErrorKind, RuntimeError};
-use crate::list::List;
 use crate::memory::{Mutator, MutatorView};
 use crate::parser::parse;
 use crate::safeptr::{CellPtr, TaggedScopedPtr};
@@ -38,10 +35,12 @@ impl Mutator for ReadEvalPrint {
     type Output = ();
 
     fn run(&self, mem: &MutatorView, line: String) -> Result<(), RuntimeError> {
+        let thread = self.main_thread.get(mem);
+
         match (|mem, line| -> Result<TaggedScopedPtr, RuntimeError> {
             let value = parse(mem, line)?;
             let code = compile(mem, value)?;
-            let value = self.main_thread.get(mem).quick_vm_eval(mem, code)?;
+            let value = thread.quick_vm_eval(mem, code)?;
             Ok(value)
         })(mem, &line)
         {

@@ -278,18 +278,6 @@ impl Thread {
 
                     match *binding {
                         Value::Function(function) => {
-                            // create a new call frame:
-                            //   function being called
-                            //   base = current base + index of result register
-                            //
-                            // get current ip
-                            //
-                            // modify current call frame:
-                            //   set ip to current ip
-                            //
-                            // represent current register window as a slice, run this
-                            // function as an SliceableContainer::access_slice() function
-
                             // Modify the current call frame, saving the return ip
                             let current_frame_ip = instr.get_next_ip();
                             frames.access_slice(mem, |f| {
@@ -302,13 +290,15 @@ impl Thread {
                             // Create a new call frame, pushing it to the frame stack
                             let new_stack_base = self.stack_base.get() + result_reg;
                             let frame = CallFrame::new(function, 0, new_stack_base);
-                            frames.push(mem, frame);
+                            frames.push(mem, frame)?;
 
                             // Update the instruction stream
                             let code = function.code.get(mem);
                             instr.switch_frame(code, 0);
 
-                            unimplemented!() // TODO represent registers as slice
+                            // TODO - ensure stack has 256 available regs from base
+
+                            unimplemented!()
                         }
 
                         Value::Partial(_p) => unimplemented!(),
