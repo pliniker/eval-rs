@@ -69,7 +69,7 @@ impl Thread {
     pub fn new<'guard>(
         mem: &'guard MutatorView,
     ) -> Result<ScopedPtr<'guard, Thread>, RuntimeError> {
-        // create an empty stack frame list
+        // create a stack frame list with a 'main' entry
         let frames = mem.alloc(CallFrameList::with_capacity(mem, 32)?)?;
 
         // create a minimal value stack
@@ -81,11 +81,19 @@ impl Thread {
         // create an empty globals dict
         let globals = mem.alloc(Dict::new())?;
 
+        // create an empty instruction stream
+        let blank_code = ByteCode::new(mem)?;
+        let main_fn = Function::new(mem, mem.nil(), 0, blank_code)?;
+
+        let instr = mem.alloc(InstructionStream::new(blank_code))?;
+
+        frames.push(mem, CallFrame::new_main(main_fn))?;
+
         mem.alloc(Thread {
             frames: CellPtr::new_with(frames),
             stack: CellPtr::new_with(stack),
             globals: CellPtr::new_with(globals),
-            instr,
+            instr: CellPtr::new_with(instr),
             stack_base: Cell::new(0),
         })
     }

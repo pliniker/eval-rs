@@ -20,12 +20,12 @@ pub struct Function {
 impl Function {
     pub fn new<'guard>(
         mem: &'guard MutatorView,
-        name: TaggedPtr,
+        name: TaggedScopedPtr<'guard>,
         arity: u8,
         code: ScopedPtr<'guard, ByteCode>,
-    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-        mem.alloc_tagged(Function {
-            name,
+    ) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
+        mem.alloc(Function {
+            name: name.as_unscoped(),
             arity,
             code: CellPtr::new_with(code),
         })

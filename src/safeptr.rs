@@ -2,8 +2,9 @@ use std::cell::Cell;
 use std::fmt;
 use std::ops::Deref;
 
-use stickyimmix::RawPtr;
+use stickyimmix::{AllocObject, RawPtr};
 
+use crate::headers::TypeList;
 use crate::pointerops::ScopedRef;
 use crate::printer::Print;
 use crate::taggedptr::{FatPtr, TaggedPtr, Value};
@@ -36,6 +37,18 @@ pub struct ScopedPtr<'guard, T: Sized> {
 impl<'guard, T: Sized> ScopedPtr<'guard, T> {
     pub fn new(_guard: &'guard dyn MutatorScope, value: &'guard T) -> ScopedPtr<'guard, T> {
         ScopedPtr { value: value }
+    }
+
+    /// Convert the compile-time type pointer to a runtime type pointer
+    pub fn as_tagged(&self, guard: &'guard dyn MutatorScope) -> TaggedScopedPtr<'guard>
+    where
+        FatPtr: From<RawPtr<T>>,
+        T: AllocObject<TypeList>,
+    {
+        TaggedScopedPtr::new(
+            guard,
+            TaggedPtr::from(FatPtr::from(RawPtr::new(self.value))),
+        )
     }
 }
 

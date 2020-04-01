@@ -121,11 +121,13 @@ pub struct ByteCode {
 
 impl ByteCode {
     /// Instantiate a blank ByteCode instance
-    pub fn new() -> ByteCode {
-        ByteCode {
+    pub fn new<'guard>(
+        mem: &'guard MutatorView,
+    ) -> Result<ScopedPtr<'guard, ByteCode>, RuntimeError> {
+        mem.alloc(ByteCode {
             code: Code::new(),
             literals: Literals::new(),
-        }
+        })
     }
 
     /// Push a 0-operand instruction to the back of the sequence
