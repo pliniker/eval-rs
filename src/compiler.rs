@@ -86,6 +86,7 @@ impl Compiler {
 
                     // TODO: check for local variable and return register number first
                     _ => {
+                        // load sym, then replace sym with global
                         let reg1 = self.push_load_literal(mem, ast_node)?;
                         self.bytecode
                             .get(mem)

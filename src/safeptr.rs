@@ -109,6 +109,8 @@ impl<T: Sized> CellPtr<T> {
         ScopedPtr::new(guard, self.inner.get().scoped_ref(guard))
     }
 
+    // the explicit 'guard lifetime bound to MutatorScope is omitted here since the ScopedPtr
+    // carries this lifetime already so we can assume that this operation is safe
     pub fn set(&self, source: ScopedPtr<T>) {
         self.inner.set(RawPtr::new(source.value))
     }
@@ -207,6 +209,8 @@ impl TaggedCellPtr {
     }
 
     /// Set this pointer to point at the same object as a given `TaggedScopedPtr` instance
+    // the explicit 'guard lifetime bound to MutatorScope is omitted here since the TaggedScopedPtr
+    // carries this lifetime already so we can assume that this operation is safe
     pub fn set(&self, source: TaggedScopedPtr) {
         self.inner.set(TaggedPtr::from(source.ptr))
     }

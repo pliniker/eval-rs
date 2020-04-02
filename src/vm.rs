@@ -107,6 +107,10 @@ impl Thread {
         let globals = self.globals.get(mem);
         let instr = self.instr.get(mem);
 
+        // TODO - ensure stack has 256 available regs from base!!!
+        stack.ensure_length(mem, mem.nil())?;
+
+        // create a 256-register window into the stack from the stack base
         stack.access_slice(mem, |full_stack| {
             let stack_base = self.stack_base.get() as usize;
             let window = &mut full_stack[stack_base..stack_base + 256];
@@ -117,94 +121,94 @@ impl Thread {
                 Opcode::HALT => return Ok(EvalStatus::Halt),
 
                 Opcode::RETURN => {
-                    let reg = instr.get_reg_acc() as ArraySize;
-                    return Ok(EvalStatus::Return(stack.get(mem, reg)?));
+                    let reg = instr.get_reg_acc() as usize;
+                    return Ok(EvalStatus::Return(window[reg].get(mem)));
                 }
 
                 Opcode::LOADLIT => {
-                    let acc = instr.get_reg_acc() as ArraySize;
+                    let acc = instr.get_reg_acc() as usize;
                     let literal = instr.get_literal(mem)?;
-                    stack.set(mem, acc, literal)?;
+                    window[acc].set(literal);
                 }
 
                 Opcode::NIL => {
-                    let acc = instr.get_reg_acc() as ArraySize;
-                    let reg1 = instr.get_reg1() as ArraySize;
+                    let acc = instr.get_reg_acc() as usize;
+                    let reg1 = instr.get_reg1() as usize;
 
-                    let reg1_val = stack.get(mem, reg1)?;
+                    let reg1_val = window[reg1].get(mem);
 
                     match *reg1_val {
-                        Value::Nil => stack.set(mem, acc, mem.lookup_sym("true"))?,
-                        _ => stack.set(mem, acc, mem.nil())?,
+                        Value::Nil => window[acc].set(mem.lookup_sym("true")),
+                        _ => window[acc].set(mem.nil()),
                     }
                 }
 
                 Opcode::ATOM => {
-                    let acc = instr.get_reg_acc() as ArraySize;
-                    let reg1 = instr.get_reg1() as ArraySize;
+                    let acc = instr.get_reg_acc() as usize;
+                    let reg1 = instr.get_reg1() as usize;
 
-                    let reg1_val = stack.get(mem, reg1)?;
+                    let reg1_val = window[reg1].get(mem);
 
                     match *reg1_val {
-                        Value::Pair(_) => stack.set(mem, acc, mem.nil())?,
-                        Value::Nil => stack.set(mem, acc, mem.nil())?,
-                        _ => stack.set(mem, acc, mem.lookup_sym("true"))?,
+                        Value::Pair(_) => window[acc].set(mem.nil()),
+                        Value::Nil => window[acc].set(mem.nil()),
+                        _ => window[acc].set(mem.lookup_sym("true")),
                     }
                 }
 
                 Opcode::CAR => {
-                    let acc = instr.get_reg_acc() as ArraySize;
-                    let reg1 = instr.get_reg1() as ArraySize;
+                    let acc = instr.get_reg_acc() as usize;
+                    let reg1 = instr.get_reg1() as usize;
 
-                    let reg1_val = stack.get(mem, reg1)?;
+                    let reg1_val = window[reg1].get(mem);
 
                     match *reg1_val {
-                        Value::Pair(p) => stack.set(mem, acc, p.first.get(mem))?,
-                        Value::Nil => stack.set(mem, acc, mem.nil())?,
+                        Value::Pair(p) => window[acc].set(p.first.get(mem)),
+                        Value::Nil => window[acc].set(mem.nil()),
                         _ => return Err(err_eval("Parameter to CAR is not a list")),
                     }
                 }
 
                 Opcode::CDR => {
-                    let acc = instr.get_reg_acc() as ArraySize;
-                    let reg1 = instr.get_reg1() as ArraySize;
+                    let acc = instr.get_reg_acc() as usize;
+                    let reg1 = instr.get_reg1() as usize;
 
-                    let reg1_val = stack.get(mem, reg1)?;
+                    let reg1_val = window[reg1].get(mem);
 
                     match *reg1_val {
-                        Value::Pair(p) => stack.set(mem, acc, p.second.get(mem))?,
-                        Value::Nil => stack.set(mem, acc, mem.nil())?,
+                        Value::Pair(p) => window[acc].set(p.second.get(mem)),
+                        Value::Nil => window[acc].set(mem.nil()),
                         _ => return Err(err_eval("Parameter to CDR is not a list")),
                     }
                 }
 
                 Opcode::CONS => {
-                    let acc = instr.get_reg_acc() as ArraySize;
-                    let reg1 = instr.get_reg1() as ArraySize;
-                    let reg2 = instr.get_reg2() as ArraySize;
+                    let acc = instr.get_reg_acc() as usize;
+                    let reg1 = instr.get_reg1() as usize;
+                    let reg2 = instr.get_reg2() as usize;
 
-                    let reg1_val = stack.get(mem, reg1)?;
-                    let reg2_val = stack.get(mem, reg2)?;
+                    let reg1_val = window[reg1].get(mem);
+                    let reg2_val = window[reg2].get(mem);
 
                     let new_pair = Pair::new();
                     new_pair.first.set(reg1_val);
                     new_pair.second.set(reg2_val);
 
-                    stack.set(mem, acc, mem.alloc_tagged(new_pair)?)?
+                    window[acc].set(mem.alloc_tagged(new_pair)?);
                 }
 
                 Opcode::IS => {
-                    let acc = instr.get_reg_acc() as ArraySize;
-                    let reg1 = instr.get_reg1() as ArraySize;
-                    let reg2 = instr.get_reg2() as ArraySize;
+                    let acc = instr.get_reg_acc() as usize;
+                    let reg1 = instr.get_reg1() as usize;
+                    let reg2 = instr.get_reg2() as usize;
 
-                    let reg1_val = stack.get(mem, reg1)?;
-                    let reg2_val = stack.get(mem, reg2)?;
+                    let reg1_val = window[reg1].get(mem);
+                    let reg2_val = window[reg2].get(mem);
 
                     if reg1_val == reg2_val {
-                        stack.set(mem, acc, mem.lookup_sym("true"))?;
+                        window[acc].set(mem.lookup_sym("true"));
                     } else {
-                        stack.set(mem, acc, mem.nil())?;
+                        window[acc].set(mem.nil());
                     }
                 }
 
@@ -213,8 +217,8 @@ impl Thread {
                 }
 
                 Opcode::JMPT => {
-                    let reg = instr.get_reg1() as ArraySize;
-                    let reg_val = stack.get(mem, reg)?;
+                    let reg = instr.get_reg1() as usize;
+                    let reg_val = window[reg].get(mem);
 
                     let true_sym = mem.lookup_sym("true"); // TODO preload keyword syms
 
@@ -224,8 +228,8 @@ impl Thread {
                 }
 
                 Opcode::JMPNT => {
-                    let reg = instr.get_reg1() as ArraySize;
-                    let reg_val = stack.get(mem, reg)?;
+                    let reg = instr.get_reg1() as usize;
+                    let reg_val = window[reg].get(mem);
 
                     let true_sym = mem.lookup_sym("true");
 
@@ -235,19 +239,21 @@ impl Thread {
                 }
 
                 Opcode::LOADNIL => {
-                    let reg = instr.get_reg1() as ArraySize;
-                    stack.set(mem, reg, mem.nil())?;
+                    let reg = instr.get_reg1() as usize;
+                    window[reg].set(mem.nil());
                 }
 
                 Opcode::LOADGLOBAL => {
-                    let reg1 = instr.get_reg1() as ArraySize;
-                    let reg1_val = stack.get(mem, reg1)?;
+                    let assign_reg = instr.get_reg_acc() as usize;
+                    let reg1 = instr.get_reg1() as usize;
+
+                    let reg1_val = window[reg1].get(mem);
 
                     if let Value::Symbol(s) = *reg1_val {
                         let lookup_result = globals.lookup(mem, reg1_val);
 
                         match lookup_result {
-                            Ok(binding) => stack.set(mem, reg1, binding)?,
+                            Ok(binding) => window[assign_reg].set(binding),
                             Err(_) => return Err(err_eval("Symbol not bound to value")),
                         }
                     } else {
@@ -256,12 +262,12 @@ impl Thread {
                 }
 
                 Opcode::STOREGLOBAL => {
-                    let assign_reg = instr.get_reg_acc() as ArraySize;
-                    let reg1 = instr.get_reg1() as ArraySize;
+                    let assign_reg = instr.get_reg_acc() as usize;
+                    let reg1 = instr.get_reg1() as usize;
 
-                    let assign_reg_val = stack.get(mem, assign_reg)?;
+                    let assign_reg_val = window[assign_reg].get(mem);
                     if let Value::Symbol(_) = *assign_reg_val {
-                        let reg1_val = stack.get(mem, reg1)?;
+                        let reg1_val = window[reg1].get(mem);
                         globals.assoc(mem, assign_reg_val, reg1_val)?;
                     } else {
                         return Err(err_eval("Cannot bind value to non-symbol type"));
@@ -271,10 +277,10 @@ impl Thread {
                 Opcode::CALL => {
                     // TODO params
 
-                    let result_reg = instr.get_reg_acc() as ArraySize;
-                    let function_reg = instr.get_reg1() as ArraySize;
+                    let result_reg = instr.get_reg_acc() as usize;
+                    let function_reg = instr.get_reg1() as usize;
 
-                    let binding = stack.get(mem, function_reg)?;
+                    let binding = window[function_reg].get(mem);
 
                     match *binding {
                         Value::Function(function) => {
@@ -288,20 +294,17 @@ impl Thread {
                             });
 
                             // Create a new call frame, pushing it to the frame stack
-                            let new_stack_base = self.stack_base.get() + result_reg;
+                            let new_stack_base = self.stack_base.get() + result_reg as ArraySize;
                             let frame = CallFrame::new(function, 0, new_stack_base);
                             frames.push(mem, frame)?;
+                            self.stack_base.set(new_stack_base);
 
                             // Update the instruction stream
                             let code = function.code.get(mem);
                             instr.switch_frame(code, 0);
-
-                            // TODO - ensure stack has 256 available regs from base
-
-                            unimplemented!()
                         }
 
-                        Value::Partial(_p) => unimplemented!(),
+                        Value::Partial(_partial) => unimplemented!(),
 
                         _ => return Err(err_eval("Type is not callable")),
                     }
