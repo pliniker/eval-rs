@@ -3,8 +3,8 @@ use std::cell::Cell;
 use crate::array::{Array, ArraySize};
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{
-    Container, HashIndexedAnyContainer, IndexedAnyContainer, SliceableContainer, StackAnyContainer,
-    StackContainer,
+    Container, FillAnyContainer, HashIndexedAnyContainer, IndexedAnyContainer, SliceableContainer,
+    StackAnyContainer, StackContainer,
 };
 use crate::dict::Dict;
 use crate::error::{err_eval, RuntimeError};
@@ -74,9 +74,7 @@ impl Thread {
 
         // create a minimal value stack
         let stack = mem.alloc(List::with_capacity(mem, 256)?)?;
-        for _ in 0..256 {
-            StackAnyContainer::push(&*stack, mem, mem.nil())?;
-        }
+        stack.fill(mem, 256, mem.nil())?;
 
         // create an empty globals dict
         let globals = mem.alloc(Dict::new())?;
@@ -107,22 +105,24 @@ impl Thread {
         let globals = self.globals.get(mem);
         let instr = self.instr.get(mem);
 
-        // TODO - ensure stack has 256 available regs from base!!!
-        stack.ensure_length(mem, mem.nil())?;
-
         // create a 256-register window into the stack from the stack base
         stack.access_slice(mem, |full_stack| {
             let stack_base = self.stack_base.get() as usize;
             let window = &mut full_stack[stack_base..stack_base + 256];
 
             let opcode = instr.get_next_opcode(mem)?;
-
             match opcode {
                 Opcode::HALT => return Ok(EvalStatus::Halt),
 
                 Opcode::RETURN => {
                     let reg = instr.get_reg_acc() as usize;
-                    return Ok(EvalStatus::Return(window[reg].get(mem)));
+                    window[0].set(window[reg].get(mem));
+
+                    let frame = frames.pop(mem)?;
+                    self.stack_base.set(frame.base);
+                    instr.switch_frame(frame.function.get(mem).code.get(mem), frame.ip.get());
+
+                    // return Ok(EvalStatus::Return(window[reg].get(mem)));
                 }
 
                 Opcode::LOADLIT => {
@@ -297,11 +297,14 @@ impl Thread {
                             let new_stack_base = self.stack_base.get() + result_reg as ArraySize;
                             let frame = CallFrame::new(function, 0, new_stack_base);
                             frames.push(mem, frame)?;
-                            self.stack_base.set(new_stack_base);
 
-                            // Update the instruction stream
+                            // Update the instruction stream to point to the new function
                             let code = function.code.get(mem);
+                            self.stack_base.set(new_stack_base);
                             instr.switch_frame(code, 0);
+
+                            // Ensure the stack has 256 registers allocated
+                            stack.fill(mem, new_stack_base + 256, mem.nil())?;
                         }
 
                         Value::Partial(_partial) => unimplemented!(),
@@ -332,6 +335,7 @@ impl Thread {
                 _ => (),
             }
         }
+
         Ok(EvalStatus::Pending)
     }
 
@@ -341,9 +345,8 @@ impl Thread {
         mem: &'guard MutatorView,
         code: ScopedPtr<'guard, ByteCode>,
     ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-        let stream = mem.alloc(InstructionStream::new(code))?;
-
         let mut status = EvalStatus::Pending;
+
         while status == EvalStatus::Pending {
             status = self.vm_eval_stream(mem, code, 1024)?;
             match status {

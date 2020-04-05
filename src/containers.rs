@@ -31,6 +31,28 @@ pub trait Container<T: Sized + Clone>: Sized {
     fn length(&self) -> ArraySize;
 }
 
+/// If implemented, the container can be filled with a set number of values in one operation
+pub trait FillContainer<T: Sized + Clone>: Container<T> {
+    /// The `item` is an object to copy into each container memory slot.
+    fn fill<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        size: ArraySize,
+        item: T,
+    ) -> Result<(), RuntimeError>;
+}
+
+/// If implemented, the container can be filled with a set number of values in one operation
+pub trait FillAnyContainer: FillContainer<TaggedCellPtr> {
+    /// The `item` is an object to copy into each container memory slot.
+    fn fill<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        size: ArraySize,
+        item: TaggedScopedPtr<'guard>,
+    ) -> Result<(), RuntimeError>;
+}
+
 /// Generic stack trait. If implemented, the container can function as a stack
 pub trait StackContainer<T: Sized + Clone>: Container<T> {
     /// Push can trigger an underlying array resize, hence it requires the ability to allocate

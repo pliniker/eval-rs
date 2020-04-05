@@ -11,8 +11,8 @@ use std::slice::from_raw_parts_mut;
 pub use stickyimmix::ArraySize;
 
 use crate::containers::{
-    Container, ContainerFromPairList, IndexedAnyContainer, IndexedContainer, SliceOp,
-    SliceableContainer, StackAnyContainer, StackContainer,
+    Container, ContainerFromPairList, FillAnyContainer, FillContainer, IndexedAnyContainer,
+    IndexedContainer, SliceOp, SliceableContainer, StackAnyContainer, StackContainer,
 };
 use crate::error::{ErrorKind, RuntimeError};
 use crate::memory::MutatorView;
@@ -98,7 +98,8 @@ impl<T: Sized + Clone> Array<T> {
 
     /// Represent the array as a slice. This is necessarily unsafe even for the 'guard lifetime
     /// duration because while a slice is held, other code can cause array internals to change
-    /// that might cause the slice pointer and length to become invalid.
+    /// that might cause the slice pointer and length to become invalid. Interior mutability
+    /// patterns such as RefCell-style should be used in addition.
     pub unsafe fn as_slice<'guard>(&self, _guard: &'guard dyn MutatorScope) -> &mut [T] {
         if let Some(ptr) = self.data.get().as_ptr() {
             from_raw_parts_mut(ptr as *mut T, self.length.get() as usize)
@@ -139,6 +140,43 @@ impl<T: Sized + Clone> Container<T> for Array<T> {
 
     fn length(&self) -> ArraySize {
         self.length.get()
+    }
+}
+
+impl<T: Sized + Clone> FillContainer<T> for Array<T> {
+    fn fill<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        size: ArraySize,
+        item: T,
+    ) -> Result<(), RuntimeError> {
+        let length = self.length();
+
+        if length > size {
+            Ok(())
+        } else {
+            let mut array = self.data.get(); // Takes a copy
+
+            let capacity = array.capacity();
+
+            if size > capacity {
+                if capacity == 0 {
+                    array.resize(mem, DEFAULT_ARRAY_SIZE)?;
+                } else {
+                    array.resize(mem, default_array_growth(capacity)?)?;
+                }
+                // Replace the struct's copy with the resized RawArray object
+                self.data.set(array);
+            }
+
+            self.length.set(size);
+
+            for index in length..size {
+                self.write(mem, index, item.clone())?;
+            }
+
+            Ok(())
+        }
     }
 }
 
@@ -229,8 +267,6 @@ impl<T: Sized + Clone> SliceableContainer<T> for Array<T> {
     where
         F: FnOnce(&mut [T]) -> R,
     {
-        // protect the slice from any backing-array modification while allowing
-        // the closure to access it's environment
         self.borrow.set(EXPOSED_MUTABLY);
         let slice = unsafe { self.as_slice(guard) };
         let result = f(slice);
@@ -262,6 +298,43 @@ impl Print for ArrayU32 {
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
         write!(f, "ArrayU32[...]")
+    }
+}
+
+impl FillAnyContainer for Array<TaggedCellPtr> {
+    fn fill<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        size: ArraySize,
+        item: TaggedScopedPtr<'guard>,
+    ) -> Result<(), RuntimeError> {
+        let length = self.length();
+
+        if length > size {
+            Ok(())
+        } else {
+            let mut array = self.data.get(); // Takes a copy
+
+            let capacity = array.capacity();
+
+            if size > capacity {
+                if capacity == 0 {
+                    array.resize(mem, DEFAULT_ARRAY_SIZE)?;
+                } else {
+                    array.resize(mem, default_array_growth(capacity)?)?;
+                }
+                // Replace the struct's copy with the resized RawArray object
+                self.data.set(array);
+            }
+
+            self.length.set(size);
+
+            for index in length..size {
+                self.write(mem, index, TaggedCellPtr::new_with(item))?;
+            }
+
+            Ok(())
+        }
     }
 }
 

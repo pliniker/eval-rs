@@ -19,13 +19,13 @@ impl Mutator for RepMaker {
 
 /// Mutator that implements the VM
 pub struct ReadEvalPrint {
-    main_thread: CellPtr<Thread>
+    main_thread: CellPtr<Thread>,
 }
 
 impl ReadEvalPrint {
     pub fn new(mem: &MutatorView) -> Result<ReadEvalPrint, RuntimeError> {
         Ok(ReadEvalPrint {
-            main_thread: CellPtr::new_with(Thread::new(mem)?)
+            main_thread: CellPtr::new_with(Thread::new(mem)?),
         })
     }
 }
