@@ -13,7 +13,7 @@ use crate::taggedptr::Value;
 /// be built on std
 struct Scope {
     // symbol -> register mapping
-    pub bindings: HashMap<String, u8>,
+    pub bindings: HashMap<String, Register>,
 }
 
 struct Compiler {
@@ -29,11 +29,15 @@ struct Compiler {
 }
 
 impl Compiler {
-    fn new<'guard>(mem: &'guard MutatorView) -> Result<Compiler, RuntimeError> {
+    /// Instantiate a new nested function-level compiler
+    fn new<'guard>(
+        mem: &'guard MutatorView,
+        name: Option<String>,
+    ) -> Result<Compiler, RuntimeError> {
         Ok(Compiler {
             bytecode: CellPtr::new_with(ByteCode::new(mem)?),
-            next_reg: 0,
-            name: None,
+            next_reg: 1, // register 0 is reserved for the return value
+            name: name,
             locals: Vec::new(),
         })
     }
@@ -334,9 +338,9 @@ fn compile_function<'guard>(
     exprs: &[TaggedScopedPtr<'guard>],
 ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
     // validate function name
-    match *name {
-        Value::Symbol(_) => (),
-        Value::Nil => (),
+    let name_str = match *name {
+        Value::Symbol(s) => Some(String::from(s.as_str(mem))),
+        Value::Nil => None,
         _ => {
             return Err(err_eval(
                 "A function name may be nil (anonymous) or a symbol (named)",
@@ -347,6 +351,7 @@ fn compile_function<'guard>(
 
     // validate arity
     let fn_arity = if params.len() > 250 {
+        // TODO less than 255 but really, what should this number be?
         return Err(err_eval("A function cannot have more than 250 parameters"));
     } else {
         params.len() as u8
@@ -358,7 +363,7 @@ fn compile_function<'guard>(
     }
 
     // compile the expresssions
-    let mut compiler = Compiler::new(mem)?;
+    let mut compiler = Compiler::new(mem, name_str)?;
     compiler.compile_function(mem, params, exprs)?;
     let fn_bytecode = compiler.bytecode.get(mem);
 
@@ -370,10 +375,15 @@ pub fn compile<'guard>(
     mem: &'guard MutatorView,
     ast: TaggedScopedPtr<'guard>,
 ) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
-    let mut compiler = Compiler::new(mem)?;
+    let mut compiler = Compiler::new(mem, None)?;
     compiler.compile(mem, ast)?;
 
-    Ok(Function::new(mem, mem.nil(), 0, compiler.bytecode.get(mem))?)
+    Ok(Function::new(
+        mem,
+        mem.nil(),
+        0,
+        compiler.bytecode.get(mem),
+    )?)
 }
 
 #[cfg(test)]
