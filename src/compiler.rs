@@ -369,11 +369,11 @@ fn compile_function<'guard>(
 pub fn compile<'guard>(
     mem: &'guard MutatorView,
     ast: TaggedScopedPtr<'guard>,
-) -> Result<ScopedPtr<'guard, ByteCode>, RuntimeError> {
+) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
     let mut compiler = Compiler::new(mem)?;
     compiler.compile(mem, ast)?;
 
-    Ok(compiler.bytecode.get(mem))
+    Ok(Function::new(mem, mem.nil(), 0, compiler.bytecode.get(mem))?)
 }
 
 #[cfg(test)]

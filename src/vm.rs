@@ -81,11 +81,7 @@ impl Thread {
 
         // create an empty instruction stream
         let blank_code = ByteCode::new(mem)?;
-        let main_fn = Function::new(mem, mem.nil(), 0, blank_code)?;
-
         let instr = mem.alloc(InstructionStream::new(blank_code))?;
-
-        frames.push(mem, CallFrame::new_main(main_fn))?;
 
         mem.alloc(Thread {
             frames: CellPtr::new_with(frames),
@@ -115,14 +111,22 @@ impl Thread {
                 Opcode::HALT => return Ok(EvalStatus::Halt),
 
                 Opcode::RETURN => {
+                    // write the return value to register 0
                     let reg = instr.get_reg_acc() as usize;
                     window[0].set(window[reg].get(mem));
 
-                    let frame = frames.pop(mem)?;
-                    self.stack_base.set(frame.base);
-                    instr.switch_frame(frame.function.get(mem).code.get(mem), frame.ip.get());
+                    // remove this function's stack frame
+                    frames.pop(mem)?;
 
-                    // return Ok(EvalStatus::Return(window[reg].get(mem)));
+                    // if we just returned from the last stack frame, program evaluation is complete
+                    if frames.length() == 0 {
+                        return Ok(EvalStatus::Return(window[0].get(mem)));
+                    } else {
+                        // otherwise restore the previous stack frame settings
+                        let frame = frames.top(mem)?;
+                        self.stack_base.set(frame.base);
+                        instr.switch_frame(frame.function.get(mem).code.get(mem), frame.ip.get());
+                    }
                 }
 
                 Opcode::LOADLIT => {
@@ -343,9 +347,14 @@ impl Thread {
     pub fn quick_vm_eval<'guard>(
         &self,
         mem: &'guard MutatorView,
-        code: ScopedPtr<'guard, ByteCode>,
+        function: ScopedPtr<'guard, Function>,
     ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
         let mut status = EvalStatus::Pending;
+
+        let frames = self.frames.get(mem);
+        frames.push(mem, CallFrame::new_main(function))?;
+
+        let code = function.code.get(mem);
 
         while status == EvalStatus::Pending {
             status = self.vm_eval_stream(mem, code, 1024)?;

@@ -39,8 +39,8 @@ impl Mutator for ReadEvalPrint {
 
         match (|mem, line| -> Result<TaggedScopedPtr, RuntimeError> {
             let value = parse(mem, line)?;
-            let code = compile(mem, value)?;
-            let value = thread.quick_vm_eval(mem, code)?;
+            let function = compile(mem, value)?;
+            let value = thread.quick_vm_eval(mem, function)?;
             Ok(value)
         })(mem, &line)
         {
