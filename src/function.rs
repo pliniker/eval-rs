@@ -18,7 +18,7 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn new<'guard>(
+    pub fn alloc<'guard>(
         mem: &'guard MutatorView,
         name: TaggedScopedPtr<'guard>,
         arity: u8,

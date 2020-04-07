@@ -121,7 +121,7 @@ pub struct ByteCode {
 
 impl ByteCode {
     /// Instantiate a blank ByteCode instance
-    pub fn new<'guard>(
+    pub fn alloc<'guard>(
         mem: &'guard MutatorView,
     ) -> Result<ScopedPtr<'guard, ByteCode>, RuntimeError> {
         mem.alloc(ByteCode {
@@ -255,12 +255,15 @@ pub struct InstructionStream {
 
 impl InstructionStream {
     /// Create an InstructionStream instance with the given ByteCode instance that will be iterated over
-    pub fn new(code: ScopedPtr<'_, ByteCode>) -> InstructionStream {
-        InstructionStream {
+    pub fn alloc<'guard>(
+        mem: &'guard MutatorView,
+        code: ScopedPtr<'_, ByteCode>,
+    ) -> Result<ScopedPtr<'guard, InstructionStream>, RuntimeError> {
+        mem.alloc(InstructionStream {
             instructions: CellPtr::new_with(code),
             ip: Cell::new(0),
             current: Cell::new(0),
-        }
+        })
     }
 
     /// Change to a different stack frame, either as a function call or a return

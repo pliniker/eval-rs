@@ -8,17 +8,18 @@ use std::fmt;
 use std::ptr::{read, write};
 use std::slice::from_raw_parts_mut;
 
-pub use stickyimmix::ArraySize;
+pub use stickyimmix::{AllocObject, ArraySize};
 
 use crate::containers::{
     Container, ContainerFromPairList, FillAnyContainer, FillContainer, IndexedAnyContainer,
-    IndexedContainer, SliceOp, SliceableContainer, StackAnyContainer, StackContainer,
+    IndexedContainer, SliceableContainer, StackAnyContainer, StackContainer,
 };
 use crate::error::{ErrorKind, RuntimeError};
+use crate::headers::TypeList;
 use crate::memory::MutatorView;
 use crate::printer::Print;
 use crate::rawarray::{default_array_growth, RawArray, DEFAULT_ARRAY_SIZE};
-use crate::safeptr::{MutatorScope, TaggedCellPtr, TaggedScopedPtr};
+use crate::safeptr::{MutatorScope, ScopedPtr, TaggedCellPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
 // RefCell interior mutability pattern
@@ -41,6 +42,27 @@ pub struct Array<T: Sized + Clone> {
 
 /// Internal implementation
 impl<T: Sized + Clone> Array<T> {
+    /// Allocate a new instance on the heap
+    pub fn alloc<'guard>(
+        mem: &'guard MutatorView,
+    ) -> Result<ScopedPtr<'guard, Array<T>>, RuntimeError>
+    where
+        Array<T>: AllocObject<TypeList>,
+    {
+        mem.alloc(Array::new())
+    }
+
+    /// Allocate a new instance on the heap with pre-allocated capacity
+    pub fn alloc_with_capacity<'guard>(
+        mem: &'guard MutatorView,
+        capacity: ArraySize,
+    ) -> Result<ScopedPtr<'guard, Array<T>>, RuntimeError>
+    where
+        Array<T>: AllocObject<TypeList>,
+    {
+        mem.alloc(Array::with_capacity(mem, capacity)?)
+    }
+
     /// Return a bounds-checked pointer to the object at the given index
     fn get_offset(&self, index: ArraySize) -> Result<*mut T, RuntimeError> {
         if index >= self.length.get() {

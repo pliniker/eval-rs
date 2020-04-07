@@ -114,10 +114,6 @@ impl<T: Sized> CellPtr<T> {
     pub fn set(&self, source: ScopedPtr<T>) {
         self.inner.set(RawPtr::new(source.value))
     }
-
-    pub fn copy_from(&self, other: &CellPtr<T>) {
-        self.inner.set(other.inner.get());
-    }
 }
 
 /// A _tagged_ runtime typed pointer type with scope limited by `MutatorScope` such that a `Value`
@@ -201,11 +197,6 @@ impl TaggedCellPtr {
     /// a `Value` type for both copying and access convenience
     pub fn get<'guard>(&self, guard: &'guard dyn MutatorScope) -> TaggedScopedPtr<'guard> {
         TaggedScopedPtr::new(guard, self.inner.get())
-    }
-
-    /// This returns the pointer as a `Value` type, given a mutator scope for safety
-    pub fn get_value<'guard>(&self, guard: &'guard dyn MutatorScope) -> Value<'guard> {
-        FatPtr::from(self.inner.get()).as_value(guard)
     }
 
     /// Set this pointer to point at the same object as a given `TaggedScopedPtr` instance

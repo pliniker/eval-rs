@@ -35,7 +35,7 @@ impl Compiler {
         name: Option<String>,
     ) -> Result<Compiler, RuntimeError> {
         Ok(Compiler {
-            bytecode: CellPtr::new_with(ByteCode::new(mem)?),
+            bytecode: CellPtr::new_with(ByteCode::alloc(mem)?),
             next_reg: 1, // register 0 is reserved for the return value
             name: name,
             locals: Vec::new(),
@@ -367,7 +367,7 @@ fn compile_function<'guard>(
     compiler.compile_function(mem, params, exprs)?;
     let fn_bytecode = compiler.bytecode.get(mem);
 
-    Ok(Function::new(mem, fn_name, fn_arity, fn_bytecode)?.as_tagged(mem))
+    Ok(Function::alloc(mem, fn_name, fn_arity, fn_bytecode)?.as_tagged(mem))
 }
 
 /// Compile the given AST and return a bytecode structure
@@ -378,7 +378,7 @@ pub fn compile<'guard>(
     let mut compiler = Compiler::new(mem, None)?;
     compiler.compile(mem, ast)?;
 
-    Ok(Function::new(
+    Ok(Function::alloc(
         mem,
         mem.nil(),
         0,

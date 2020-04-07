@@ -107,9 +107,6 @@ pub trait IndexedContainer<T: Sized + Clone>: Container<T> {
     ) -> Result<(), RuntimeError>;
 }
 
-/// A function pointer that takes a slice of type T and returns a value of type R.
-pub type SliceOp<T, R> = fn(&mut [T]) -> R;
-
 /// A trait that is implemented for containers that can represent their contents as a slice.
 pub trait SliceableContainer<T: Sized + Clone>: IndexedContainer<T> {
     /// This function allows access to the interior of a container as a slice by way of a

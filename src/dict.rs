@@ -11,7 +11,7 @@ use crate::hashable::Hashable;
 use crate::memory::MutatorView;
 use crate::printer::Print;
 use crate::rawarray::{default_array_growth, ArraySize, RawArray};
-use crate::safeptr::{MutatorScope, TaggedCellPtr, TaggedScopedPtr};
+use crate::safeptr::{MutatorScope, ScopedPtr, TaggedCellPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
 // max load factor before resizing the table
@@ -116,7 +116,6 @@ fn needs_to_grow(used_entries: ArraySize, capacity: ArraySize) -> bool {
 }
 
 /// A mutable Dict key/value associative data structure.
-/// TODO: resizing
 pub struct Dict {
     /// Number of items stored
     length: Cell<ArraySize>,
@@ -127,6 +126,21 @@ pub struct Dict {
 }
 
 impl Dict {
+    /// Allocate a new instance on the heap
+    pub fn alloc<'guard>(
+        mem: &'guard MutatorView,
+    ) -> Result<ScopedPtr<'guard, Dict>, RuntimeError> {
+        mem.alloc(Dict::new())
+    }
+
+    /// Allocate a new instance on the heap with pre-allocated capacity
+    pub fn alloc_with_capacity<'guard>(
+        mem: &'guard MutatorView,
+        capacity: ArraySize,
+    ) -> Result<ScopedPtr<'guard, Dict>, RuntimeError> {
+        mem.alloc(Dict::with_capacity(mem, capacity)?)
+    }
+
     /// Scale capacity up if needed
     fn grow_capacity<'guard>(&self, mem: &'guard MutatorView) -> Result<(), RuntimeError> {
         let data = self.data.get();

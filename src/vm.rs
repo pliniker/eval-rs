@@ -3,8 +3,8 @@ use std::cell::Cell;
 use crate::array::{Array, ArraySize};
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{
-    Container, FillAnyContainer, HashIndexedAnyContainer, IndexedAnyContainer, SliceableContainer,
-    StackAnyContainer, StackContainer,
+    Container, FillAnyContainer, HashIndexedAnyContainer, IndexedAnyContainer, IndexedContainer,
+    SliceableContainer, StackAnyContainer, StackContainer,
 };
 use crate::dict::Dict;
 use crate::error::{err_eval, RuntimeError};
@@ -12,7 +12,7 @@ use crate::function::Function;
 use crate::list::List;
 use crate::memory::MutatorView;
 use crate::pair::Pair;
-use crate::safeptr::{CellPtr, ScopedPtr, TaggedCellPtr, TaggedScopedPtr};
+use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
 /// Control flow flags
@@ -51,6 +51,12 @@ impl CallFrame {
             base: base,
         }
     }
+
+    fn as_string<'guard>(&self, guard: &'guard dyn MutatorScope) -> String {
+        let function = self.function.get(guard);
+        let ip = self.ip.get();
+        format!("{}: {}", function, ip)
+    }
 }
 
 /// A stack of CallFrame instances
@@ -66,22 +72,22 @@ pub struct Thread {
 }
 
 impl Thread {
-    pub fn new<'guard>(
+    pub fn alloc<'guard>(
         mem: &'guard MutatorView,
     ) -> Result<ScopedPtr<'guard, Thread>, RuntimeError> {
-        // create a stack frame list with a 'main' entry
-        let frames = mem.alloc(CallFrameList::with_capacity(mem, 32)?)?;
+        // create an empty stack frame array
+        let frames = CallFrameList::alloc_with_capacity(mem, 32)?;
 
         // create a minimal value stack
-        let stack = mem.alloc(List::with_capacity(mem, 256)?)?;
+        let stack = List::alloc_with_capacity(mem, 256)?;
         stack.fill(mem, 256, mem.nil())?;
 
         // create an empty globals dict
-        let globals = mem.alloc(Dict::new())?;
+        let globals = Dict::alloc(mem)?;
 
         // create an empty instruction stream
-        let blank_code = ByteCode::new(mem)?;
-        let instr = mem.alloc(InstructionStream::new(blank_code))?;
+        let blank_code = ByteCode::alloc(mem)?;
+        let instr = InstructionStream::alloc(mem, blank_code)?;
 
         mem.alloc(Thread {
             frames: CellPtr::new_with(frames),
@@ -253,7 +259,7 @@ impl Thread {
 
                     let reg1_val = window[reg1].get(mem);
 
-                    if let Value::Symbol(s) = *reg1_val {
+                    if let Value::Symbol(_) = *reg1_val {
                         let lookup_result = globals.lookup(mem, reg1_val);
 
                         match lookup_result {
@@ -333,10 +339,32 @@ impl Thread {
         instr.switch_frame(code, 0);
 
         for _ in 0..max_instr {
-            match self.eval_next_instr(mem)? {
-                EvalStatus::Return(value) => return Ok(EvalStatus::Return(value)),
-                EvalStatus::Halt => return Ok(EvalStatus::Halt),
-                _ => (),
+            match self.eval_next_instr(mem) {
+                // Evaluation paused or completed without error
+                Ok(exit_cond) => match exit_cond {
+                    EvalStatus::Return(value) => return Ok(EvalStatus::Return(value)),
+                    EvalStatus::Halt => return Ok(EvalStatus::Halt),
+                    _ => (),
+                },
+
+                // Evaluation hit an error
+                Err(rt_error) => {
+                    // unwind the stack, printing a trace
+                    let frames = self.frames.get(mem);
+
+                    // Print a stack trace
+                    frames.access_slice(mem, |window| {
+                        for item in &window[1..] {
+                            println!("    {}", item.as_string(mem));
+                        }
+                    });
+
+                    // Unwind by clearing all frames from the stack
+                    frames.clear(mem)?;
+                    self.stack_base.set(0);
+
+                    return Err(rt_error);
+                }
             }
         }
 

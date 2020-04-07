@@ -13,7 +13,7 @@ impl Mutator for RepMaker {
     type Output = ReadEvalPrint;
 
     fn run(&self, mem: &MutatorView, _input: ()) -> Result<ReadEvalPrint, RuntimeError> {
-        ReadEvalPrint::new(mem)
+        ReadEvalPrint::alloc(mem)
     }
 }
 
@@ -23,9 +23,9 @@ pub struct ReadEvalPrint {
 }
 
 impl ReadEvalPrint {
-    pub fn new(mem: &MutatorView) -> Result<ReadEvalPrint, RuntimeError> {
+    pub fn alloc(mem: &MutatorView) -> Result<ReadEvalPrint, RuntimeError> {
         Ok(ReadEvalPrint {
-            main_thread: CellPtr::new_with(Thread::new(mem)?),
+            main_thread: CellPtr::new_with(Thread::alloc(mem)?),
         })
     }
 }
