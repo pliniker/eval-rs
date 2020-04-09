@@ -240,7 +240,19 @@ impl Print for ByteCode {
     ) -> fmt::Result {
         for index in 0..self.code.length() {
             let instr = self.code.get(guard, index)?;
-            write!(f, "{:02} 0x{:x}\n", index, instr)?;
+            let op = decode_op(instr)?;
+            let acc = decode_reg_acc(instr);
+            let reg1 = decode_reg1(instr);
+            let reg2 = decode_reg2(instr);
+            write!(
+                f,
+                "BC: {:02} {:8} acc={} reg1={} reg2={}\n",
+                index,
+                format!("{:?}", op),
+                acc,
+                reg1,
+                reg2
+            )?;
         }
         Ok(())
     }

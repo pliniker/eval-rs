@@ -228,7 +228,7 @@ impl Thread {
                 }
 
                 Opcode::JMPT => {
-                    let reg = instr.get_reg1() as usize;
+                    let reg = instr.get_reg_acc() as usize;
                     let reg_val = window[reg].get(mem);
 
                     let true_sym = mem.lookup_sym("true"); // TODO preload keyword syms
@@ -239,7 +239,7 @@ impl Thread {
                 }
 
                 Opcode::JMPNT => {
-                    let reg = instr.get_reg1() as usize;
+                    let reg = instr.get_reg_acc() as usize;
                     let reg_val = window[reg].get(mem);
 
                     let true_sym = mem.lookup_sym("true");
@@ -325,10 +325,6 @@ impl Thread {
                 }
             }
 
-            let reg = instr.get_reg_acc();
-            let val = window[reg as usize].get(mem);
-            println!("OP: {} {:?} -> {} == {}", instr.get_next_ip() - 1, opcode, reg, val);
-
             Ok(EvalStatus::Pending)
         })
     }
@@ -360,7 +356,7 @@ impl Thread {
                     // Print a stack trace
                     frames.access_slice(mem, |window| {
                         for item in &window[1..] {
-                            println!("    {}", item.as_string(mem));
+                            println!("{:>4}", item.as_string(mem));
                         }
                     });
 

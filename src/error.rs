@@ -142,15 +142,6 @@ impl From<AllocError> for RuntimeError {
 }
 
 impl Error for RuntimeError {
-    fn description(&self) -> &str {
-        match self.kind {
-            ErrorKind::LexerError(ref reason) => reason,
-            ErrorKind::ParseError(ref reason) => reason,
-            ErrorKind::EvalError(ref reason) => reason,
-            _ => "",
-        }
-    }
-
     fn cause(&self) -> Option<&dyn Error> {
         None
     }

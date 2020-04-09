@@ -49,7 +49,7 @@ impl Print for Function {
         let name = TaggedScopedPtr::new(guard, self.name);
         match *name {
             Value::Symbol(s) => write!(f, "(def {} ({}) ...)", s.as_str(guard), self.arity),
-            _ => write!(f, "(lambda ({}) ...)", self.arity)
+            _ => write!(f, "(lambda ({}) ...)", self.arity),
         }
     }
 }

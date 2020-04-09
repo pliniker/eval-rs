@@ -71,7 +71,7 @@ impl Compiler {
 
             Value::Symbol(s) => {
                 match s.as_str(mem) {
-                    "nil" => self.push_load_literal(mem, mem.nil()),
+                    "nil" => self.push_op1(mem, Opcode::LOADNIL),
 
                     "true" => self.push_load_literal(mem, mem.lookup_sym("true")),
 
@@ -110,7 +110,6 @@ impl Compiler {
                 "set" => self.compile_apply_assign(mem, params),
                 "def" => self.compile_named_function(mem, params),
                 //"lambda" => self.compile_anon_function(mem, params),
-
                 _ => {
                     // TODO params - use register to pass in parameter count?
                     let result = self.acquire_reg();
@@ -299,7 +298,6 @@ impl Compiler {
         literal: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         let reg = self.acquire_reg();
-        println!("Load lit reg {}", reg);
         let lit_id = self.bytecode.get(mem).push_lit(mem, literal)?;
         self.bytecode.get(mem).push_loadlit(mem, reg, lit_id)?;
         Ok(reg)
@@ -310,7 +308,6 @@ impl Compiler {
         // TODO check overflow
         let reg = self.next_reg;
         self.next_reg += 1;
-        println!("Acquiring reg {}", reg);
         reg
     }
 
@@ -406,8 +403,25 @@ mod test {
 
     #[test]
     fn compile_cond_first_is_true() {
-        // TODO, srsly
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            let code = "(cond (nil? nil) 'x (nil? 'a) 'y)";
 
+            let ast = parse(mem, code)?;
+            let f = compile(mem, ast)?;
+            let t = Thread::alloc(mem)?;
+
+            let result = t.quick_vm_eval(mem, f)?;
+
+            assert!(result == mem.lookup_sym("x"));
+
+            Ok(())
+        }
+
+        test_helper(test_inner);
+    }
+
+    #[test]
+    fn compile_cond_second_is_true() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
             let code = "(cond (nil? 'a) 'x (nil? nil) 'y)";
 
@@ -417,7 +431,26 @@ mod test {
 
             let result = t.quick_vm_eval(mem, f)?;
 
-            assert!(result == mem.lookup_sym("x"));
+            assert!(result == mem.lookup_sym("y"));
+
+            Ok(())
+        }
+
+        test_helper(test_inner);
+    }
+
+    #[test]
+    fn compile_cond_none_is_true() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            let code = "(cond (nil? 'a) 'x (nil? 'b) 'y)";
+
+            let ast = parse(mem, code)?;
+            let f = compile(mem, ast)?;
+            let t = Thread::alloc(mem)?;
+
+            let result = t.quick_vm_eval(mem, f)?;
+
+            assert!(result == mem.nil());
 
             Ok(())
         }
