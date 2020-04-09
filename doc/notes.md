@@ -4,8 +4,8 @@
 
 ### Source Maps
 
- - Copy source code into Text objects
- - reference source Text objects from Function objects
+ - Copy source code into Text objects?
+ - reference source Text objects from Function objects?
  - keep source code map on Function objects
  - propagate source code pos objects through to Function object source maps
  - print pretty stack traces

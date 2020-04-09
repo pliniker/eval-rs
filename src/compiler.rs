@@ -42,19 +42,6 @@ impl Compiler {
         })
     }
 
-    /// Compile an outermost-level expression, at the 'main' function level
-    fn compile<'guard>(
-        &mut self,
-        mem: &'guard MutatorView,
-        ast: TaggedScopedPtr<'guard>,
-    ) -> Result<(), RuntimeError> {
-        let result_reg = self.compile_eval(mem, ast)?;
-        self.bytecode
-            .get(mem)
-            .push_op1(mem, Opcode::RETURN, result_reg)?;
-        Ok(())
-    }
-
     /// Compile an expression that has parameters and possibly a name
     fn compile_function<'guard>(
         &mut self,
@@ -122,6 +109,7 @@ impl Compiler {
                 "is?" => self.push_op3(mem, Opcode::IS, params),
                 "set" => self.compile_apply_assign(mem, params),
                 "def" => self.compile_named_function(mem, params),
+                //"lambda" => self.compile_anon_function(mem, params),
 
                 _ => {
                     // TODO params - use register to pass in parameter count?
@@ -311,6 +299,7 @@ impl Compiler {
         literal: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         let reg = self.acquire_reg();
+        println!("Load lit reg {}", reg);
         let lit_id = self.bytecode.get(mem).push_lit(mem, literal)?;
         self.bytecode.get(mem).push_loadlit(mem, reg, lit_id)?;
         Ok(reg)
@@ -321,6 +310,7 @@ impl Compiler {
         // TODO check overflow
         let reg = self.next_reg;
         self.next_reg += 1;
+        println!("Acquiring reg {}", reg);
         reg
     }
 
@@ -376,7 +366,7 @@ pub fn compile<'guard>(
     ast: TaggedScopedPtr<'guard>,
 ) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
     let mut compiler = Compiler::new(mem, None)?;
-    compiler.compile(mem, ast)?;
+    compiler.compile_function(mem, &[], &[ast])?;
 
     Ok(Function::alloc(
         mem,
@@ -389,9 +379,49 @@ pub fn compile<'guard>(
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::memory::{Memory, Mutator};
+    use crate::parser::parse;
+    use crate::vm::Thread;
+
+    fn test_helper(test_fn: fn(&MutatorView) -> Result<(), RuntimeError>) {
+        let mem = Memory::new();
+
+        struct Test {}
+        impl Mutator for Test {
+            type Input = fn(&MutatorView) -> Result<(), RuntimeError>;
+            type Output = ();
+
+            fn run(
+                &self,
+                mem: &MutatorView,
+                test_fn: Self::Input,
+            ) -> Result<Self::Output, RuntimeError> {
+                test_fn(mem)
+            }
+        }
+
+        let test = Test {};
+        mem.mutate(&test, test_fn).unwrap();
+    }
 
     #[test]
-    fn compile_cond() {
+    fn compile_cond_first_is_true() {
         // TODO, srsly
+
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            let code = "(cond (nil? 'a) 'x (nil? nil) 'y)";
+
+            let ast = parse(mem, code)?;
+            let f = compile(mem, ast)?;
+            let t = Thread::alloc(mem)?;
+
+            let result = t.quick_vm_eval(mem, f)?;
+
+            assert!(result == mem.lookup_sym("x"));
+
+            Ok(())
+        }
+
+        test_helper(test_inner);
     }
 }

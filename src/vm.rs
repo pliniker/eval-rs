@@ -113,6 +113,7 @@ impl Thread {
             let window = &mut full_stack[stack_base..stack_base + 256];
 
             let opcode = instr.get_next_opcode(mem)?;
+
             match opcode {
                 Opcode::HALT => return Ok(EvalStatus::Halt),
 
@@ -323,6 +324,10 @@ impl Thread {
                     }
                 }
             }
+
+            let reg = instr.get_reg_acc();
+            let val = window[reg as usize].get(mem);
+            println!("OP: {} {:?} -> {} == {}", instr.get_next_ip() - 1, opcode, reg, val);
 
             Ok(EvalStatus::Pending)
         })

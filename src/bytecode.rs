@@ -13,7 +13,7 @@ use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr, TaggedScopedPtr};
 
 /// VM opcodes
 #[repr(u8)]
-#[derive(FromPrimitive, PartialEq)]
+#[derive(FromPrimitive, PartialEq, Debug)]
 pub enum Opcode {
     HALT = 0x00,
     RETURN = 0x01,
