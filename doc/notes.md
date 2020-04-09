@@ -1,18 +1,44 @@
 # Notes
 
+## TODO
+
+### Source Maps
+
+ - Copy source code into Text objects
+ - reference source Text objects from Function objects
+ - keep source code map on Function objects
+ - propagate source code pos objects through to Function object source maps
+ - print pretty stack traces
+
+### Compiler
+
+ - unit tests! :grimace:
+ - function parameters
+ - partial functions
+ - lambdas
+ - let
+ - tail calls
+
+### Types
+
+ - dicts
+ - lists
+ - sets
+ - record
+ - enum
+
 ## Semantics
 
 Glue language:
  - Immutable values and data structures, structural sharing
+ - Mutable unique copy-on-write
  - Mutable concurrency-safe variables?
  - Mutable stack-pinned resource/state/io management - 'with' (needs escape analysis?)
  - Closures with lambda lifting
  - Partial application
- - Tail call recursion (continuations)
+ - Tail call recursion
  - Duck typed? Traits/interfaces
- - Types: scalar, tuple, record, enum, map, array, list
- - Pattern matching, destructuring
- - Coroutines?
+ - Pattern matching, destructuring?
 
  Function Prototype Definition (lambda lifted):
   - Name
@@ -26,71 +52,11 @@ Partial Application:
  - Parameter value list
  - Function Prototype Definition
 
-Coroutine: (?)
- - Next arity
- - Activation Record
- - Registers
-
-Activation Record Stack:
- - Function Prototype Definition pointer
- - IP
- - Stack base pointer
-
- Register Stack
- - return value [0]
- - parameters [1..n]
- - registers [n..255]
-
-
-## Virtual Machine
-
-### eval/apply
-
-eval:
- - quote x -> x
- - list -> apply sym args
- - pap -> self
- - closure -> self
- - int -> int
- - nil -> nil
- - true -> true
-
-apply:
- - sym + eval(args) -> pap args | closure
- - pap + eval(args) -> pap args | value
- - closure + eval(args) -> value
-
-Bytecode:
-
-### v1
- - load reg sym
- - load reg int
- - load reg pair
- - atom regr regx: regr = atom regx
- - quote reg = quote x
- - car reg = car x:xs
- - cdr reg = cdr x:xs
- - cons reg = x:xs
- - eq reg = x==y
- - jump-if-false reg offset
- - jump offset
-
-### v2
- - call sym(fn)
- - return reg
-
-### vn
- - tailcall/cont sym(fn)
- - construct sym(type)
- - cons-str reg str
- - cons-int reg lit
- - match
- - with sym(fn) reg: pin to stack
-
 
 ## Syntax - easy to parse but unergonomic s-exprs
 
 ### v1
+
 (atom sym)
 (quote thing)
 (car (quote (list of things)))
@@ -98,7 +64,8 @@ Bytecode:
 (cons thing (quote (list of things)))
 (eq thing1 thing2)
 
-### vn
+### v2
+
 (defn fib (n)
     (match n
         ((0) 1)
@@ -119,28 +86,3 @@ Bytecode:
 (deftype Option (
     (Some (value))
     (None)))
-
-
-
-### Type System
-
-Trait based?  Duck typed?
-
-Dispatch?
- * Single dispatch: x.y() === X::y(x)
-
-
-### Lambda lifting and partial applications
-
-def make_adder(x):
-    def adder(y):
-        return x + y
-    return adder
-
-becomes
-
-def adder(x, y):
-    return x + y
-
-def make_adder(x):
-    return partial(adder, x)

@@ -46,7 +46,11 @@ impl Print for Function {
         guard: &'guard dyn MutatorScope,
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
-        write!(f, "Function({}, {})", self.name(guard), self.arity)
+        let name = TaggedScopedPtr::new(guard, self.name);
+        match *name {
+            Value::Symbol(s) => write!(f, "(def {} ({}) ...)", s.as_str(guard), self.arity),
+            _ => write!(f, "(lambda ({}) ...)", self.arity)
+        }
     }
 }
 
