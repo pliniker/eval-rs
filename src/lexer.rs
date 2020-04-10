@@ -245,8 +245,10 @@ mod test {
 
     #[test]
     fn lexer_text() {
-        if let Ok(tokens) = tokenize("(foo \"text\" bar)") {
+        if let Ok(_tokens) = tokenize("(foo \"text\" bar)") {
             // TODO
+        } else {
+            assert!(false, "unexpected error")
         }
     }
 }

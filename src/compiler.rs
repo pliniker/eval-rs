@@ -46,7 +46,7 @@ impl Compiler {
     fn compile_function<'guard>(
         &mut self,
         mem: &'guard MutatorView,
-        params: &[TaggedScopedPtr<'guard>], // TODO make use of params in scopes
+        _params: &[TaggedScopedPtr<'guard>], // TODO make use of params in scopes
         exprs: &[TaggedScopedPtr<'guard>],
     ) -> Result<(), RuntimeError> {
         let mut result_reg = 0;
@@ -404,6 +404,7 @@ mod test {
     #[test]
     fn compile_cond_first_is_true() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            // (nil? nil) == true, so result should be x
             let code = "(cond (nil? nil) 'x (nil? 'a) 'y)";
 
             let ast = parse(mem, code)?;
@@ -423,6 +424,7 @@ mod test {
     #[test]
     fn compile_cond_second_is_true() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            // (nil? 'a) == nil, (nil? nil) == true, so result should be y
             let code = "(cond (nil? 'a) 'x (nil? nil) 'y)";
 
             let ast = parse(mem, code)?;
@@ -442,6 +444,7 @@ mod test {
     #[test]
     fn compile_cond_none_is_true() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            // (nil? 'a) == nil, (nil? 'b) == nil, result should be nil
             let code = "(cond (nil? 'a) 'x (nil? 'b) 'y)";
 
             let ast = parse(mem, code)?;
