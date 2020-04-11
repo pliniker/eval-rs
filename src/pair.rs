@@ -213,9 +213,8 @@ pub fn values_from_3_pairs<'guard>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::error::{RuntimeError};
+    use crate::error::RuntimeError;
     use crate::memory::{Memory, Mutator, MutatorView};
-    
 
     fn test_helper(test_fn: fn(&MutatorView) -> Result<(), RuntimeError>) {
         let mem = Memory::new();

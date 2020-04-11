@@ -5,7 +5,7 @@ use stickyimmix::ArraySize;
 
 use crate::error::RuntimeError;
 use crate::memory::MutatorView;
-use crate::safeptr::{MutatorScope, TaggedCellPtr, TaggedScopedPtr};
+use crate::safeptr::{MutatorScope, ScopedPtr, TaggedCellPtr, TaggedScopedPtr};
 
 /// Base container-type trait. All container types are subtypes of `Container`.
 ///
@@ -178,12 +178,28 @@ pub trait HashIndexedAnyContainer {
 }
 
 /// Convert a Pair list to a different container
-pub trait ContainerFromPairList: Container<TaggedCellPtr> {
+pub trait AnyContainerFromPairList: Container<TaggedCellPtr> {
     fn from_pair_list<'guard>(
         &self,
         mem: &'guard MutatorView,
         pair_list: TaggedScopedPtr<'guard>,
     ) -> Result<(), RuntimeError>;
+}
+
+/// Replace the contents of a container with the values in the slice
+pub trait ContainerFromSlice<T: Sized + Clone>: Container<T> {
+    fn from_slice<'guard>(
+        mem: &'guard MutatorView,
+        data: &[T],
+    ) -> Result<ScopedPtr<'guard, Self>, RuntimeError>;
+}
+
+/// Replace the contents of a container with the values in the slice
+pub trait AnyContainerFromSlice: Container<TaggedCellPtr> {
+    fn from_slice<'guard>(
+        mem: &'guard MutatorView,
+        data: &[TaggedScopedPtr<'guard>],
+    ) -> Result<ScopedPtr<'guard, Self>, RuntimeError>;
 }
 
 /// The implementor represents mutable changes via an internal version count

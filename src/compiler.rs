@@ -30,35 +30,62 @@ struct Compiler {
 
 impl Compiler {
     /// Instantiate a new nested function-level compiler
-    fn new<'guard>(
-        mem: &'guard MutatorView,
-        name: Option<String>,
-    ) -> Result<Compiler, RuntimeError> {
+    fn new<'guard>(mem: &'guard MutatorView) -> Result<Compiler, RuntimeError> {
         Ok(Compiler {
             bytecode: CellPtr::new_with(ByteCode::alloc(mem)?),
             next_reg: 1, // register 0 is reserved for the return value
-            name: name,
+            name: None,
             locals: Vec::new(),
         })
     }
 
     /// Compile an expression that has parameters and possibly a name
     fn compile_function<'guard>(
-        &mut self,
+        mut self,
         mem: &'guard MutatorView,
-        _params: &[TaggedScopedPtr<'guard>], // TODO make use of params in scopes
+        name: TaggedScopedPtr<'guard>,
+        params: &[TaggedScopedPtr<'guard>], // TODO make use of params in scopes
         exprs: &[TaggedScopedPtr<'guard>],
-    ) -> Result<(), RuntimeError> {
+    ) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
+        // validate function name
+        let name_str = match *name {
+            Value::Symbol(s) => Some(String::from(s.as_str(mem))),
+            Value::Nil => None,
+            _ => {
+                return Err(err_eval(
+                    "A function name may be nil (anonymous) or a symbol (named)",
+                ))
+            }
+        };
+        let fn_name = name;
+
+        // validate arity
+        let fn_arity = if params.len() > 250 {
+            // TODO less than 255 but really, what should this number be?
+            return Err(err_eval("A function cannot have more than 250 parameters"));
+        } else {
+            params.len() as u8
+        };
+
+        // validate expression list
+        if exprs.len() == 0 {
+            return Err(err_eval("A function must have at least one expression"));
+        }
+
+        // begin compilation
         let mut result_reg = 0;
 
         for expr in exprs.iter() {
             result_reg = self.compile_eval(mem, *expr)?;
         }
 
-        self.bytecode
-            .get(mem)
-            .push_op1(mem, Opcode::RETURN, result_reg)?;
-        Ok(())
+        // TODO Question: for every RETURN instruction in the bytecode, if the preceding
+        // instruction is a CALL, can the CALL be converted to a TAILCALL?
+
+        let fn_bytecode = self.bytecode.get(mem);
+        fn_bytecode.push_op1(mem, Opcode::RETURN, result_reg)?;
+
+        Ok(Function::alloc(mem, fn_name, fn_arity, fn_bytecode)?)
     }
 
     fn compile_eval<'guard>(
@@ -317,60 +344,26 @@ impl Compiler {
     }
 }
 
-/// Compile a function - parameters and expression, returning a Function object
+/// Compile a function - parameters and expression, returning a tagged Function object
 fn compile_function<'guard>(
     mem: &'guard MutatorView,
     name: TaggedScopedPtr<'guard>,
     params: &[TaggedScopedPtr<'guard>],
     exprs: &[TaggedScopedPtr<'guard>],
 ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-    // validate function name
-    let name_str = match *name {
-        Value::Symbol(s) => Some(String::from(s.as_str(mem))),
-        Value::Nil => None,
-        _ => {
-            return Err(err_eval(
-                "A function name may be nil (anonymous) or a symbol (named)",
-            ))
-        }
-    };
-    let fn_name = name;
-
-    // validate arity
-    let fn_arity = if params.len() > 250 {
-        // TODO less than 255 but really, what should this number be?
-        return Err(err_eval("A function cannot have more than 250 parameters"));
-    } else {
-        params.len() as u8
-    };
-
-    // validate expression list
-    if exprs.len() == 0 {
-        return Err(err_eval("A function must have at least one expression"));
-    }
-
-    // compile the expresssions
-    let mut compiler = Compiler::new(mem, name_str)?;
-    compiler.compile_function(mem, params, exprs)?;
-    let fn_bytecode = compiler.bytecode.get(mem);
-
-    Ok(Function::alloc(mem, fn_name, fn_arity, fn_bytecode)?.as_tagged(mem))
+    let mut compiler = Compiler::new(mem)?;
+    Ok(compiler
+        .compile_function(mem, name, params, exprs)?
+        .as_tagged(mem))
 }
 
-/// Compile the given AST and return a bytecode structure
+/// Compile the given AST and return an anonymous Function object
 pub fn compile<'guard>(
     mem: &'guard MutatorView,
     ast: TaggedScopedPtr<'guard>,
 ) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
-    let mut compiler = Compiler::new(mem, None)?;
-    compiler.compile_function(mem, &[], &[ast])?;
-
-    Ok(Function::alloc(
-        mem,
-        mem.nil(),
-        0,
-        compiler.bytecode.get(mem),
-    )?)
+    let mut compiler = Compiler::new(mem)?;
+    compiler.compile_function(mem, mem.nil(), &[], &[ast])
 }
 
 #[cfg(test)]

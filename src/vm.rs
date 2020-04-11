@@ -132,7 +132,7 @@ impl Thread {
                         // otherwise restore the previous stack frame settings
                         let frame = frames.top(mem)?;
                         self.stack_base.set(frame.base);
-                        instr.switch_frame(frame.function.get(mem).code.get(mem), frame.ip.get());
+                        instr.switch_frame(frame.function.get(mem).code(mem), frame.ip.get());
                     }
                 }
 
@@ -310,7 +310,7 @@ impl Thread {
                             frames.push(mem, frame)?;
 
                             // Update the instruction stream to point to the new function
-                            let code = function.code.get(mem);
+                            let code = function.code(mem);
                             self.stack_base.set(new_stack_base);
                             instr.switch_frame(code, 0);
 
@@ -383,7 +383,7 @@ impl Thread {
         let frames = self.frames.get(mem);
         frames.push(mem, CallFrame::new_main(function))?;
 
-        let code = function.code.get(mem);
+        let code = function.code(mem);
 
         while status == EvalStatus::Pending {
             status = self.vm_eval_stream(mem, code, 1024)?;

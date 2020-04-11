@@ -116,6 +116,12 @@ impl<T: Sized> CellPtr<T> {
     }
 }
 
+impl<T: Sized> From<ScopedPtr<'_, T>> for CellPtr<T> {
+    fn from(ptr: ScopedPtr<T>) -> CellPtr<T> {
+        CellPtr::new_with(ptr)
+    }
+}
+
 /// A _tagged_ runtime typed pointer type with scope limited by `MutatorScope` such that a `Value`
 /// instance can safely be derived and accessed. This type is neccessary to derive `Value`s from.
 #[derive(Copy, Clone)]
@@ -219,5 +225,11 @@ impl TaggedCellPtr {
     /// Set this pointer to nil
     pub fn set_to_nil(&self) {
         self.inner.set(TaggedPtr::nil())
+    }
+}
+
+impl From<TaggedScopedPtr<'_>> for TaggedCellPtr {
+    fn from(ptr: TaggedScopedPtr) -> TaggedCellPtr {
+        TaggedCellPtr::new_with(ptr)
     }
 }

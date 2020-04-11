@@ -300,7 +300,6 @@ mod test {
     use crate::error::{ErrorKind, RuntimeError};
     use crate::memory::{Memory, Mutator, MutatorView};
     use crate::pair::Pair;
-    
 
     #[test]
     fn dict_empty_assoc_lookup() {

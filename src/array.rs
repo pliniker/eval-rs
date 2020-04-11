@@ -11,8 +11,9 @@ use std::slice::from_raw_parts_mut;
 pub use stickyimmix::{AllocObject, ArraySize};
 
 use crate::containers::{
-    Container, ContainerFromPairList, FillAnyContainer, FillContainer, IndexedAnyContainer,
-    IndexedContainer, SliceableContainer, StackAnyContainer, StackContainer,
+    AnyContainerFromPairList, AnyContainerFromSlice, Container, ContainerFromSlice,
+    FillAnyContainer, FillContainer, IndexedAnyContainer, IndexedContainer, SliceableContainer,
+    StackAnyContainer, StackContainer,
 };
 use crate::error::{ErrorKind, RuntimeError};
 use crate::headers::TypeList;
@@ -125,6 +126,19 @@ impl<T: Sized + Clone> Array<T> {
     pub unsafe fn as_slice<'guard>(&self, _guard: &'guard dyn MutatorScope) -> &mut [T] {
         if let Some(ptr) = self.data.get().as_ptr() {
             from_raw_parts_mut(ptr as *mut T, self.length.get() as usize)
+        } else {
+            &mut []
+        }
+    }
+
+    /// Represent the full capacity of the array, however initialized, as a slice.
+    /// This is necessarily unsafe even for the 'guard lifetime
+    /// duration because while a slice is held, other code can cause array internals to change
+    /// that might cause the slice pointer and length to become invalid. Interior mutability
+    /// patterns such as RefCell-style should be used in addition.
+    pub unsafe fn as_capacity_slice<'guard>(&self, _guard: &'guard dyn MutatorScope) -> &mut [T] {
+        if let Some(ptr) = self.data.get().as_ptr() {
+            from_raw_parts_mut(ptr as *mut T, self.data.get().capacity() as usize)
         } else {
             &mut []
         }
@@ -414,7 +428,7 @@ impl IndexedAnyContainer for Array<TaggedCellPtr> {
     }
 }
 
-impl ContainerFromPairList for Array<TaggedCellPtr> {
+impl AnyContainerFromPairList for Array<TaggedCellPtr> {
     fn from_pair_list<'guard>(
         &self,
         mem: &'guard MutatorView,
@@ -429,6 +443,38 @@ impl ContainerFromPairList for Array<TaggedCellPtr> {
         }
 
         Ok(())
+    }
+}
+
+impl<T: Clone + Sized> ContainerFromSlice<T> for Array<T>
+where
+    Array<T>: AllocObject<TypeList>,
+{
+    fn from_slice<'guard>(
+        mem: &'guard MutatorView,
+        data: &[T],
+    ) -> Result<ScopedPtr<'guard, Array<T>>, RuntimeError> {
+        let array = Array::alloc_with_capacity(mem, data.len() as ArraySize)?;
+        let slice = unsafe { array.as_capacity_slice(mem) };
+        slice.clone_from_slice(data);
+        Ok(array)
+    }
+}
+
+impl AnyContainerFromSlice for Array<TaggedCellPtr> {
+    fn from_slice<'guard>(
+        mem: &'guard MutatorView,
+        data: &[TaggedScopedPtr<'guard>],
+    ) -> Result<ScopedPtr<'guard, Self>, RuntimeError> {
+        let array = Array::<TaggedCellPtr>::alloc_with_capacity(mem, data.len() as ArraySize)?;
+        let slice = unsafe { array.as_capacity_slice(mem) };
+
+        // probably slow
+        for index in 0..data.len() {
+            slice[index] = TaggedCellPtr::new_with(data[index])
+        }
+
+        Ok(array)
     }
 }
 
@@ -458,7 +504,7 @@ impl Print for Array<TaggedCellPtr> {
 #[cfg(test)]
 mod test {
     use super::{
-        Array, Container, ContainerFromPairList, IndexedAnyContainer, IndexedContainer,
+        AnyContainerFromPairList, Array, Container, IndexedAnyContainer, IndexedContainer,
         StackAnyContainer, StackContainer,
     };
     use crate::error::{ErrorKind, RuntimeError};
