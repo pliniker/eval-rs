@@ -13,7 +13,50 @@ use crate::taggedptr::Value;
 /// be built on std
 struct Scope {
     // symbol -> register mapping
-    pub bindings: HashMap<String, Register>,
+    bindings: HashMap<String, Register>,
+}
+
+impl Scope {
+    fn new() -> Scope {
+        Scope {
+            bindings: HashMap::new(),
+        }
+    }
+
+    // Add a Symbol->Register binding to this scope
+    fn push_binding<'guard>(
+        &mut self,
+        name: TaggedScopedPtr<'guard>,
+        reg: Register,
+    ) -> Result<(), RuntimeError> {
+        let name_string = match *name {
+            Value::Symbol(s) => String::from(s.as_str(&name)),
+            _ => return Err(err_eval("A parameter name must be a symbol")),
+        };
+
+        self.bindings.insert(name_string, reg);
+
+        Ok(())
+    }
+
+    // Find a Symbol->Register binding in this scope
+    fn lookup_binding<'guard>(
+        &self,
+        name: TaggedScopedPtr<'guard>,
+    ) -> Result<Register, RuntimeError> {
+        let name_string = match *name {
+            Value::Symbol(s) => String::from(s.as_str(&name)),
+            _ => return Err(err_eval("A variable must be represented by a symbol")),
+        };
+
+        match self.bindings.get(&name_string) {
+            Some(reg) => Ok(*reg),
+            None => Err(err_eval(&format!(
+                "Symbol {} is not bound to a value",
+                &name_string
+            ))),
+        }
+    }
 }
 
 struct Compiler {
@@ -22,10 +65,13 @@ struct Compiler {
     // TODO:
     // optional function name
     name: Option<String>,
-    // optional link to parent scope
-    //  * parent: Option<&Compiler>
     // function-local nested scopes bindings list (including parameters at outer level)
     locals: Vec<Scope>,
+    // optional link to parent scope for finding free variable register indexes
+    //parent: Option<&'outer_scope Compiler>
+    // call site return register, needed to know relative base of parent nested function calls
+    // when compiling a partial function
+    //call_return_reg: Option<Register>
 }
 
 impl Compiler {
@@ -36,6 +82,8 @@ impl Compiler {
             next_reg: 1, // register 0 is reserved for the return value
             name: None,
             locals: Vec::new(),
+            //parent: None,
+            //call_return_reg: None,
         })
     }
 
@@ -48,7 +96,7 @@ impl Compiler {
         exprs: &[TaggedScopedPtr<'guard>],
     ) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
         // validate function name
-        let name_str = match *name {
+        self.name = match *name {
             Value::Symbol(s) => Some(String::from(s.as_str(mem))),
             Value::Nil => None,
             _ => {
@@ -136,7 +184,7 @@ impl Compiler {
                 "is?" => self.push_op3(mem, Opcode::IS, params),
                 "set" => self.compile_apply_assign(mem, params),
                 "def" => self.compile_named_function(mem, params),
-                //"lambda" => self.compile_anon_function(mem, params),
+                "lambda" => self.compile_anonymous_function(mem, params),
                 _ => {
                     // TODO params - use register to pass in parameter count?
                     let result = self.acquire_reg();
@@ -240,6 +288,30 @@ impl Compiler {
         Ok(expr)
     }
 
+    fn compile_anonymous_function<'guard>(
+        &mut self,
+        mem: &'guard MutatorView,
+        params: TaggedScopedPtr<'guard>,
+    ) -> Result<Register, RuntimeError> {
+        let items = vec_from_pairs(mem, params)?;
+
+        if items.len() < 2 {
+            return Err(err_eval(
+                "An anonymous function definition must have at least (lambda (params) expr)",
+            ));
+        }
+
+        // a function consists of (name (params) expr1 .. exprn)
+        let fn_params = vec_from_pairs(mem, items[0])?;
+        let fn_exprs = &items[1..];
+
+        // compile the function to a Function object
+        let fn_object = compile_function(mem, mem.nil(), &fn_params, fn_exprs)?;
+
+        // load the function object as a literal
+        self.push_load_literal(mem, fn_object)
+    }
+
     fn compile_named_function<'guard>(
         &mut self,
         mem: &'guard MutatorView,
@@ -249,7 +321,7 @@ impl Compiler {
 
         if items.len() < 3 {
             return Err(err_eval(
-                "A function definition must have at least (name params expr)",
+                "A function definition must have at least (def name (params) expr)",
             ));
         }
 
@@ -351,7 +423,7 @@ fn compile_function<'guard>(
     params: &[TaggedScopedPtr<'guard>],
     exprs: &[TaggedScopedPtr<'guard>],
 ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-    let mut compiler = Compiler::new(mem)?;
+    let compiler = Compiler::new(mem)?;
     Ok(compiler
         .compile_function(mem, name, params, exprs)?
         .as_tagged(mem))
@@ -362,7 +434,7 @@ pub fn compile<'guard>(
     mem: &'guard MutatorView,
     ast: TaggedScopedPtr<'guard>,
 ) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
-    let mut compiler = Compiler::new(mem)?;
+    let compiler = Compiler::new(mem)?;
     compiler.compile_function(mem, mem.nil(), &[], &[ast])
 }
 

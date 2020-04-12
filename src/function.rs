@@ -5,18 +5,19 @@ use crate::error::RuntimeError;
 use crate::list::List;
 use crate::memory::MutatorView;
 use crate::printer::Print;
-use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr, TaggedScopedPtr};
-use crate::taggedptr::{TaggedPtr, Value};
+use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr, TaggedCellPtr, TaggedScopedPtr};
+use crate::taggedptr::Value;
 
 /// A function object type
 #[derive(Clone)]
 pub struct Function {
     // name could be a Symbol, or nil if it is an anonymous fn
-    name: TaggedPtr,
+    name: TaggedCellPtr,
     arity: u8,
     code: CellPtr<ByteCode>,
     param_names: CellPtr<List>,
     // TODO - list of negative indexes into stack where free variable values should be copied from
+    // free_variables: CellPtr<ArrayU32> <- but signed integers
 }
 
 impl Function {
@@ -26,9 +27,10 @@ impl Function {
         arity: u8,
         code: ScopedPtr<'guard, ByteCode>,
         //param_names: ScopedPtr<'guard, List>,
+        //free_variables
     ) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
         mem.alloc(Function {
-            name: name.as_unscoped(),
+            name: TaggedCellPtr::new_with(name),
             arity,
             code: CellPtr::new_with(code),
             param_names: CellPtr::new_with(List::alloc(mem)?), //CellPtr::new_with(param_names),
@@ -36,7 +38,7 @@ impl Function {
     }
 
     pub fn name<'guard>(&self, guard: &'guard dyn MutatorScope) -> &'guard str {
-        let name = TaggedScopedPtr::new(guard, self.name);
+        let name = self.name.get(guard);
         match *name {
             Value::Symbol(s) => s.as_str(guard),
             _ => "<lambda>",
@@ -62,7 +64,7 @@ impl Print for Function {
         guard: &'guard dyn MutatorScope,
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
-        let name = TaggedScopedPtr::new(guard, self.name);
+        let name = self.name.get(guard);
         match *name {
             Value::Symbol(s) => write!(f, "(def {} ({}) ...)", s.as_str(guard), self.arity),
             _ => write!(f, "(lambda ({}) ...)", self.arity),

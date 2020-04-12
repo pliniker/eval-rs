@@ -23,7 +23,7 @@ use crate::rawarray::{default_array_growth, RawArray, DEFAULT_ARRAY_SIZE};
 use crate::safeptr::{MutatorScope, ScopedPtr, TaggedCellPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
-// RefCell interior mutability pattern
+// For a RefCell-style interior mutability pattern
 type BorrowFlag = isize;
 const INTERIOR_ONLY: isize = 0;
 const EXPOSED_MUTABLY: isize = 1;
