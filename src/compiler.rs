@@ -39,6 +39,21 @@ impl Scope {
         Ok(())
     }
 
+    // Push a block of bindings into this scope, returning the next register available
+    // after these bound registers
+    fn push_bindings<'guard>(
+        &mut self,
+        names: &[TaggedScopedPtr<'guard>],
+        start_reg: Register,
+    ) -> Result<Register, RuntimeError> {
+        let mut reg = start_reg;
+        for name in names {
+            self.push_binding(*name, reg)?;
+            reg += 1;
+        }
+        Ok(reg)
+    }
+
     // Find a Symbol->Register binding in this scope
     fn lookup_binding<'guard>(
         &self,
@@ -79,7 +94,9 @@ impl Compiler {
     fn new<'guard>(mem: &'guard MutatorView) -> Result<Compiler, RuntimeError> {
         Ok(Compiler {
             bytecode: CellPtr::new_with(ByteCode::alloc(mem)?),
-            next_reg: 1, // register 0 is reserved for the return value
+            // register 0 is reserved for the return value
+            // register 1 is reserved for the argument count
+            next_reg: 2,
             name: None,
             locals: Vec::new(),
             //parent: None,
@@ -108,9 +125,8 @@ impl Compiler {
         let fn_name = name;
 
         // validate arity
-        let fn_arity = if params.len() > 250 {
-            // TODO less than 255 but really, what should this number be?
-            return Err(err_eval("A function cannot have more than 250 parameters"));
+        let fn_arity = if params.len() > 254 {
+            return Err(err_eval("A function cannot have more than 254 parameters"));
         } else {
             params.len() as u8
         };
@@ -188,15 +204,24 @@ impl Compiler {
                 _ => {
                     // TODO params - use register to pass in parameter count?
                     let result = self.acquire_reg();
-                    let fn_name_reg = self.compile_eval(mem, function)?;
+                    let fn_reg = self.compile_eval(mem, function)?;
                     self.bytecode
                         .get(mem)
-                        .push_op2(mem, Opcode::CALL, result, fn_name_reg)?;
+                        .push_op2(mem, Opcode::CALL, result, fn_reg)?;
                     Ok(result)
                 }
             },
 
-            _ => Err(err_eval("Non symbol in function-call position")),
+            // Here we allow the value in the function position to be evaluated dynamically
+            _ => {
+                // TODO params
+                let result = self.acquire_reg();
+                let fn_reg = self.compile_eval(mem, function)?;
+                self.bytecode
+                    .get(mem)
+                    .push_op2(mem, Opcode::CALL, result, fn_reg)?;
+                Ok(result)
+            }
         }
     }
 

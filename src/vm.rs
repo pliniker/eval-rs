@@ -265,7 +265,12 @@ impl Thread {
 
                         match lookup_result {
                             Ok(binding) => window[assign_reg].set(binding),
-                            Err(_) => return Err(err_eval("Symbol not bound to value")),
+                            Err(_) => {
+                                return Err(err_eval(&format!(
+                                    "Symbol {} is not bound to a value",
+                                    reg1_val
+                                )))
+                            }
                         }
                     } else {
                         return Err(err_eval("Cannot lookup value for non-symbol type"));
