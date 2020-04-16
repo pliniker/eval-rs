@@ -1,6 +1,8 @@
+use itertools::join;
 use std::fmt;
 
 use crate::bytecode::ByteCode;
+use crate::containers::{Container, IndexedAnyContainer, SliceableContainer};
 use crate::error::RuntimeError;
 use crate::list::List;
 use crate::memory::MutatorView;
@@ -24,16 +26,15 @@ impl Function {
     pub fn alloc<'guard>(
         mem: &'guard MutatorView,
         name: TaggedScopedPtr<'guard>,
-        arity: u8,
+        param_names: ScopedPtr<'guard, List>,
         code: ScopedPtr<'guard, ByteCode>,
-        //param_names: ScopedPtr<'guard, List>,
         //free_variables
     ) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
         mem.alloc(Function {
             name: TaggedCellPtr::new_with(name),
-            arity,
+            arity: param_names.length() as u8,
             code: CellPtr::new_with(code),
-            param_names: CellPtr::new_with(List::alloc(mem)?), //CellPtr::new_with(param_names),
+            param_names: CellPtr::new_with(param_names),
         })
     }
 
@@ -65,9 +66,16 @@ impl Print for Function {
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
         let name = self.name.get(guard);
+        let params = self.param_names.get(guard);
+
+        let mut param_string = String::new();
+        params.access_slice(guard, |items| {
+            param_string = join(items.iter().map(|item| item.get(guard)), " ")
+        });
+
         match *name {
-            Value::Symbol(s) => write!(f, "(def {} ({}) ...)", s.as_str(guard), self.arity),
-            _ => write!(f, "(lambda ({}) ...)", self.arity),
+            Value::Symbol(s) => write!(f, "(def {} ({}) ...)", s.as_str(guard), param_string),
+            _ => write!(f, "(lambda ({}) ...)", param_string),
         }
     }
 }

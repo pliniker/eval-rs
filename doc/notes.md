@@ -66,16 +66,16 @@ Partial Application:
 
 ### v2
 
-(defn fib (n)
+(def fib (n)
     (match n
         ((0) 1)
         ((n) (+ n (fib (- n 1))))))
 
-(defn function (x y)
+(def function (x y)
     (let (variable expr)
         (* x y)))
 
-(defn mult () function)
+(def mult () function)
 (mult 2 3)
 
 (let (square (lambda (x) (* x x))))
@@ -86,3 +86,10 @@ Partial Application:
 (deftype Option (
     (Some (value))
     (None)))
+
+### Partials
+
+(def addn (a) (add a)) -> (partial (b))
+(def muln (x) (mul x)) -> (partial (y))
+
+((addn 3 (muln 5)) 2)

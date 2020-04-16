@@ -474,6 +474,7 @@ impl AnyContainerFromSlice for Array<TaggedCellPtr> {
             slice[index] = TaggedCellPtr::new_with(data[index])
         }
 
+        array.length.set(data.len() as ArraySize);
         Ok(array)
     }
 }

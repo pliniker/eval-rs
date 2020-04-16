@@ -2,8 +2,10 @@ use std::collections::HashMap;
 
 use crate::array::ArraySize;
 use crate::bytecode::{ByteCode, Opcode, Register};
+use crate::containers::AnyContainerFromSlice;
 use crate::error::{err_eval, RuntimeError};
 use crate::function::Function;
+use crate::list::List;
 use crate::memory::MutatorView;
 use crate::pair::{value_from_1_pair, values_from_2_pairs, vec_from_pairs};
 use crate::safeptr::{CellPtr, ScopedPtr, TaggedScopedPtr};
@@ -131,6 +133,9 @@ impl Compiler {
             params.len() as u8
         };
 
+        // get params as a list
+        let fn_params = List::from_slice(mem, params)?;
+
         // validate expression list
         if exprs.len() == 0 {
             return Err(err_eval("A function must have at least one expression"));
@@ -149,7 +154,7 @@ impl Compiler {
         let fn_bytecode = self.bytecode.get(mem);
         fn_bytecode.push_op1(mem, Opcode::RETURN, result_reg)?;
 
-        Ok(Function::alloc(mem, fn_name, fn_arity, fn_bytecode)?)
+        Ok(Function::alloc(mem, fn_name, fn_params, fn_bytecode)?)
     }
 
     fn compile_eval<'guard>(
