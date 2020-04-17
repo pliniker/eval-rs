@@ -89,7 +89,34 @@ Partial Application:
 
 ### Partials
 
-(def addn (a) (add a)) -> (partial (b))
-(def muln (x) (mul x)) -> (partial (y))
+(def addn (a) (+ a)) -> (Partial + a b)
+(def muln (x) (* x)) -> (partial * x b)
 
-((addn 3 (muln 5)) 2)
+Chaining partials?
+(Partial add 3 (Partial mul 5)) -> (Partial mul 5 b)~>(Partial add 3 b)
+
+### Functors, Applicative, Monads
+
+data Maybe = Just a | Nothing
+
+instance Functor Maybe where
+  fmap :: (a -> b) -> Maybe a -> Maybe b
+  fmap _ Nothing  = Nothing
+  fmap g (Just a) = Just (g a)
+
+---
+
+(data Maybe 
+    (Just a)
+    (Nothing))
+->
+(def Maybe '(Maybe (Just a) (Nothing)))
+(def Just (a) '(Maybe Just `a))
+(def Nothing '(Maybe Nothing))
+
+(def fmap (f a) (f a))
+(def fmap (f (Maybe Just a)) (Just (f a)))
+(def fmap (f (Maybe Nothing)) (Nothing))
+
+(fmap (+ 3) (Just 2)) -> '(Maybe Just 6)
+(fmap (+ 3) (+ 4)) -> (Partial + 3)~>(Partial + 4)
