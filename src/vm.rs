@@ -13,7 +13,7 @@ use crate::list::List;
 use crate::memory::MutatorView;
 use crate::pair::Pair;
 use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr, TaggedScopedPtr};
-use crate::taggedptr::Value;
+use crate::taggedptr::{TaggedPtr, Value};
 
 /// Control flow flags
 #[derive(PartialEq)]
@@ -250,8 +250,15 @@ impl Thread {
                 }
 
                 Opcode::LOADNIL => {
-                    let reg = instr.get_reg1() as usize;
+                    let reg = instr.get_reg_acc() as usize;
                     window[reg].set(mem.nil());
+                }
+
+                Opcode::LOADINT => {
+                    let reg = instr.get_reg_acc() as usize;
+                    let integer = instr.get_literal_integer();
+                    let tagged_ptr = TaggedScopedPtr::new(mem, TaggedPtr::literal_integer(integer));
+                    window[reg].set(tagged_ptr);
                 }
 
                 Opcode::LOADGLOBAL => {

@@ -235,6 +235,13 @@ impl TaggedPtr {
         }
     }
 
+    /// Construct an inline integer from a literal signed 16bit number
+    pub fn literal_integer(value: i16) -> TaggedPtr {
+        TaggedPtr {
+            number: (((value as usize) << 2) | TAG_NUMBER) as isize,
+        }
+    }
+
     fn into_fat_ptr(&self) -> FatPtr {
         unsafe {
             if self.tag == 0 {

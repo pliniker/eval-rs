@@ -31,6 +31,7 @@ pub enum Opcode {
     LOADGLOBAL = 0x0D,
     STOREGLOBAL = 0x0E,
     CALL = 0x0F,
+    LOADINT = 0x10,
 }
 
 /// A register can be in the range 0..255
@@ -62,6 +63,11 @@ fn encode_3(op: Opcode, reg_acc: Register, reg1: Register, reg2: Register) -> u3
 /// Encode a literal load operation
 fn encode_load_lit(reg_acc: Register, literal_id: LiteralId) -> u32 {
     (Opcode::LOADLIT as u32) << 24 | (reg_acc as u32) << 16 | (literal_id as u32)
+}
+
+/// Encode a literal load operation
+fn encode_load_integer(reg_acc: Register, integer: i16) -> u32 {
+    (Opcode::LOADINT as u32) << 24 | (reg_acc as u32) << 16 | ((integer as u32) & 0xFFFF)
 }
 
 /// Encode a jump operation
@@ -97,6 +103,11 @@ fn decode_reg2(instr: u32) -> Register {
 /// Decode the literal id operand in an instruction
 fn decode_literal_id(instr: u32) -> LiteralId {
     (instr & 0xFFFF) as u16
+}
+
+/// Decode the literal id operand in an instruction
+fn decode_literal_integer(instr: u32) -> i16 {
+    (instr & 0xFFFF) as i16
 }
 
 /// Decode the jump offset in an instruction
@@ -221,6 +232,15 @@ impl ByteCode {
         Ok(lit_id)
     }
 
+    pub fn push_load_integer<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        reg_acc: Register,
+        literal: i16,
+    ) -> Result<(), RuntimeError> {
+        self.code.push(mem, encode_load_integer(reg_acc, literal))
+    }
+
     /// Get the index into the bytecode array of the last instruction
     pub fn last_instruction(&self) -> ArraySize {
         self.code.length() - 1
@@ -327,6 +347,11 @@ impl InstructionStream {
         )
     }
 
+    /// Extract the signed 16bit integer literal from the opcode
+    pub fn get_literal_integer(&self) -> i16 {
+        decode_literal_integer(self.current.get())
+    }
+
     /// Return the next instruction pointer
     pub fn get_next_ip(&self) -> ArraySize {
         self.ip.get()
@@ -376,6 +401,12 @@ mod test {
     }
 
     #[test]
+    fn code_encode_load_int() {
+        let code = encode_load_integer(0x23, -1);
+        assert!(code == 0x1023FFFF);
+    }
+
+    #[test]
     fn code_decode_op() {
         let code = 0x04010203;
         let op = decode_op(code).unwrap();
@@ -401,6 +432,15 @@ mod test {
         let code = 0x08101112;
         let reg2 = decode_reg2(code);
         assert!(reg2 == 0x12);
+    }
+
+    #[test]
+    fn code_decode_int() {
+        let code = 0x1023FFFF;
+        let op = decode_op(code).unwrap();
+        assert!(op == Opcode::LOADINT);
+        let integer = decode_literal_integer(code);
+        assert!(integer == -1);
     }
 
     #[test]

@@ -60,18 +60,15 @@ impl Scope {
     fn lookup_binding<'guard>(
         &self,
         name: TaggedScopedPtr<'guard>,
-    ) -> Result<Register, RuntimeError> {
+    ) -> Result<Option<Register>, RuntimeError> {
         let name_string = match *name {
             Value::Symbol(s) => String::from(s.as_str(&name)),
             _ => return Err(err_eval("A variable must be represented by a symbol")),
         };
 
         match self.bindings.get(&name_string) {
-            Some(reg) => Ok(*reg),
-            None => Err(err_eval(&format!(
-                "Symbol {} is not bound to a value",
-                &name_string
-            ))),
+            Some(reg) => Ok(Some(*reg)),
+            None => Ok(None),
         }
     }
 }
@@ -127,23 +124,24 @@ impl Compiler {
         let fn_name = name;
 
         // validate arity
-        let fn_arity = if params.len() > 254 {
+        if params.len() > 254 {
             return Err(err_eval("A function cannot have more than 254 parameters"));
-        } else {
-            params.len() as u8
-        };
-
-        // get params as a list
+        }
+        // put params into a list for the Function object
         let fn_params = List::from_slice(mem, params)?;
+
+        // also assign params to the first level function scope and give each one a register
+        let mut param_scope = Scope::new();
+        self.next_reg = param_scope.push_bindings(params, self.next_reg)?;
+        self.locals.push(param_scope);
 
         // validate expression list
         if exprs.len() == 0 {
             return Err(err_eval("A function must have at least one expression"));
         }
 
-        // begin compilation
+        // compile expressions
         let mut result_reg = 0;
-
         for expr in exprs.iter() {
             result_reg = self.compile_eval(mem, *expr)?;
         }
@@ -171,9 +169,16 @@ impl Compiler {
 
                     "true" => self.push_load_literal(mem, mem.lookup_sym("true")),
 
-                    // TODO: check for local variable and return register number first
+                    // Search scopes for a binding; if none do a global lookup
                     _ => {
-                        // load sym, then replace sym with global
+                        // First search local bindings from inner to outer
+                        for scope in self.locals.iter().rev() {
+                            if let Some(reg) = scope.lookup_binding(ast_node)? {
+                                return Ok(reg);
+                            }
+                        }
+
+                        // Otherwise do a late-binding global lookup
                         let reg1 = self.push_load_literal(mem, ast_node)?;
                         self.bytecode
                             .get(mem)
@@ -206,27 +211,11 @@ impl Compiler {
                 "set" => self.compile_apply_assign(mem, params),
                 "def" => self.compile_named_function(mem, params),
                 "lambda" => self.compile_anonymous_function(mem, params),
-                _ => {
-                    // TODO params - use register to pass in parameter count?
-                    let result = self.acquire_reg();
-                    let fn_reg = self.compile_eval(mem, function)?;
-                    self.bytecode
-                        .get(mem)
-                        .push_op2(mem, Opcode::CALL, result, fn_reg)?;
-                    Ok(result)
-                }
+                _ => self.compile_apply_call(mem, function, params),
             },
 
             // Here we allow the value in the function position to be evaluated dynamically
-            _ => {
-                // TODO params
-                let result = self.acquire_reg();
-                let fn_reg = self.compile_eval(mem, function)?;
-                self.bytecode
-                    .get(mem)
-                    .push_op2(mem, Opcode::CALL, result, fn_reg)?;
-                Ok(result)
-            }
+            _ => self.compile_apply_call(mem, function, params),
         }
     }
 
@@ -371,6 +360,39 @@ impl Compiler {
             .push_op2(mem, Opcode::STOREGLOBAL, name_reg, function_reg)?;
 
         Ok(function_reg)
+    }
+
+    fn compile_apply_call<'guard>(
+        &mut self,
+        mem: &'guard MutatorView,
+        function: TaggedScopedPtr<'guard>,
+        args: TaggedScopedPtr<'guard>,
+    ) -> Result<Register, RuntimeError> {
+        let mut bytecode = self.bytecode.get(mem);
+
+        // put the function pointer in a register
+        let fn_reg = self.compile_eval(mem, function)?;
+
+        // allocate a register for the return value
+        let result = self.acquire_reg();
+
+        // evaluate arguments, first allocating a register for the arg count
+        let arg_list = vec_from_pairs(mem, args)?;
+
+        let arg_count = self.acquire_reg();
+        bytecode.push_load_integer(mem, arg_count, arg_list.len() as i16)?;
+
+        for arg in arg_list {
+            // TODO reserve regs, eval each arg
+        }
+
+        self.bytecode
+            .get(mem)
+            .push_op2(mem, Opcode::CALL, result, fn_reg)?;
+
+        // ignore use of any registers beyond the result once the call is complete
+        self.reset_reg(result);
+        Ok(result)
     }
 
     fn push_op0<'guard>(

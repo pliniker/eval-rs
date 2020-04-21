@@ -113,7 +113,7 @@ instance Functor Maybe where
     (Nothing))
 ->
 (set 'Maybe (object))
-(def Just (a) (append '(Maybe Just) (a))
+(def Just (a) (append '(Maybe Just) (list a))
 (def Nothing () '(Maybe Nothing))
 
 (def Maybe::fmap (self f)
