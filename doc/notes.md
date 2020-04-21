@@ -21,11 +21,13 @@
 
 ### Types
 
- - dicts
- - lists
- - sets
- - record
+ - dicts #{...}
+ - lists (arrays) [...]
+ - sets &{...}
+ - record {...}
  - enum
+ - tuple &(...)
+ - cons lists (...)
 
 ## Semantics
 
@@ -87,7 +89,7 @@ Partial Application:
     (Some (value))
     (None)))
 
-### Partials
+### Partials and Currying
 
 (def addn (a) (+ a)) -> (Partial + a b)
 (def muln (x) (* x)) -> (partial * x b)
@@ -110,13 +112,21 @@ instance Functor Maybe where
     (Just a)
     (Nothing))
 ->
-(def Maybe '(Maybe (Just a) (Nothing)))
-(def Just (a) '(Maybe Just `a))
-(def Nothing '(Maybe Nothing))
+(set 'Maybe (object))
+(def Just (a) (append '(Maybe Just) (a))
+(def Nothing () '(Maybe Nothing))
 
-(def fmap (f a) (f a))
-(def fmap (f (Maybe Just a)) (Just (f a)))
-(def fmap (f (Maybe Nothing)) (Nothing))
+(def Maybe::fmap (self f)
+  (match self
+    (Nothing) (Nothing)
+    (Just a) (Just (f a))))
 
-(fmap (+ 3) (Just 2)) -> '(Maybe Just 6)
-(fmap (+ 3) (+ 4)) -> (Partial + 3)~>(Partial + 4)
+(def Maybe::amap (self mf)
+  (match self
+    (Nothing) (Nothing)
+    (Just a) (match mf
+      (Nothing) (Nothing)
+      (Just f) (Just (f a))
+)))
+
+
