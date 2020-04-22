@@ -94,8 +94,7 @@ impl Compiler {
         Ok(Compiler {
             bytecode: CellPtr::new_with(ByteCode::alloc(mem)?),
             // register 0 is reserved for the return value
-            // register 1 is reserved for the argument count
-            next_reg: 2,
+            next_reg: 1,
             name: None,
             locals: Vec::new(),
             //parent: None,
@@ -368,7 +367,7 @@ impl Compiler {
         function: TaggedScopedPtr<'guard>,
         args: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
-        let mut bytecode = self.bytecode.get(mem);
+        let bytecode = self.bytecode.get(mem);
 
         // put the function pointer in a register
         let fn_reg = self.compile_eval(mem, function)?;
@@ -378,17 +377,14 @@ impl Compiler {
 
         // evaluate arguments, first allocating a register for the arg count
         let arg_list = vec_from_pairs(mem, args)?;
-
-        let arg_count = self.acquire_reg();
-        bytecode.push_load_integer(mem, arg_count, arg_list.len() as i16)?;
+        let arg_count = arg_list.len() as u8;
 
         for arg in arg_list {
             // TODO reserve regs, eval each arg
+            self.compile_eval(mem, arg)?;
         }
 
-        self.bytecode
-            .get(mem)
-            .push_op2(mem, Opcode::CALL, result, fn_reg)?;
+        bytecode.push_op3(mem, Opcode::CALL, result, fn_reg, arg_count)?;
 
         // ignore use of any registers beyond the result once the call is complete
         self.reset_reg(result);

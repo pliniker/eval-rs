@@ -298,15 +298,24 @@ impl Thread {
                 }
 
                 Opcode::CALL => {
-                    // TODO params
-
                     let result_reg = instr.get_reg_acc() as usize;
                     let function_reg = instr.get_reg1() as usize;
+                    let arg_count = instr.get_reg2();
 
                     let binding = window[function_reg].get(mem);
 
                     match *binding {
                         Value::Function(function) => {
+                            if arg_count != function.arity() {
+                                // TODO return Partial
+                                return Err(err_eval(&format!(
+                                    "Function {} expected {} arguments, got {}",
+                                    binding,
+                                    function.arity(),
+                                    arg_count
+                                )));
+                            }
+
                             // Modify the current call frame, saving the return ip
                             let current_frame_ip = instr.get_next_ip();
                             frames.access_slice(mem, |f| {
