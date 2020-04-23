@@ -92,10 +92,23 @@ Partial Application:
 ### Partials and Currying
 
 (def addn (a) (+ a)) -> (Partial + a b)
-(def muln (x) (* x)) -> (partial * x b)
+(def muln (x) (* x)) -> (partial * x y)
 
-Chaining partials?
-(Partial add 3 (Partial mul 5)) -> (Partial mul 5 b)~>(Partial add 3 b)
+Chaining partials? Stack of partials?
+(Partial div 2 (Partial add 3 (Partial mul 5)))
+->
+(Partial mul 5)
+(Partial add 3)
+(Partial div 2)
+(PartialStack)
+
+(<PartialStack> 3)
+(mul 5 3): pop 3, push 15
+(add 3 15): pop 15, push 18
+(div 2 18): pop 18, push 9
+(pop 9)
+
+iterate until arg stack is empty
 
 ### Functors, Applicative, Monads
 

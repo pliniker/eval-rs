@@ -32,6 +32,7 @@ pub enum Opcode {
     STOREGLOBAL = 0x0E,
     CALL = 0x0F,
     LOADINT = 0x10,
+    COPYREG = 0x11,
 }
 
 /// A register can be in the range 0..255

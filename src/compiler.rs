@@ -178,11 +178,11 @@ impl Compiler {
                         }
 
                         // Otherwise do a late-binding global lookup
-                        let reg1 = self.push_load_literal(mem, ast_node)?;
+                        let reg_acc = self.push_load_literal(mem, ast_node)?;
                         self.bytecode
                             .get(mem)
-                            .push_op2(mem, Opcode::LOADGLOBAL, reg1, reg1)?;
-                        Ok(reg1)
+                            .push_op2(mem, Opcode::LOADGLOBAL, reg_acc, reg_acc)?;
+                        Ok(reg_acc)
                     }
                 }
             }
@@ -379,19 +379,29 @@ impl Compiler {
         let arg_list = vec_from_pairs(mem, args)?;
         let arg_count = arg_list.len() as u8;
 
+        println!("COMPILE CALL, result reg {}", result);
         for arg in arg_list {
-            // TODO reserve regs, eval each arg
-            self.compile_eval(mem, arg)?;
+            let reg = self.compile_eval(mem, arg)?;
+            // if a bound variable was returned, we have a direct reference to its register;
+            // we need to copy the register to the arg list. Bound registers are necessarily
+            // lower indexes than where the function call is situated.
+            if reg <= result {
+                let arg_reg = self.acquire_reg();
+                bytecode.push_op2(mem, Opcode::COPYREG, arg_reg, reg)?;
+                println!("COMPILE CALL, arg reg {}", arg_reg);
+            } else {
+                println!("COMPILE CALL, arg reg {}", reg);
+            }
         }
 
         bytecode.push_op3(mem, Opcode::CALL, result, fn_reg, arg_count)?;
 
         // ignore use of any registers beyond the result once the call is complete
-        self.reset_reg(result);
+        self.reset_reg(result + 1);
         Ok(result)
     }
 
-    fn push_op0<'guard>(
+    fn _push_op0<'guard>(
         &mut self,
         mem: &'guard MutatorView,
         op: Opcode,
@@ -567,6 +577,36 @@ mod test {
             let result = t.quick_vm_eval(mem, f)?;
 
             assert!(result == mem.nil());
+
+            Ok(())
+        }
+
+        test_helper(test_inner);
+    }
+
+    #[test]
+    fn compile_call_functions_stack_depth_3() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            let compare_fn = "(def is_it (ask expect) (is? ask expect))";
+            let curried_fn = "(def is_it_a (ask) (is_it ask 'a))";
+            let query1 = "(is_it_a nil)";
+            let query2 = "(is_it_a 'a)";
+
+            let compile_code = |mem, code| {
+                println!("RUNNING {}", code);
+                compile(mem, parse(mem, code)?)
+            };
+
+            let t = Thread::alloc(mem)?;
+
+            t.quick_vm_eval(mem, compile_code(mem, compare_fn)?)?;
+            t.quick_vm_eval(mem, compile_code(mem, curried_fn)?)?;
+
+            let result1 = t.quick_vm_eval(mem, compile_code(mem, query1)?)?;
+            assert!(result1 == mem.nil());
+
+            let result2 = t.quick_vm_eval(mem, compile_code(mem, query2)?)?;
+            assert!(result2 == mem.lookup_sym("a"));
 
             Ok(())
         }

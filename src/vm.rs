@@ -304,6 +304,11 @@ impl Thread {
 
                     let binding = window[function_reg].get(mem);
 
+                    println!("VM CALL, result reg {}", result_reg);
+                    for reg in (result_reg + 1)..(result_reg + arg_count as usize + 1) {
+                        println!("VM CALL, arg {} = {}", reg, window[reg].get(mem));
+                    }
+
                     match *binding {
                         Value::Function(function) => {
                             if arg_count != function.arity() {
@@ -343,6 +348,12 @@ impl Thread {
 
                         _ => return Err(err_eval("Type is not callable")),
                     }
+                }
+
+                Opcode::COPYREG => {
+                    let reg_acc = instr.get_reg_acc() as usize;
+                    let reg1 = instr.get_reg1() as usize;
+                    window[reg_acc].set(window[reg1].get(mem));
                 }
             }
 
