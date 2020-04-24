@@ -53,6 +53,17 @@ impl<T: Sized + Clone> Array<T> {
         mem.alloc(Array::new())
     }
 
+    /// Clone the contents of an existing Array
+    pub fn alloc_clone<'guard>(
+        mem: &'guard MutatorView,
+        from_array: ScopedPtr<'guard, Array<T>>,
+    ) -> Result<ScopedPtr<'guard, Array<T>>, RuntimeError>
+    where
+        Array<T>: AllocObject<TypeList> + ContainerFromSlice<T>,
+    {
+        from_array.access_slice(mem, |items| ContainerFromSlice::from_slice(mem, items))
+    }
+
     /// Allocate a new instance on the heap with pre-allocated capacity
     pub fn alloc_with_capacity<'guard>(
         mem: &'guard MutatorView,

@@ -638,4 +638,30 @@ mod test {
 
         test_helper(test_inner);
     }
+
+    #[test]
+    fn compile_call_functions_partial_application() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            let a_fn = "(def isit (a b) (is? a b))";
+
+            let query1 = "((isit 'x) 'x)";
+            let query2 = "((isit 'x) 'y)";
+
+            let compile_code = |mem, code| compile(mem, parse(mem, code)?);
+
+            let t = Thread::alloc(mem)?;
+
+            t.quick_vm_eval(mem, compile_code(mem, a_fn)?)?;
+
+            let result = t.quick_vm_eval(mem, compile_code(mem, query1)?)?;
+            assert!(result == mem.lookup_sym("true"));
+
+            let result = t.quick_vm_eval(mem, compile_code(mem, query2)?)?;
+            assert!(result == mem.nil());
+
+            Ok(())
+        }
+
+        test_helper(test_inner);
+    }
 }

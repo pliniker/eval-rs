@@ -2,7 +2,9 @@ use itertools::join;
 use std::fmt;
 
 use crate::bytecode::ByteCode;
-use crate::containers::{Container, IndexedAnyContainer, SliceableContainer};
+use crate::containers::{
+    Container, ContainerFromSlice, IndexedAnyContainer, SliceableContainer, StackContainer,
+};
 use crate::error::RuntimeError;
 use crate::list::List;
 use crate::memory::MutatorView;
@@ -23,6 +25,7 @@ pub struct Function {
 }
 
 impl Function {
+    /// Allocate a Function object on the heap
     pub fn alloc<'guard>(
         mem: &'guard MutatorView,
         name: TaggedScopedPtr<'guard>,
@@ -38,6 +41,7 @@ impl Function {
         })
     }
 
+    /// Return the Function's name as a string slice
     pub fn name<'guard>(&self, guard: &'guard dyn MutatorScope) -> &'guard str {
         let name = self.name.get(guard);
         match *name {
@@ -46,16 +50,19 @@ impl Function {
         }
     }
 
+    /// Return the number of arguments the Function can take
     pub fn arity(&self) -> u8 {
         self.arity
     }
 
-    pub fn code<'guard>(&self, guard: &'guard dyn MutatorScope) -> ScopedPtr<'guard, ByteCode> {
-        self.code.get(guard)
-    }
-
+    /// Return the names of the parameters that the Function takes
     pub fn param_names<'guard>(&self, guard: &'guard dyn MutatorScope) -> ScopedPtr<'guard, List> {
         self.param_names.get(guard)
+    }
+
+    /// Return the ByteCode object associated with the Function
+    pub fn code<'guard>(&self, guard: &'guard dyn MutatorScope) -> ScopedPtr<'guard, ByteCode> {
+        self.code.get(guard)
     }
 }
 
@@ -85,28 +92,71 @@ impl Print for Function {
 pub struct Partial {
     arity: u8,
     used: u8,
-    pub args: CellPtr<List>,
-    pub func: CellPtr<Function>,
+    args: CellPtr<List>,
+    func: CellPtr<Function>,
 }
 
 impl Partial {
+    /// Allocate a Partial application of a Function on the heap
     pub fn alloc<'guard>(
         mem: &'guard MutatorView,
         function: ScopedPtr<'guard, Function>,
-        args: ScopedPtr<'guard, List>,
+        args: &[TaggedCellPtr],
     ) -> Result<ScopedPtr<'guard, Partial>, RuntimeError> {
-        let used = args.length() as u8;
+        let used = args.len() as u8;
         let arity = function.arity() - used;
+
+        let args_list: ScopedPtr<'guard, List> = ContainerFromSlice::from_slice(mem, &args)?;
+
         mem.alloc(Partial {
             arity: arity,
             used: used,
-            args: CellPtr::new_with(args),
+            args: CellPtr::new_with(args_list),
             func: CellPtr::new_with(function),
         })
     }
 
+    /// Allocate a clone of an existing Partial application, adding the given arguments to the
+    /// list of existing args.
+    pub fn alloc_clone<'guard>(
+        mem: &'guard MutatorView,
+        partial: ScopedPtr<'guard, Partial>,
+        new_args: &[TaggedCellPtr],
+    ) -> Result<ScopedPtr<'guard, Partial>, RuntimeError> {
+        let used = partial.used() + new_args.len() as u8;
+        let arity = partial.arity() - new_args.len() as u8;
+
+        let arg_list = List::alloc_clone(mem, partial.args(mem))?;
+        for arg in new_args {
+            arg_list.push(mem, arg.clone())?
+        }
+
+        mem.alloc(Partial {
+            arity: arity,
+            used: used,
+            args: CellPtr::new_with(arg_list),
+            func: CellPtr::new_with(partial.function(mem)),
+        })
+    }
+
+    /// Return the number of arguments this Partial needs before the function can be called
     pub fn arity(&self) -> u8 {
         self.arity
+    }
+
+    /// Return the count of arguments already applied
+    pub fn used(&self) -> u8 {
+        self.used
+    }
+
+    /// Return the arguments already supplied to the Partial
+    pub fn args<'guard>(&self, guard: &'guard dyn MutatorScope) -> ScopedPtr<'guard, List> {
+        self.args.get(guard)
+    }
+
+    /// Return the Function object that the Partial will call
+    pub fn function<'guard>(&self, guard: &'guard dyn MutatorScope) -> ScopedPtr<'guard, Function> {
+        self.func.get(guard)
     }
 }
 

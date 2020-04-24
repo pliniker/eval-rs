@@ -304,20 +304,52 @@ impl Thread {
 
                     let binding = window[function_reg].get(mem);
 
+                    // To avoid duplicating code in function and partial application cases,
+                    // this is declared as a closure so it can access local variables
+                    let new_call_frame = |function| -> Result<(), RuntimeError> {
+                        // Modify the current call frame, saving the return ip
+                        let current_frame_ip = instr.get_next_ip();
+                        frames.access_slice(mem, |f| {
+                            f.last()
+                                .expect("No CallFrames in slice!")
+                                .ip
+                                .set(current_frame_ip)
+                        });
+
+                        // Create a new call frame, pushing it to the frame stack
+                        let new_stack_base = self.stack_base.get() + result_reg as ArraySize;
+                        let frame = CallFrame::new(function, 0, new_stack_base);
+                        frames.push(mem, frame)?;
+
+                        // Update the instruction stream to point to the new function
+                        let code = function.code(mem);
+                        self.stack_base.set(new_stack_base);
+                        instr.switch_frame(code, 0);
+
+                        // Ensure the stack has 256 registers allocated
+                        stack.fill(mem, new_stack_base + 256, mem.nil())?;
+
+                        Ok(())
+                    };
+
+                    // Handle the two similar-but-different cases: this might be a Function object
+                    // or a Partial application object
                     match *binding {
                         Value::Function(function) => {
-                            if arg_count < function.arity() {
+                            let arity = function.arity();
+
+                            if arg_count < arity {
                                 // Too few args, return a Partial object
                                 let args_start = result_reg + 1;
                                 let args_end = args_start + arg_count as usize;
-                                let args: ScopedPtr<'guard, List> = ContainerFromSlice::from_slice(
-                                    mem,
-                                    &window[args_start..args_end],
-                                )?;
-                                let partial = Partial::alloc(mem, function, args)?;
+
+                                let partial =
+                                    Partial::alloc(mem, function, &window[args_start..args_end])?;
+
                                 window[result_reg].set(partial.as_tagged(mem));
+
                                 return Ok(EvalStatus::Pending);
-                            } else if arg_count > function.arity() {
+                            } else if arg_count > arity {
                                 // Too many args, we haven't got a continuations stack
                                 return Err(err_eval(&format!(
                                     "Function {} expected {} arguments, got {}",
@@ -327,42 +359,54 @@ impl Thread {
                                 )));
                             }
 
-                            // Modify the current call frame, saving the return ip
-                            let current_frame_ip = instr.get_next_ip();
-                            frames.access_slice(mem, |f| {
-                                f.last()
-                                    .expect("No CallFrames in slice!")
-                                    .ip
-                                    .set(current_frame_ip)
-                            });
-
-                            // Create a new call frame, pushing it to the frame stack
-                            let new_stack_base = self.stack_base.get() + result_reg as ArraySize;
-                            let frame = CallFrame::new(function, 0, new_stack_base);
-                            frames.push(mem, frame)?;
-
-                            // Update the instruction stream to point to the new function
-                            let code = function.code(mem);
-                            self.stack_base.set(new_stack_base);
-                            instr.switch_frame(code, 0);
-
-                            // Ensure the stack has 256 registers allocated
-                            stack.fill(mem, new_stack_base + 256, mem.nil())?;
+                            new_call_frame(function)?;
                         }
 
                         Value::Partial(partial) => {
-                            if arg_count < partial.arity() {
+                            let arity = partial.arity();
+
+                            if arg_count < arity {
+                                // Too few args, bake a new Partial from the existing one, adding the new
+                                // arguments
                                 let args_start = result_reg + 1;
                                 let args_end = args_start + arg_count as usize;
 
-                                // TODO deep-clone the Partial
-                                // append the args
-                                // update the arity and used count
+                                let new_partial = Partial::alloc_clone(
+                                    mem,
+                                    partial,
+                                    &window[args_start..args_end],
+                                )?;
 
-                                unimplemented!()
-                            } else {
-                                unimplemented!()
+                                window[result_reg].set(new_partial.as_tagged(mem));
+
+                                return Ok(EvalStatus::Pending);
+                            } else if arg_count > arity {
+                                // Too many args, we haven't got a continuations stack
+                                return Err(err_eval(&format!(
+                                    "Partial {} expected {} arguments, got {}",
+                                    binding,
+                                    partial.arity(),
+                                    arg_count
+                                )));
                             }
+
+                            // Shunt _call_ args back into the window to make space for the
+                            // partially applied args
+                            let push_dist = partial.used();
+                            let from_reg = result_reg as usize + 1;
+                            let to_reg = from_reg + push_dist as usize;
+                            for index in (0..arg_count as usize).rev() {
+                                window[to_reg + index].set(window[from_reg + index].get(mem));
+                            }
+
+                            // copy args from Partial to the register window
+                            let args = partial.args(mem);
+                            let start_reg = result_reg + 1;
+                            args.access_slice(mem, |items| for (index, item) in items.iter().enumerate() {
+                                window[start_reg + index].set(item.get(mem));
+                            });
+
+                            new_call_frame(partial.function(mem))?;
                         }
 
                         _ => return Err(err_eval("Type is not callable")),
