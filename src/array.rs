@@ -457,6 +457,7 @@ where
         let array = Array::alloc_with_capacity(mem, data.len() as ArraySize)?;
         let slice = unsafe { array.as_capacity_slice(mem) };
         slice.clone_from_slice(data);
+        array.length.set(data.len() as ArraySize);
         Ok(array)
     }
 }

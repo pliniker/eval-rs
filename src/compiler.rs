@@ -179,9 +179,12 @@ impl Compiler {
 
                         // Otherwise do a late-binding global lookup
                         let reg_acc = self.push_load_literal(mem, ast_node)?;
-                        self.bytecode
-                            .get(mem)
-                            .push_op2(mem, Opcode::LOADGLOBAL, reg_acc, reg_acc)?;
+                        self.bytecode.get(mem).push_op2(
+                            mem,
+                            Opcode::LOADGLOBAL,
+                            reg_acc,
+                            reg_acc,
+                        )?;
                         Ok(reg_acc)
                     }
                 }
@@ -588,9 +591,7 @@ mod test {
             let query1 = "(is_it_a nil)";
             let query2 = "(is_it_a 'a)";
 
-            let compile_code = |mem, code| {
-                compile(mem, parse(mem, code)?)
-            };
+            let compile_code = |mem, code| compile(mem, parse(mem, code)?);
 
             let t = Thread::alloc(mem)?;
 
@@ -613,13 +614,12 @@ mod test {
     fn compile_call_functions_map_over_list() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
             let compare_fn = "(def is_y (ask) (is? ask 'y))";
-            let map_fn = "(def map (f l) (cond (nil? l) nil true (cons (f (car l)) (map f (cdr l)))))";
+            let map_fn =
+                "(def map (f l) (cond (nil? l) nil true (cons (f (car l)) (map f (cdr l)))))";
 
             let query = "(map is_y '(x y z z y))";
 
-            let compile_code = |mem, code| {
-                compile(mem, parse(mem, code)?)
-            };
+            let compile_code = |mem, code| compile(mem, parse(mem, code)?);
 
             let t = Thread::alloc(mem)?;
 

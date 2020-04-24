@@ -3,12 +3,12 @@ use std::cell::Cell;
 use crate::array::{Array, ArraySize};
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{
-    Container, FillAnyContainer, HashIndexedAnyContainer, IndexedAnyContainer, IndexedContainer,
-    SliceableContainer, StackAnyContainer, StackContainer,
+    Container, ContainerFromSlice, FillAnyContainer, HashIndexedAnyContainer, IndexedAnyContainer,
+    IndexedContainer, SliceableContainer, StackAnyContainer, StackContainer,
 };
 use crate::dict::Dict;
 use crate::error::{err_eval, RuntimeError};
-use crate::function::Function;
+use crate::function::{Function, Partial};
 use crate::list::List;
 use crate::memory::MutatorView;
 use crate::pair::Pair;
@@ -306,8 +306,19 @@ impl Thread {
 
                     match *binding {
                         Value::Function(function) => {
-                            if arg_count != function.arity() {
-                                // TODO return Partial
+                            if arg_count < function.arity() {
+                                // Too few args, return a Partial object
+                                let args_start = result_reg + 1;
+                                let args_end = args_start + arg_count as usize;
+                                let args: ScopedPtr<'guard, List> = ContainerFromSlice::from_slice(
+                                    mem,
+                                    &window[args_start..args_end],
+                                )?;
+                                let partial = Partial::alloc(mem, function, args)?;
+                                window[result_reg].set(partial.as_tagged(mem));
+                                return Ok(EvalStatus::Pending);
+                            } else if arg_count > function.arity() {
+                                // Too many args, we haven't got a continuations stack
                                 return Err(err_eval(&format!(
                                     "Function {} expected {} arguments, got {}",
                                     binding,
@@ -339,7 +350,20 @@ impl Thread {
                             stack.fill(mem, new_stack_base + 256, mem.nil())?;
                         }
 
-                        Value::Partial(_partial) => unimplemented!(),
+                        Value::Partial(partial) => {
+                            if arg_count < partial.arity() {
+                                let args_start = result_reg + 1;
+                                let args_end = args_start + arg_count as usize;
+
+                                // TODO deep-clone the Partial
+                                // append the args
+                                // update the arity and used count
+
+                                unimplemented!()
+                            } else {
+                                unimplemented!()
+                            }
+                        }
 
                         _ => return Err(err_eval("Type is not callable")),
                     }

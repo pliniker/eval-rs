@@ -83,10 +83,31 @@ impl Print for Function {
 /// A partial function application object type
 #[derive(Clone)]
 pub struct Partial {
-    pub arity: u8,
-    pub used: u8,
+    arity: u8,
+    used: u8,
     pub args: CellPtr<List>,
     pub func: CellPtr<Function>,
+}
+
+impl Partial {
+    pub fn alloc<'guard>(
+        mem: &'guard MutatorView,
+        function: ScopedPtr<'guard, Function>,
+        args: ScopedPtr<'guard, List>,
+    ) -> Result<ScopedPtr<'guard, Partial>, RuntimeError> {
+        let used = args.length() as u8;
+        let arity = function.arity() - used;
+        mem.alloc(Partial {
+            arity: arity,
+            used: used,
+            args: CellPtr::new_with(args),
+            func: CellPtr::new_with(function),
+        })
+    }
+
+    pub fn arity(&self) -> u8 {
+        self.arity
+    }
 }
 
 impl Print for Partial {
@@ -96,20 +117,26 @@ impl Print for Partial {
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
         let function = self.func.get(guard);
-        write!(
-            f,
-            "Partial({}, {}/{})",
-            function.name(guard),
-            self.used,
-            self.arity
-        )
+        let name = function.name.get(guard);
+        let params = function.param_names.get(guard);
+
+        let mut param_string = String::new();
+        params.access_slice(guard, |items| {
+            let start = self.used as usize;
+            param_string = join(items[start..].iter().map(|item| item.get(guard)), " ")
+        });
+
+        match *name {
+            Value::Symbol(s) => write!(f, "(partial {} ({}) ...)", s.as_str(guard), param_string),
+            _ => write!(f, "(partial ({}) ...)", param_string),
+        }
     }
 }
 
 /// A list of arguments to apply to functions
-pub struct Arguments {
+pub struct CurriedArguments {
     // TODO
 // not sure of the mechanics of this.
 // The ghc runtime would push all these to the stack and then consume the stack with
-// function applications
+// function continuations
 }
