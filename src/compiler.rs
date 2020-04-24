@@ -612,11 +612,10 @@ mod test {
     #[test]
     fn compile_call_functions_map_over_list() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
-            let compare_fn = "(def is_it (ask expect) (is? ask expect))";
-            let curried_fn = "(def is_it_a (ask) (is_it ask 'a))";
+            let compare_fn = "(def is_y (ask) (is? ask 'y))";
             let map_fn = "(def map (f l) (cond (nil? l) nil true (cons (f (car l)) (map f (cdr l)))))";
 
-            let query = "(map is_it_a '(x a x x a))";
+            let query = "(map is_y '(x y z z y))";
 
             let compile_code = |mem, code| {
                 compile(mem, parse(mem, code)?)
@@ -625,7 +624,6 @@ mod test {
             let t = Thread::alloc(mem)?;
 
             t.quick_vm_eval(mem, compile_code(mem, compare_fn)?)?;
-            t.quick_vm_eval(mem, compile_code(mem, curried_fn)?)?;
             t.quick_vm_eval(mem, compile_code(mem, map_fn)?)?;
 
             let result = t.quick_vm_eval(mem, compile_code(mem, query)?)?;
