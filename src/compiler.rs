@@ -502,6 +502,15 @@ mod test {
     use crate::parser::parse;
     use crate::vm::Thread;
 
+    fn eval_helper<'guard>(
+        mem: &'guard MutatorView,
+        thread: ScopedPtr<'guard, Thread>,
+        code: &str,
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
+        let compile_code = |mem, code| compile(mem, parse(mem, code)?);
+        thread.quick_vm_eval(mem, compile_code(mem, code)?)
+    }
+
     fn test_helper(test_fn: fn(&MutatorView) -> Result<(), RuntimeError>) {
         let mem = Memory::new();
 
@@ -529,11 +538,9 @@ mod test {
             // (nil? nil) == true, so result should be x
             let code = "(cond (nil? nil) 'x (nil? 'a) 'y)";
 
-            let ast = parse(mem, code)?;
-            let f = compile(mem, ast)?;
             let t = Thread::alloc(mem)?;
 
-            let result = t.quick_vm_eval(mem, f)?;
+            let result = eval_helper(mem, t, code)?;
 
             assert!(result == mem.lookup_sym("x"));
 
@@ -549,11 +556,9 @@ mod test {
             // (nil? 'a) == nil, (nil? nil) == true, so result should be y
             let code = "(cond (nil? 'a) 'x (nil? nil) 'y)";
 
-            let ast = parse(mem, code)?;
-            let f = compile(mem, ast)?;
             let t = Thread::alloc(mem)?;
 
-            let result = t.quick_vm_eval(mem, f)?;
+            let result = eval_helper(mem, t, code)?;
 
             assert!(result == mem.lookup_sym("y"));
 
@@ -569,11 +574,9 @@ mod test {
             // (nil? 'a) == nil, (nil? 'b) == nil, result should be nil
             let code = "(cond (nil? 'a) 'x (nil? 'b) 'y)";
 
-            let ast = parse(mem, code)?;
-            let f = compile(mem, ast)?;
             let t = Thread::alloc(mem)?;
 
-            let result = t.quick_vm_eval(mem, f)?;
+            let result = eval_helper(mem, t, code)?;
 
             assert!(result == mem.nil());
 
@@ -591,17 +594,15 @@ mod test {
             let query1 = "(is_it_a nil)";
             let query2 = "(is_it_a 'a)";
 
-            let compile_code = |mem, code| compile(mem, parse(mem, code)?);
-
             let t = Thread::alloc(mem)?;
 
-            t.quick_vm_eval(mem, compile_code(mem, compare_fn)?)?;
-            t.quick_vm_eval(mem, compile_code(mem, curried_fn)?)?;
+            eval_helper(mem, t, compare_fn)?;
+            eval_helper(mem, t, curried_fn)?;
 
-            let result1 = t.quick_vm_eval(mem, compile_code(mem, query1)?)?;
+            let result1 = eval_helper(mem, t, query1)?;
             assert!(result1 == mem.nil());
 
-            let result2 = t.quick_vm_eval(mem, compile_code(mem, query2)?)?;
+            let result2 = eval_helper(mem, t, query2)?;
             assert!(result2 == mem.lookup_sym("true"));
 
             Ok(())
@@ -619,14 +620,12 @@ mod test {
 
             let query = "(map is_y '(x y z z y))";
 
-            let compile_code = |mem, code| compile(mem, parse(mem, code)?);
-
             let t = Thread::alloc(mem)?;
 
-            t.quick_vm_eval(mem, compile_code(mem, compare_fn)?)?;
-            t.quick_vm_eval(mem, compile_code(mem, map_fn)?)?;
+            eval_helper(mem, t, compare_fn)?;
+            eval_helper(mem, t, map_fn)?;
 
-            let result = t.quick_vm_eval(mem, compile_code(mem, query)?)?;
+            let result = eval_helper(mem, t, query)?;
 
             let result = vec_from_pairs(mem, result)?;
             let sym_nil = mem.nil();
@@ -647,17 +646,39 @@ mod test {
             let query1 = "((isit 'x) 'x)";
             let query2 = "((isit 'x) 'y)";
 
-            let compile_code = |mem, code| compile(mem, parse(mem, code)?);
+            let t = Thread::alloc(mem)?;
+
+            eval_helper(mem, t, a_fn)?;
+
+            let result = eval_helper(mem, t, query1)?;
+            assert!(result == mem.lookup_sym("true"));
+
+            let result = eval_helper(mem, t, query2)?;
+            assert!(result == mem.nil());
+
+            Ok(())
+        }
+
+        test_helper(test_inner);
+    }
+
+    #[test]
+    fn compile_call_functions_partial_application_as_param() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            // this test passes a Partial as a parameter of another function that will call it
+            // with a parameter.
+            let isit_fn = "(def isit (a b) (is? a b))";
+            let apply_fn = "(def use (f v) (f v))";
+
+            let query = "(use (isit 'x) 'x)";
 
             let t = Thread::alloc(mem)?;
 
-            t.quick_vm_eval(mem, compile_code(mem, a_fn)?)?;
+            eval_helper(mem, t, isit_fn)?;
+            eval_helper(mem, t, apply_fn)?;
 
-            let result = t.quick_vm_eval(mem, compile_code(mem, query1)?)?;
+            let result = eval_helper(mem, t, query)?;
             assert!(result == mem.lookup_sym("true"));
-
-            let result = t.quick_vm_eval(mem, compile_code(mem, query2)?)?;
-            assert!(result == mem.nil());
 
             Ok(())
         }

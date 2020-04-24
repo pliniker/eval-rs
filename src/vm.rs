@@ -402,8 +402,10 @@ impl Thread {
                             // copy args from Partial to the register window
                             let args = partial.args(mem);
                             let start_reg = result_reg + 1;
-                            args.access_slice(mem, |items| for (index, item) in items.iter().enumerate() {
-                                window[start_reg + index].set(item.get(mem));
+                            args.access_slice(mem, |items| {
+                                for (index, item) in items.iter().enumerate() {
+                                    window[start_reg + index].set(item.get(mem));
+                                }
                             });
 
                             new_call_frame(partial.function(mem))?;
