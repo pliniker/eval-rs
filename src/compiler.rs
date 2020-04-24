@@ -379,7 +379,6 @@ impl Compiler {
         let arg_list = vec_from_pairs(mem, args)?;
         let arg_count = arg_list.len() as u8;
 
-        println!("COMPILE CALL, result reg {}", result);
         for arg in arg_list {
             let reg = self.compile_eval(mem, arg)?;
             // if a bound variable was returned, we have a direct reference to its register;
@@ -388,9 +387,6 @@ impl Compiler {
             if reg <= result {
                 let arg_reg = self.acquire_reg();
                 bytecode.push_op2(mem, Opcode::COPYREG, arg_reg, reg)?;
-                println!("COMPILE CALL, arg reg {}", arg_reg);
-            } else {
-                println!("COMPILE CALL, arg reg {}", reg);
             }
         }
 
@@ -585,7 +581,7 @@ mod test {
     }
 
     #[test]
-    fn compile_call_functions_stack_depth_3() {
+    fn compile_call_functions() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
             let compare_fn = "(def is_it (ask expect) (is? ask expect))";
             let curried_fn = "(def is_it_a (ask) (is_it ask 'a))";
@@ -593,7 +589,6 @@ mod test {
             let query2 = "(is_it_a 'a)";
 
             let compile_code = |mem, code| {
-                println!("RUNNING {}", code);
                 compile(mem, parse(mem, code)?)
             };
 
@@ -606,7 +601,39 @@ mod test {
             assert!(result1 == mem.nil());
 
             let result2 = t.quick_vm_eval(mem, compile_code(mem, query2)?)?;
-            assert!(result2 == mem.lookup_sym("a"));
+            assert!(result2 == mem.lookup_sym("true"));
+
+            Ok(())
+        }
+
+        test_helper(test_inner);
+    }
+
+    #[test]
+    fn compile_call_functions_map_over_list() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            let compare_fn = "(def is_it (ask expect) (is? ask expect))";
+            let curried_fn = "(def is_it_a (ask) (is_it ask 'a))";
+            let map_fn = "(def map (f l) (cond (nil? l) nil true (cons (f (car l)) (map f (cdr l)))))";
+
+            let query = "(map is_it_a '(x a x x a))";
+
+            let compile_code = |mem, code| {
+                compile(mem, parse(mem, code)?)
+            };
+
+            let t = Thread::alloc(mem)?;
+
+            t.quick_vm_eval(mem, compile_code(mem, compare_fn)?)?;
+            t.quick_vm_eval(mem, compile_code(mem, curried_fn)?)?;
+            t.quick_vm_eval(mem, compile_code(mem, map_fn)?)?;
+
+            let result = t.quick_vm_eval(mem, compile_code(mem, query)?)?;
+
+            let result = vec_from_pairs(mem, result)?;
+            let sym_nil = mem.nil();
+            let sym_true = mem.lookup_sym("true");
+            assert!(result == &[sym_nil, sym_true, sym_nil, sym_nil, sym_true]);
 
             Ok(())
         }

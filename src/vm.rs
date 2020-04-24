@@ -304,11 +304,6 @@ impl Thread {
 
                     let binding = window[function_reg].get(mem);
 
-                    println!("VM CALL, result reg {}", result_reg);
-                    for reg in (result_reg + 1)..(result_reg + arg_count as usize + 1) {
-                        println!("VM CALL, arg {} = {}", reg, window[reg].get(mem));
-                    }
-
                     match *binding {
                         Value::Function(function) => {
                             if arg_count != function.arity() {
