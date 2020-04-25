@@ -419,7 +419,15 @@ impl Thread {
                 Opcode::COPYREG => {
                     let reg_acc = instr.get_reg_acc() as usize;
                     let reg1 = instr.get_reg1() as usize;
-                    window[reg_acc].set(window[reg1].get(mem));
+                    window[reg_acc] = window[reg1].clone();
+                }
+
+                Opcode::LOADNONLOCAL => {
+                    // borrow rules don't let us use window and full_stack in the same scope
+                    let reg_acc = stack_base + instr.get_reg_acc() as usize;
+                    let reg1 = stack_base - instr.get_nonlocal_reg() as usize;
+                    let value = &full_stack[reg1];
+                    full_stack[reg_acc] = value.clone();
                 }
             }
 

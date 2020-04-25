@@ -213,6 +213,7 @@ impl Compiler {
                 "set" => self.compile_apply_assign(mem, params),
                 "def" => self.compile_named_function(mem, params),
                 "lambda" => self.compile_anonymous_function(mem, params),
+                "let" => self.compile_apply_let(mem, params),
                 _ => self.compile_apply_call(mem, function, params),
             },
 
@@ -398,6 +399,14 @@ impl Compiler {
         // ignore use of any registers beyond the result once the call is complete
         self.reset_reg(result + 1);
         Ok(result)
+    }
+
+    fn compile_apply_let<'guard>(
+        &mut self,
+        mem: &'guard MutatorView,
+        params: TaggedScopedPtr<'guard>,
+    ) -> Result<Register, RuntimeError> {
+        unimplemented!()
     }
 
     fn _push_op0<'guard>(
@@ -692,6 +701,23 @@ mod test {
 
             let result = eval_helper(mem, t, query2)?;
             assert!(result == mem.nil());
+
+            Ok(())
+        }
+
+        test_helper(test_inner);
+    }
+
+    #[test]
+    fn compile_simple_let() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            // this test compiles a basic let expression
+            let expr = "(let (x 'y) x)";
+
+            let t = Thread::alloc(mem)?;
+
+            let result = eval_helper(mem, t, expr)?;
+            assert!(result == mem.lookup_sym("y"));
 
             Ok(())
         }

@@ -33,10 +33,18 @@ pub enum Opcode {
     CALL = 0x0F,
     LOADINT = 0x10,
     COPYREG = 0x11,
+    LOADNONLOCAL = 0x12,
 }
 
 /// A register can be in the range 0..255
 pub type Register = u8;
+
+/// A register in a previous stack frame can be in the range 0..65535, as a value subtracted from
+/// the current stack base pointer
+pub type NonLocalRegister = u16;
+
+/// A literal integer that can be baked into an opcode can be in the range -32768..32767
+pub type LiteralInteger = i16;
 
 /// Literals are stored in a list, a LiteralId describes the index of the value in the list
 pub type LiteralId = u16;
@@ -67,8 +75,13 @@ fn encode_load_lit(reg_acc: Register, literal_id: LiteralId) -> u32 {
 }
 
 /// Encode a literal load operation
-fn encode_load_integer(reg_acc: Register, integer: i16) -> u32 {
+fn encode_load_integer(reg_acc: Register, integer: LiteralInteger) -> u32 {
     (Opcode::LOADINT as u32) << 24 | (reg_acc as u32) << 16 | ((integer as u32) & 0xFFFF)
+}
+
+/// Encode a literal load operation
+fn encode_load_nonlocal(reg_acc: Register, nonlocal_reg: NonLocalRegister) -> u32 {
+    (Opcode::LOADINT as u32) << 24 | (reg_acc as u32) << 16 | (nonlocal_reg as u32)
 }
 
 /// Encode a jump operation
@@ -107,8 +120,13 @@ fn decode_literal_id(instr: u32) -> LiteralId {
 }
 
 /// Decode the literal id operand in an instruction
-fn decode_literal_integer(instr: u32) -> i16 {
+fn decode_literal_integer(instr: u32) -> LiteralInteger {
     (instr & 0xFFFF) as i16
+}
+
+/// Decode the nonlocal register offset in an instruction
+fn decode_nonlocal_reg(instr: u32) -> NonLocalRegister {
+    (instr & 0xFFFF) as u16
 }
 
 /// Decode the jump offset in an instruction
@@ -237,7 +255,7 @@ impl ByteCode {
         &self,
         mem: &'guard MutatorView,
         reg_acc: Register,
-        literal: i16,
+        literal: LiteralInteger,
     ) -> Result<(), RuntimeError> {
         self.code.push(mem, encode_load_integer(reg_acc, literal))
     }
@@ -349,8 +367,12 @@ impl InstructionStream {
     }
 
     /// Extract the signed 16bit integer literal from the opcode
-    pub fn get_literal_integer(&self) -> i16 {
+    pub fn get_literal_integer(&self) -> LiteralInteger {
         decode_literal_integer(self.current.get())
+    }
+
+    pub fn get_nonlocal_reg(&self) -> NonLocalRegister {
+        decode_nonlocal_reg(self.current.get())
     }
 
     /// Return the next instruction pointer
