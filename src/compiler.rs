@@ -372,13 +372,10 @@ impl Compiler {
     ) -> Result<Register, RuntimeError> {
         let bytecode = self.bytecode.get(mem);
 
-        // put the function pointer in a register
-        let fn_reg = self.compile_eval(mem, function)?;
-
         // allocate a register for the return value
         let result = self.acquire_reg();
 
-        // evaluate arguments, first allocating a register for the arg count
+        // evaluate arguments first
         let arg_list = vec_from_pairs(mem, args)?;
         let arg_count = arg_list.len() as u8;
 
@@ -392,6 +389,9 @@ impl Compiler {
                 bytecode.push_op2(mem, Opcode::COPYREG, arg_reg, reg)?;
             }
         }
+
+        // put the function pointer in the last register of the call so it'll be discarded
+        let fn_reg = self.compile_eval(mem, function)?;
 
         bytecode.push_op3(mem, Opcode::CALL, result, fn_reg, arg_count)?;
 
@@ -507,8 +507,11 @@ mod test {
         thread: ScopedPtr<'guard, Thread>,
         code: &str,
     ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-        let compile_code = |mem, code| compile(mem, parse(mem, code)?);
-        thread.quick_vm_eval(mem, compile_code(mem, code)?)
+        let compiled_code = compile(mem, parse(mem, code)?)?;
+        println!("RUN CODE {}", code);
+        let result = thread.quick_vm_eval(mem, compiled_code)?;
+        println!("RUN RESULT {}", result);
+        Ok(result)
     }
 
     fn test_helper(test_fn: fn(&MutatorView) -> Result<(), RuntimeError>) {
@@ -535,6 +538,7 @@ mod test {
     #[test]
     fn compile_cond_first_is_true() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            // testing 'cond'
             // (nil? nil) == true, so result should be x
             let code = "(cond (nil? nil) 'x (nil? 'a) 'y)";
 
@@ -553,6 +557,7 @@ mod test {
     #[test]
     fn compile_cond_second_is_true() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            // testing 'cond'
             // (nil? 'a) == nil, (nil? nil) == true, so result should be y
             let code = "(cond (nil? 'a) 'x (nil? nil) 'y)";
 
@@ -571,6 +576,7 @@ mod test {
     #[test]
     fn compile_cond_none_is_true() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            // testing 'cond'
             // (nil? 'a) == nil, (nil? 'b) == nil, result should be nil
             let code = "(cond (nil? 'a) 'x (nil? 'b) 'y)";
 
@@ -589,6 +595,7 @@ mod test {
     #[test]
     fn compile_call_functions() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            // this test calls a function from another function
             let compare_fn = "(def is_it (ask expect) (is? ask expect))";
             let curried_fn = "(def is_it_a (ask) (is_it ask 'a))";
             let query1 = "(is_it_a nil)";
@@ -612,8 +619,9 @@ mod test {
     }
 
     #[test]
-    fn compile_call_functions_map_over_list() {
+    fn compile_map_function_over_list() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            // this test passes a function as a parameter through recursive function calls
             let compare_fn = "(def is_y (ask) (is? ask 'y))";
             let map_fn =
                 "(def map (f l) (cond (nil? l) nil true (cons (f (car l)) (map f (cdr l)))))";
@@ -639,8 +647,9 @@ mod test {
     }
 
     #[test]
-    fn compile_call_functions_partial_application() {
+    fn compile_eval_nested_partials() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            // this test evaluates nested Partial applications in function position
             let a_fn = "(def isit (a b) (is? a b))";
 
             let query1 = "((isit 'x) 'x)";
@@ -663,22 +672,26 @@ mod test {
     }
 
     #[test]
-    fn compile_call_functions_partial_application_as_param() {
+    fn compile_pass_partial_as_param() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
-            // this test passes a Partial as a parameter of another function that will call it
-            // with a parameter.
+            // this test passes a Partial as an argument of another function that will call it
+            // with it's last argument.
             let isit_fn = "(def isit (a b) (is? a b))";
-            let apply_fn = "(def use (f v) (f v))";
+            let map_fn = "(def map (f v) (f v))";
 
-            let query = "(use (isit 'x) 'x)";
+            let query1 = "(map (isit 'x) 'x)";
+            let query2 = "(map (isit 'x) 'y)";
 
             let t = Thread::alloc(mem)?;
 
             eval_helper(mem, t, isit_fn)?;
-            eval_helper(mem, t, apply_fn)?;
+            eval_helper(mem, t, map_fn)?;
 
-            let result = eval_helper(mem, t, query)?;
+            let result = eval_helper(mem, t, query1)?;
             assert!(result == mem.lookup_sym("true"));
+
+            let result = eval_helper(mem, t, query2)?;
+            assert!(result == mem.nil());
 
             Ok(())
         }

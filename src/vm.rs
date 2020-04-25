@@ -120,7 +120,8 @@ impl Thread {
                 Opcode::RETURN => {
                     // write the return value to register 0
                     let reg = instr.get_reg_acc() as usize;
-                    window[0].set(window[reg].get(mem));
+                    let result = window[reg].get(mem);
+                    window[0].set(result);
 
                     // remove this function's stack frame
                     frames.pop(mem)?;
@@ -298,8 +299,8 @@ impl Thread {
                 }
 
                 Opcode::CALL => {
-                    let result_reg = instr.get_reg_acc() as usize;
                     let function_reg = instr.get_reg1() as usize;
+                    let result_reg = instr.get_reg_acc() as usize;
                     let arg_count = instr.get_reg2();
 
                     let binding = window[function_reg].get(mem);
