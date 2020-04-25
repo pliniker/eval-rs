@@ -366,7 +366,11 @@ impl Thread {
                         Value::Partial(partial) => {
                             let arity = partial.arity();
 
-                            if arg_count < arity {
+                            if arg_count == 0 {
+                                // Partial is unchanged, no args added
+                                window[result_reg].set(partial.as_tagged(mem));
+                                return Ok(EvalStatus::Pending);
+                            } else if arg_count < arity {
                                 // Too few args, bake a new Partial from the existing one, adding the new
                                 // arguments
                                 let args_start = result_reg + 1;

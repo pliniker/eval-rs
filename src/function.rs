@@ -81,8 +81,8 @@ impl Print for Function {
         });
 
         match *name {
-            Value::Symbol(s) => write!(f, "(def {} ({}) ...)", s.as_str(guard), param_string),
-            _ => write!(f, "(lambda ({}) ...)", param_string),
+            Value::Symbol(s) => write!(f, "(Function {} ({}))", s.as_str(guard), param_string),
+            _ => write!(f, "(Function ({}))", param_string),
         }
     }
 }
@@ -177,8 +177,8 @@ impl Print for Partial {
         });
 
         match *name {
-            Value::Symbol(s) => write!(f, "(partial {} ({}) ...)", s.as_str(guard), param_string),
-            _ => write!(f, "(partial ({}) ...)", param_string),
+            Value::Symbol(s) => write!(f, "(Partial {} ({}))", s.as_str(guard), param_string),
+            _ => write!(f, "(Partial ({}))", param_string),
         }
     }
 }
