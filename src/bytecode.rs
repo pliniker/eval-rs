@@ -10,6 +10,7 @@ use crate::list::List;
 use crate::memory::MutatorView;
 use crate::printer::Print;
 use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr, TaggedScopedPtr};
+use crate::taggedptr::TaggedPtr;
 
 /// VM opcodes
 #[repr(u8)]
@@ -34,6 +35,10 @@ pub enum Opcode {
     LOADINT = 0x10,
     COPYREG = 0x11,
     LOADNONLOCAL = 0x12,
+    ADD = 0x13,
+    SUB = 0x14,
+    MUL = 0x15,
+    DIVINTEGER = 0x16,
 }
 
 /// A register can be in the range 0..255
@@ -357,13 +362,15 @@ impl InstructionStream {
     pub fn get_literal<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
-    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
+    ) -> Result<TaggedPtr, RuntimeError> {
         let lit_id = decode_literal_id(self.current.get());
-        IndexedAnyContainer::get(
+
+        Ok(IndexedContainer::get(
             &self.instructions.get(guard).literals,
             guard,
             lit_id as ArraySize,
-        )
+        )?
+        .get_ptr())
     }
 
     /// Extract the signed 16bit integer literal from the opcode

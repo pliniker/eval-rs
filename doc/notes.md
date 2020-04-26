@@ -12,20 +12,18 @@
 
 ### Compiler
 
- - unit tests! :grimace:
- - function parameters
- - partial functions
- - lambdas
  - let
  - tail calls
+ - integer math
+ - arbitrary sized integers
 
 ### Types
 
+ - object
  - dicts #{...}
  - lists (arrays) [...]
  - sets &{...}
  - record {...}
- - enum
  - tuple &(...)
  - cons lists (...)
 
@@ -39,21 +37,8 @@ Glue language:
  - Closures with lambda lifting
  - Partial application
  - Tail call recursion
- - Duck typed? Traits/interfaces
+ - Duck typed?
  - Pattern matching, destructuring?
-
- Function Prototype Definition (lambda lifted):
-  - Name
-  - Arity
-  - Code
-  - Docstring
-
-Partial Application:
- - Arity
- - Parameter Count
- - Parameter value list
- - Function Prototype Definition
-
 
 ## Syntax - easy to parse but unergonomic s-exprs
 
@@ -69,25 +54,22 @@ Partial Application:
 ### v2
 
 (def fib (n)
-    (match n
-        ((0) 1)
-        ((n) (+ n (fib (- n 1))))))
+  (match n
+    ((0) 1)
+    ((n) (+ n (fib (- n 1))))))
 
 (def function (x y)
-    (let (variable expr)
-        (* x y)))
-
-(def mult () function)
-(mult 2 3)
-
-(let (square (lambda (x) (* x x))))
+  (let (variable expr)
+    (* x y)))
 
 (with (io.file "name" 'r) f
-    (let (content (f.read))))
+  (let 
+    ((content (f.read)))
+    content))
 
-(deftype Option (
-    (Some (value))
-    (None)))
+(data Option
+  (Some value)
+  (None))
 
 ### Partials and Currying
 

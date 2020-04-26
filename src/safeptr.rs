@@ -199,6 +199,13 @@ impl TaggedCellPtr {
         }
     }
 
+    /// Construct a new TaggedCellPtr from a TaggedPtr
+    pub fn new_with_ptr(ptr: TaggedPtr) -> TaggedCellPtr {
+        TaggedCellPtr {
+            inner: Cell::new(ptr),
+        }
+    }
+
     /// Return the pointer as a `TaggedScopedPtr` type that carries a copy of the `TaggedPtr` and
     /// a `Value` type for both copying and access convenience
     pub fn get<'guard>(&self, guard: &'guard dyn MutatorScope) -> TaggedScopedPtr<'guard> {
@@ -206,8 +213,8 @@ impl TaggedCellPtr {
     }
 
     /// Set this pointer to point at the same object as a given `TaggedScopedPtr` instance
-    // the explicit 'guard lifetime bound to MutatorScope is omitted here since the TaggedScopedPtr
-    // carries this lifetime already so we can assume that this operation is safe
+    /// The explicit 'guard lifetime bound to MutatorScope is omitted here since the TaggedScopedPtr
+    /// carries this lifetime already so we can assume that this operation is safe
     pub fn set(&self, source: TaggedScopedPtr) {
         self.inner.set(TaggedPtr::from(source.ptr))
     }
@@ -225,6 +232,16 @@ impl TaggedCellPtr {
     /// Set this pointer to nil
     pub fn set_to_nil(&self) {
         self.inner.set(TaggedPtr::nil())
+    }
+
+    /// Set this pointer to another TaggedPtr
+    pub fn set_to_ptr(&self, ptr: TaggedPtr) {
+        self.inner.set(ptr)
+    }
+
+    /// Return the raw TaggedPtr from within
+    pub fn get_ptr(&self) -> TaggedPtr {
+        self.inner.get()
     }
 }
 

@@ -107,7 +107,7 @@ impl Compiler {
         mut self,
         mem: &'guard MutatorView,
         name: TaggedScopedPtr<'guard>,
-        params: &[TaggedScopedPtr<'guard>], // TODO make use of params in scopes
+        params: &[TaggedScopedPtr<'guard>],
         exprs: &[TaggedScopedPtr<'guard>],
     ) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
         // validate function name
@@ -154,6 +154,7 @@ impl Compiler {
         Ok(Function::alloc(mem, fn_name, fn_params, fn_bytecode)?)
     }
 
+    /// Compile an expression - this can be an 'atomic' value or a nested function application
     fn compile_eval<'guard>(
         &mut self,
         mem: &'guard MutatorView,
@@ -194,41 +195,48 @@ impl Compiler {
         }
     }
 
+    /// Compile a function or special-form application
     fn compile_apply<'guard>(
         &mut self,
         mem: &'guard MutatorView,
         function: TaggedScopedPtr<'guard>,
-        params: TaggedScopedPtr<'guard>,
+        args: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         match *function {
             Value::Symbol(s) => match s.as_str(mem) {
-                "quote" => self.push_load_literal(mem, value_from_1_pair(mem, params)?),
-                "atom?" => self.push_op2(mem, Opcode::ATOM, params),
-                "nil?" => self.push_op2(mem, Opcode::NIL, params),
-                "car" => self.push_op2(mem, Opcode::CAR, params),
-                "cdr" => self.push_op2(mem, Opcode::CDR, params),
-                "cons" => self.push_op3(mem, Opcode::CONS, params),
-                "cond" => self.compile_apply_cond(mem, params),
-                "is?" => self.push_op3(mem, Opcode::IS, params),
-                "set" => self.compile_apply_assign(mem, params),
-                "def" => self.compile_named_function(mem, params),
-                "lambda" => self.compile_anonymous_function(mem, params),
-                "let" => self.compile_apply_let(mem, params),
-                _ => self.compile_apply_call(mem, function, params),
+                "quote" => self.push_load_literal(mem, value_from_1_pair(mem, args)?),
+                "atom?" => self.push_op2(mem, Opcode::ATOM, args),
+                "nil?" => self.push_op2(mem, Opcode::NIL, args),
+                "car" => self.push_op2(mem, Opcode::CAR, args),
+                "cdr" => self.push_op2(mem, Opcode::CDR, args),
+                "cons" => self.push_op3(mem, Opcode::CONS, args),
+                "cond" => self.compile_apply_cond(mem, args),
+                "is?" => self.push_op3(mem, Opcode::IS, args),
+                "set" => self.compile_apply_assign(mem, args),
+                "def" => self.compile_named_function(mem, args),
+                "lambda" => self.compile_anonymous_function(mem, args),
+                "let" => self.compile_apply_let(mem, args),
+                _ => self.compile_apply_call(mem, function, args),
             },
 
             // Here we allow the value in the function position to be evaluated dynamically
-            _ => self.compile_apply_call(mem, function, params),
+            _ => self.compile_apply_call(mem, function, args),
         }
     }
 
+    /// Compile a 'cond' application
+    /// (cond
+    ///   (<if-expr-is-true?>) (<then-expr>)
+    ///   (<or-expr-is-true?) (<then-expr>)
+    /// )
+    /// result is nil if no expression evaluates to true
     fn compile_apply_cond<'guard>(
         &mut self,
         mem: &'guard MutatorView,
-        params: TaggedScopedPtr<'guard>,
+        args: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         //
-        //   for each param:
+        //   for each arg:
         //     eval cond
         //     if false then jmp -> next
         //     else eval expr
@@ -241,7 +249,7 @@ impl Compiler {
 
         let result = self.next_reg;
 
-        let mut head = params;
+        let mut head = args;
         while let Value::Pair(p) = *head {
             let cond = p.first.get(mem);
             head = p.second.get(mem);
@@ -296,6 +304,7 @@ impl Compiler {
 
     /// Assignment expression - evaluate the two expressions, binding the result of the first
     /// to the (hopefully) symbol provided by the second
+    /// (set <identifier-expr> <expr>)
     fn compile_apply_assign<'guard>(
         &mut self,
         mem: &'guard MutatorView,
@@ -310,6 +319,7 @@ impl Compiler {
         Ok(expr)
     }
 
+    /// (lambda (args) (exprs))
     fn compile_anonymous_function<'guard>(
         &mut self,
         mem: &'guard MutatorView,
@@ -334,6 +344,7 @@ impl Compiler {
         self.push_load_literal(mem, fn_object)
     }
 
+    /// (def name (args) (expr))
     fn compile_named_function<'guard>(
         &mut self,
         mem: &'guard MutatorView,
@@ -365,6 +376,7 @@ impl Compiler {
         Ok(function_reg)
     }
 
+    /// (name <arg-expr-1> <arg-expr-n>)
     fn compile_apply_call<'guard>(
         &mut self,
         mem: &'guard MutatorView,
@@ -382,9 +394,10 @@ impl Compiler {
 
         for arg in arg_list {
             let reg = self.compile_eval(mem, arg)?;
-            // if a bound variable was returned, we have a direct reference to its register;
-            // we need to copy the register to the arg list. Bound registers are necessarily
-            // lower indexes than where the function call is situated.
+            // if a local variable register was returned, we need to copy the register to the arg
+            // list. Bound registers are necessarily lower indexes than where the function call is
+            // situated because expression scope and register acquisition progresses the register
+            // index in use.
             if reg <= result {
                 let arg_reg = self.acquire_reg();
                 bytecode.push_op2(mem, Opcode::COPYREG, arg_reg, reg)?;
@@ -401,11 +414,27 @@ impl Compiler {
         Ok(result)
     }
 
+    /// Let allows recursive evaluation of it's member expressions by putting the names into scope
+    /// before evaluating their expressions.
+    /// (let
+    ///   ((<name> <expr>)
+    ///    (<name> <expr>))
+    ///   (<expr>)
+    /// )
     fn compile_apply_let<'guard>(
         &mut self,
         mem: &'guard MutatorView,
-        params: TaggedScopedPtr<'guard>,
+        args: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
+        let let_expr = vec_from_pairs(mem, args)?;
+        if let_expr.len() < 2 {
+            return Err(err_eval("A let expression must have at least 2 arguments"));
+        }
+
+        let cond_exprs = vec_from_pairs(mem, let_expr[0])?;
+
+        let result_exprs = &let_expr[1..];
+
         unimplemented!()
     }
 

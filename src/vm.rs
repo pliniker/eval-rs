@@ -54,8 +54,7 @@ impl CallFrame {
 
     fn as_string<'guard>(&self, guard: &'guard dyn MutatorScope) -> String {
         let function = self.function.get(guard);
-        let ip = self.ip.get();
-        format!("{}: {}", function, ip)
+        format!("in {}", function)
     }
 }
 
@@ -120,8 +119,8 @@ impl Thread {
                 Opcode::RETURN => {
                     // write the return value to register 0
                     let reg = instr.get_reg_acc() as usize;
-                    let result = window[reg].get(mem);
-                    window[0].set(result);
+                    let result = window[reg].get_ptr();
+                    window[0].set_to_ptr(result);
 
                     // remove this function's stack frame
                     frames.pop(mem)?;
@@ -139,8 +138,8 @@ impl Thread {
 
                 Opcode::LOADLIT => {
                     let acc = instr.get_reg_acc() as usize;
-                    let literal = instr.get_literal(mem)?;
-                    window[acc].set(literal);
+                    let literal_ptr = instr.get_literal(mem)?;
+                    window[acc].set_to_ptr(literal_ptr);
                 }
 
                 Opcode::NIL => {
@@ -151,7 +150,7 @@ impl Thread {
 
                     match *reg1_val {
                         Value::Nil => window[acc].set(mem.lookup_sym("true")),
-                        _ => window[acc].set(mem.nil()),
+                        _ => window[acc].set_to_nil(),
                     }
                 }
 
@@ -162,8 +161,8 @@ impl Thread {
                     let reg1_val = window[reg1].get(mem);
 
                     match *reg1_val {
-                        Value::Pair(_) => window[acc].set(mem.nil()),
-                        Value::Nil => window[acc].set(mem.nil()),
+                        Value::Pair(_) => window[acc].set_to_nil(),
+                        Value::Nil => window[acc].set_to_nil(),
                         _ => window[acc].set(mem.lookup_sym("true")),
                     }
                 }
@@ -175,8 +174,8 @@ impl Thread {
                     let reg1_val = window[reg1].get(mem);
 
                     match *reg1_val {
-                        Value::Pair(p) => window[acc].set(p.first.get(mem)),
-                        Value::Nil => window[acc].set(mem.nil()),
+                        Value::Pair(p) => window[acc].set_to_ptr(p.first.get_ptr()),
+                        Value::Nil => window[acc].set_to_nil(),
                         _ => return Err(err_eval("Parameter to CAR is not a list")),
                     }
                 }
@@ -188,8 +187,8 @@ impl Thread {
                     let reg1_val = window[reg1].get(mem);
 
                     match *reg1_val {
-                        Value::Pair(p) => window[acc].set(p.second.get(mem)),
-                        Value::Nil => window[acc].set(mem.nil()),
+                        Value::Pair(p) => window[acc].set_to_ptr(p.second.get_ptr()),
+                        Value::Nil => window[acc].set_to_nil(),
                         _ => return Err(err_eval("Parameter to CDR is not a list")),
                     }
                 }
@@ -199,12 +198,12 @@ impl Thread {
                     let reg1 = instr.get_reg1() as usize;
                     let reg2 = instr.get_reg2() as usize;
 
-                    let reg1_val = window[reg1].get(mem);
-                    let reg2_val = window[reg2].get(mem);
+                    let reg1_val = window[reg1].get_ptr();
+                    let reg2_val = window[reg2].get_ptr();
 
                     let new_pair = Pair::new();
-                    new_pair.first.set(reg1_val);
-                    new_pair.second.set(reg2_val);
+                    new_pair.first.set_to_ptr(reg1_val);
+                    new_pair.second.set_to_ptr(reg2_val);
 
                     window[acc].set(mem.alloc_tagged(new_pair)?);
                 }
@@ -214,8 +213,9 @@ impl Thread {
                     let reg1 = instr.get_reg1() as usize;
                     let reg2 = instr.get_reg2() as usize;
 
-                    let reg1_val = window[reg1].get(mem);
-                    let reg2_val = window[reg2].get(mem);
+                    // compare raw pointers - identity comparison
+                    let reg1_val = window[reg1].get_ptr();
+                    let reg2_val = window[reg2].get_ptr();
 
                     if reg1_val == reg2_val {
                         window[acc].set(mem.lookup_sym("true"));
@@ -252,14 +252,14 @@ impl Thread {
 
                 Opcode::LOADNIL => {
                     let reg = instr.get_reg_acc() as usize;
-                    window[reg].set(mem.nil());
+                    window[reg].set_to_nil();
                 }
 
                 Opcode::LOADINT => {
                     let reg = instr.get_reg_acc() as usize;
                     let integer = instr.get_literal_integer();
-                    let tagged_ptr = TaggedScopedPtr::new(mem, TaggedPtr::literal_integer(integer));
-                    window[reg].set(tagged_ptr);
+                    let tagged_ptr = TaggedPtr::literal_integer(integer);
+                    window[reg].set_to_ptr(tagged_ptr);
                 }
 
                 Opcode::LOADGLOBAL => {
@@ -281,7 +281,7 @@ impl Thread {
                             }
                         }
                     } else {
-                        return Err(err_eval("Cannot lookup value for non-symbol type"));
+                        return Err(err_eval("Cannot lookup global for non-symbol type"));
                     }
                 }
 
@@ -294,7 +294,7 @@ impl Thread {
                         let reg1_val = window[reg1].get(mem);
                         globals.assoc(mem, assign_reg_val, reg1_val)?;
                     } else {
-                        return Err(err_eval("Cannot bind value to non-symbol type"));
+                        return Err(err_eval("Cannot bind global to non-symbol type"));
                     }
                 }
 
@@ -401,7 +401,7 @@ impl Thread {
                             let from_reg = result_reg as usize + 1;
                             let to_reg = from_reg + push_dist as usize;
                             for index in (0..arg_count as usize).rev() {
-                                window[to_reg + index].set(window[from_reg + index].get(mem));
+                                window[to_reg + index] = window[from_reg + index].clone();
                             }
 
                             // copy args from Partial to the register window
@@ -409,7 +409,7 @@ impl Thread {
                             let start_reg = result_reg + 1;
                             args.access_slice(mem, |items| {
                                 for (index, item) in items.iter().enumerate() {
-                                    window[start_reg + index].set(item.get(mem));
+                                    window[start_reg + index] = item.clone();
                                 }
                             });
 
@@ -433,6 +433,14 @@ impl Thread {
                     let value = &full_stack[reg1];
                     full_stack[reg_acc] = value.clone();
                 }
+
+                Opcode::ADD => unimplemented!(),
+
+                Opcode::SUB => unimplemented!(),
+
+                Opcode::MUL => unimplemented!(),
+
+                Opcode::DIVINTEGER => unimplemented!(),
             }
 
             Ok(EvalStatus::Pending)
@@ -463,10 +471,14 @@ impl Thread {
                     // unwind the stack, printing a trace
                     let frames = self.frames.get(mem);
 
-                    // Print a stack trace
+                    // Print a stack trace if the error is multiple call frames deep
                     frames.access_slice(mem, |window| {
-                        for item in &window[1..] {
-                            println!("{:>4}", item.as_string(mem));
+                        if window.len() > 1 {
+                            println!("Error traceback:");
+                        }
+
+                        for frame in &window[1..] {
+                            println!("  {}", frame.as_string(mem));
                         }
                     });
 
