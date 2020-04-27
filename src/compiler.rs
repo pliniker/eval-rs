@@ -11,8 +11,7 @@ use crate::pair::{value_from_1_pair, values_from_2_pairs, vec_from_pairs};
 use crate::safeptr::{CellPtr, ScopedPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
-/// A compile-time intermediate data structure, hence can be discarded immediately after use and
-/// be built on std
+/// A Scope contains a set of local variable to register bindings
 struct Scope {
     // symbol -> register mapping
     bindings: HashMap<String, Register>,
@@ -73,40 +72,58 @@ impl Scope {
     }
 }
 
+/// A Scope instance represents a set of nested local binding scopes for a single function
+/// definition.
+struct Locals<'parent> {
+    scopes: Vec<Scope>,
+    parent: Option<&'parent Locals<'parent>>
+}
+
+impl<'parent> Locals<'parent> {
+    fn new(parent: Option<&'parent Locals<'parent>>) -> Locals<'parent> {
+        Locals {
+            scopes: Vec::new(),
+            parent: parent,
+        }
+    }
+
+    fn lookup_binding<'guard>(
+        &self,
+        name: TaggedScopedPtr<'guard>,
+    ) -> Result<Option<(usize, Register)>, RuntimeError> {
+        // TODO - look up a binding, following parents.
+        //  return value should be (count-of-parents-followed, register-in-locals)
+        unimplemented!()
+    }
+}
+
 /// This is a simple, naive compiler of a nested s-expression Pair (cons) "cell" data structure.
 /// It compiles for the VM in vm.rs, a sliding-window register machine.  Register allocation
 /// follows the expression nesting structure, essentially pushing and popping register locations
 /// from the evaluation tree as scopes are entered and exited. This is super simple but not
 /// the most efficient scheme possible.
-struct Compiler<'scope> {
+struct Compiler<'parent> {
     bytecode: CellPtr<ByteCode>,
     next_reg: Register,
     // TODO:
     // optional function name
     name: Option<String>,
     // function-local nested scopes bindings list (including parameters at outer level)
-    locals: Vec<Scope>,
-    // optional link to parent scope for finding free variable register indexes
-    parent: Option<&'scope mut Compiler<'scope>>,
-    // call site return register, needed to know relative base of parent nested function calls
-    // when compiling a partial function
-    //call_return_reg: Option<Register>
+    locals: Locals<'parent>
 }
 
-impl<'scope> Compiler<'scope> {
+impl<'parent> Compiler<'parent> {
     /// Instantiate a new nested function-level compiler
     fn new<'guard>(
         mem: &'guard MutatorView,
-        parent: Option<&'scope mut Compiler<'scope>>,
-    ) -> Result<Compiler<'scope>, RuntimeError> {
+        parent: Option<&'parent Locals<'parent>>,
+    ) -> Result<Compiler<'parent>, RuntimeError> {
         Ok(Compiler {
             bytecode: CellPtr::new_with(ByteCode::alloc(mem)?),
             // register 0 is reserved for the return value
             next_reg: 1,
             name: None,
-            locals: Vec::new(),
-            parent: parent,
-            //call_return_reg: None,
+            locals: Locals::new(parent),
         })
     }
 
@@ -140,7 +157,7 @@ impl<'scope> Compiler<'scope> {
         // also assign params to the first level function scope and give each one a register
         let mut param_scope = Scope::new();
         self.next_reg = param_scope.push_bindings(params, self.next_reg)?;
-        self.locals.push(param_scope);
+        self.locals.scopes.push(param_scope);
 
         // validate expression list
         if exprs.len() == 0 {
@@ -180,7 +197,7 @@ impl<'scope> Compiler<'scope> {
                     // Search scopes for a binding; if none do a global lookup
                     _ => {
                         // First search local bindings from inner to outer
-                        for scope in self.locals.iter().rev() {
+                        for scope in self.locals.scopes.iter().rev() {
                             if let Some(reg) = scope.lookup_binding(ast_node)? {
                                 return Ok(reg);
                             }
@@ -346,7 +363,7 @@ impl<'scope> Compiler<'scope> {
         let fn_exprs = &items[1..];
 
         // compile the function to a Function object
-        let fn_object = compile_function(mem, Some(self), mem.nil(), &fn_params, fn_exprs)?;
+        let fn_object = compile_function(mem, Some(&self.locals), mem.nil(), &fn_params, fn_exprs)?;
 
         // load the function object as a literal
         self.push_load_literal(mem, fn_object)
@@ -372,7 +389,7 @@ impl<'scope> Compiler<'scope> {
         let fn_exprs = &items[2..];
 
         // compile the function to a Function object
-        let fn_object = compile_function(mem, Some(self), fn_name, &fn_params, fn_exprs)?;
+        let fn_object = compile_function(mem, Some(&self.locals), fn_name, &fn_params, fn_exprs)?;
 
         // load the function object as a literal and associate it with a global name
         // TODO store in local scope if we're nested in an expression
@@ -461,7 +478,7 @@ impl<'scope> Compiler<'scope> {
 
         let mut let_scope = Scope::new();
         self.next_reg = let_scope.push_bindings(&names, self.next_reg)?;
-        self.locals.push(let_scope);
+        self.locals.scopes.push(let_scope);
 
         // compile each binding expression
         for (name, expr) in let_exprs {
@@ -481,7 +498,7 @@ impl<'scope> Compiler<'scope> {
         }
 
         // finish up - pop the scope, de-scope all registers except the result, return the result
-        self.locals.pop();
+        self.locals.scopes.pop();
         self.reset_reg(result + 1);
         Ok(result)
     }
@@ -562,7 +579,7 @@ impl<'scope> Compiler<'scope> {
 /// Compile a function - parameters and expression, returning a tagged Function object
 fn compile_function<'guard, 'scope>(
     mem: &'guard MutatorView,
-    parent: Option<&'scope mut Compiler<'scope>>,
+    parent: Option<&'scope Locals<'scope>>,
     name: TaggedScopedPtr<'guard>,
     params: &[TaggedScopedPtr<'guard>],
     exprs: &[TaggedScopedPtr<'guard>],
