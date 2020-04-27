@@ -73,6 +73,11 @@ impl Scope {
     }
 }
 
+/// This is a simple, naive compiler of a nested s-expression Pair (cons) "cell" data structure.
+/// It compiles for the VM in vm.rs, a sliding-window register machine.  Register allocation
+/// follows the expression nesting structure, essentially pushing and popping register locations
+/// from the evaluation tree as scopes are entered and exited. This is super simple but not
+/// the most efficient scheme possible.
 struct Compiler {
     bytecode: CellPtr<ByteCode>,
     next_reg: Register,
@@ -414,8 +419,7 @@ impl Compiler {
         Ok(result)
     }
 
-    /// Let allows recursive evaluation of it's member expressions by putting the names into scope
-    /// before evaluating their expressions.
+    /// Basic non-recursive let expressions
     /// (let
     ///   ((<name> <expr>)
     ///    (<name> <expr>))
@@ -426,16 +430,56 @@ impl Compiler {
         mem: &'guard MutatorView,
         args: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
+        let bytecode = self.bytecode.get(mem);
+
         let let_expr = vec_from_pairs(mem, args)?;
         if let_expr.len() < 2 {
             return Err(err_eval("A let expression must have at least 2 arguments"));
         }
 
-        let cond_exprs = vec_from_pairs(mem, let_expr[0])?;
+        // the binding expressions should be a pair-list itself, and each expression another
+        // pair list of length 2.  Convert it to a Vec<(name, expr)> structure for convenience.
+        let let_exprs: Vec<(TaggedScopedPtr<'guard>, TaggedScopedPtr<'guard>)> = {
+            let vec_of_pairs = vec_from_pairs(mem, let_expr[0])?;
+            let mut vec_of_tuples = Vec::new();
+            for pairs in &vec_of_pairs {
+                vec_of_tuples.push(values_from_2_pairs(mem, *pairs)?);
+            }
+            vec_of_tuples
+        };
 
+        // acquire a result reg
+        let result = self.acquire_reg();
+
+        // get the names of each binding to push a scope, assigning registers post-result for
+        // each binding
+        let names: Vec<TaggedScopedPtr<'guard>> = let_exprs.iter().map(|tup| tup.0).collect();
+
+        let mut let_scope = Scope::new();
+        self.next_reg = let_scope.push_bindings(&names, self.next_reg)?;
+        self.locals.push(let_scope);
+
+        // compile each binding expression
+        for (name, expr) in let_exprs {
+            let expr_result = self.compile_eval(mem, expr)?;
+            let name_reg = self.compile_eval(mem, name)?;
+            // TODO - more efficient to be able to write the expr_result directly to the binding reg
+            bytecode.push_op2(mem, Opcode::COPYREG, name_reg, expr_result)?;
+        }
+
+        // compile the expressions after the bindings
         let result_exprs = &let_expr[1..];
 
-        unimplemented!()
+        for expr in result_exprs {
+            let expr_result = self.compile_eval(mem, *expr)?;
+            // TODO - more efficient to be able to write the expr_result directly to the result reg
+            bytecode.push_op2(mem, Opcode::COPYREG, result, expr_result)?;
+        }
+
+        // finish up - pop the scope, de-scope all registers except the result, return the result
+        self.locals.pop();
+        self.reset_reg(result + 1);
+        Ok(result)
     }
 
     fn _push_op0<'guard>(
@@ -741,12 +785,37 @@ mod test {
     fn compile_simple_let() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
             // this test compiles a basic let expression
-            let expr = "(let (x 'y) x)";
+            let expr = "(let ((x 'y)) x)";
 
             let t = Thread::alloc(mem)?;
 
             let result = eval_helper(mem, t, expr)?;
             assert!(result == mem.lookup_sym("y"));
+
+            Ok(())
+        }
+
+        test_helper(test_inner);
+    }
+
+    #[test]
+    fn compile_function_with_simple_let() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            // this test compiles a let expression that deconstructs and reconstructs a pair list
+            let a_fn  = "(def deconrecon (list) (let ((a (car list)) (b (cdr list))) (cons a b)))";
+            let query = "(deconrecon '(x y z z y))";
+
+            let t = Thread::alloc(mem)?;
+
+            eval_helper(mem, t, a_fn)?;
+
+            let result = eval_helper(mem, t, query)?;
+
+            let result = vec_from_pairs(mem, result)?;
+            let sym_x = mem.lookup_sym("x");
+            let sym_y = mem.lookup_sym("y");
+            let sym_z = mem.lookup_sym("z");
+            assert!(result == &[sym_x, sym_y, sym_z, sym_z, sym_y]);
 
             Ok(())
         }

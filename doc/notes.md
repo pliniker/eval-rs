@@ -125,3 +125,10 @@ instance Functor Maybe where
 )))
 
 
+(let 
+  (
+    (is (lambda (a b) (is? a b)))
+    (is_not (lambda (x y) (is x y)))
+  )
+  (is_not 'a 'b)
+)
