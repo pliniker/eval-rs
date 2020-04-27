@@ -80,6 +80,7 @@ fn read_print_loop() -> Result<(), RuntimeError> {
     };
 
     // () means no completion support (TODO)
+    // Another TODO - find a more suitable alternative to rustyline
     let mut reader = Editor::<()>::new();
 
     // Try to load the repl history file
