@@ -83,7 +83,7 @@ impl<'parent> Locals<'parent> {
     fn new(parent: Option<&'parent Locals<'parent>>) -> Locals<'parent> {
         Locals {
             scopes: Vec::new(),
-            parent: parent,
+            parent,
         }
     }
 
@@ -98,10 +98,7 @@ impl<'parent> Locals<'parent> {
         while let Some(l) = locals {
             for scope in l.scopes.iter().rev() {
                 if let Some(reg) = scope.lookup_binding(name)? {
-                    println!("Searching scope fn-depth={} for {} - found reg={}", depth, name, reg);
-                    return Ok(Some((depth, reg)))
-                } else {
-                    println!("Searching scope fn-depth={} for {}", depth, name);
+                    return Ok(Some((depth, reg)));
                 }
             }
             locals = l.parent;
@@ -112,7 +109,7 @@ impl<'parent> Locals<'parent> {
     }
 }
 
-/// This is a simple, naive compiler of a nested s-expression Pair (cons) "cell" data structure.
+/// This is a simple, naive compiler of a nested s-expression Pair (Cons cell) data structure.
 /// It compiles for the VM in vm.rs, a sliding-window register machine.  Register allocation
 /// follows the expression nesting structure, essentially pushing and popping register locations
 /// from the evaluation tree as scopes are entered and exited. This is super simple but not

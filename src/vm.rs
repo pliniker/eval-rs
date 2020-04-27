@@ -435,7 +435,7 @@ impl Thread {
                     let reg = instr.get_reg1() as ArraySize;
                     let frame_offset = instr.get_reg2() as ArraySize;
 
-                    let frame = frames.get(mem, frames.length() - frame_offset)?;
+                    let frame = frames.get(mem, frames.length() - 1 - frame_offset)?;
                     let frame_base = frame.base;
                     let nonlocal_reg = frame_base + reg;
 
