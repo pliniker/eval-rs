@@ -430,10 +430,16 @@ impl Thread {
                 }
 
                 Opcode::LOADNONLOCAL => {
-                    // borrow rules don't let us use window and full_stack in the same scope
                     let reg_acc = stack_base + instr.get_reg_acc() as usize;
-                    let reg1 = stack_base - instr.get_nonlocal_reg() as usize;
-                    let value = &full_stack[reg1];
+
+                    let reg = instr.get_reg1() as ArraySize;
+                    let frame_offset = instr.get_reg2() as ArraySize;
+
+                    let frame = frames.get(mem, frames.length() - frame_offset)?;
+                    let frame_base = frame.base;
+                    let nonlocal_reg = frame_base + reg;
+
+                    let value = &full_stack[nonlocal_reg as usize];
                     full_stack[reg_acc] = value.clone();
                 }
 

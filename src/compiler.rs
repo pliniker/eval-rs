@@ -76,7 +76,7 @@ impl Scope {
 /// definition.
 struct Locals<'parent> {
     scopes: Vec<Scope>,
-    parent: Option<&'parent Locals<'parent>>
+    parent: Option<&'parent Locals<'parent>>,
 }
 
 impl<'parent> Locals<'parent> {
@@ -87,13 +87,28 @@ impl<'parent> Locals<'parent> {
         }
     }
 
+    /// Search for a binding, following parent scopes.
     fn lookup_binding<'guard>(
         &self,
         name: TaggedScopedPtr<'guard>,
-    ) -> Result<Option<(usize, Register)>, RuntimeError> {
-        // TODO - look up a binding, following parents.
+    ) -> Result<Option<(u8, Register)>, RuntimeError> {
         //  return value should be (count-of-parents-followed, register-in-locals)
-        unimplemented!()
+        let mut depth: u8 = 0;
+        let mut locals = Some(self);
+        while let Some(l) = locals {
+            for scope in l.scopes.iter().rev() {
+                if let Some(reg) = scope.lookup_binding(name)? {
+                    println!("Searching scope fn-depth={} for {} - found reg={}", depth, name, reg);
+                    return Ok(Some((depth, reg)))
+                } else {
+                    println!("Searching scope fn-depth={} for {}", depth, name);
+                }
+            }
+            locals = l.parent;
+            depth += 1;
+        }
+
+        Ok(None)
     }
 }
 
@@ -109,7 +124,7 @@ struct Compiler<'parent> {
     // optional function name
     name: Option<String>,
     // function-local nested scopes bindings list (including parameters at outer level)
-    locals: Locals<'parent>
+    locals: Locals<'parent>,
 }
 
 impl<'parent> Compiler<'parent> {
@@ -196,9 +211,21 @@ impl<'parent> Compiler<'parent> {
 
                     // Search scopes for a binding; if none do a global lookup
                     _ => {
-                        // First search local bindings from inner to outer
-                        for scope in self.locals.scopes.iter().rev() {
-                            if let Some(reg) = scope.lookup_binding(ast_node)? {
+                        // First search local and nonlocal bindings from inner to outermost scope
+                        if let Some((depth, reg)) = self.locals.lookup_binding(ast_node)? {
+                            if depth > 0 {
+                                // nonlocal nonglobal binding
+                                let result = self.acquire_reg();
+                                self.bytecode.get(mem).push_op3(
+                                    mem,
+                                    Opcode::LOADNONLOCAL,
+                                    result,
+                                    reg,
+                                    depth,
+                                )?;
+                                return Ok(result);
+                            } else {
+                                // local register
                                 return Ok(reg);
                             }
                         }
@@ -240,6 +267,7 @@ impl<'parent> Compiler<'parent> {
                 "set" => self.compile_apply_assign(mem, args),
                 "def" => self.compile_named_function(mem, args),
                 "lambda" => self.compile_anonymous_function(mem, args),
+                "\\" => self.compile_anonymous_function(mem, args),
                 "let" => self.compile_apply_let(mem, args),
                 _ => self.compile_apply_call(mem, function, args),
             },
@@ -345,6 +373,8 @@ impl<'parent> Compiler<'parent> {
     }
 
     /// (lambda (args) (exprs))
+    /// OR
+    /// (\ (args) (exprs))
     fn compile_anonymous_function<'guard>(
         &mut self,
         mem: &'guard MutatorView,
@@ -599,8 +629,10 @@ pub fn compile<'guard>(
     compiler.compile_function(mem, mem.nil(), &[], &[ast])
 }
 
+/// INTEGRATION TESTS
+/// TODO - move to a separate module
 #[cfg(test)]
-mod test {
+mod integration {
     use super::*;
     use crate::memory::{Memory, Mutator};
     use crate::parser::parse;
@@ -838,6 +870,26 @@ mod test {
             let sym_y = mem.lookup_sym("y");
             let sym_z = mem.lookup_sym("z");
             assert!(result == &[sym_x, sym_y, sym_z, sym_z, sym_y]);
+
+            Ok(())
+        }
+
+        test_helper(test_inner);
+    }
+
+    #[test]
+    fn compile_function_with_lambda_with_nonlocal_ref() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            // this test compiles a function containing a lambda that references a nonlocal
+            let head_fn = "(def head (a) (let ((inner (\\ () (car a)))) (inner)))";
+            let query = "(head '(x y z z y))";
+
+            let t = Thread::alloc(mem)?;
+
+            eval_helper(mem, t, head_fn)?;
+
+            let result = eval_helper(mem, t, query)?;
+            assert!(result == mem.lookup_sym("x"));
 
             Ok(())
         }
