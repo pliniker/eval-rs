@@ -78,7 +78,7 @@ impl Scope {
 /// follows the expression nesting structure, essentially pushing and popping register locations
 /// from the evaluation tree as scopes are entered and exited. This is super simple but not
 /// the most efficient scheme possible.
-struct Compiler {
+struct Compiler<'scope> {
     bytecode: CellPtr<ByteCode>,
     next_reg: Register,
     // TODO:
@@ -87,22 +87,25 @@ struct Compiler {
     // function-local nested scopes bindings list (including parameters at outer level)
     locals: Vec<Scope>,
     // optional link to parent scope for finding free variable register indexes
-    //parent: Option<&'outer_scope Compiler>
+    parent: Option<&'scope mut Compiler<'scope>>,
     // call site return register, needed to know relative base of parent nested function calls
     // when compiling a partial function
     //call_return_reg: Option<Register>
 }
 
-impl Compiler {
+impl<'scope> Compiler<'scope> {
     /// Instantiate a new nested function-level compiler
-    fn new<'guard>(mem: &'guard MutatorView) -> Result<Compiler, RuntimeError> {
+    fn new<'guard>(
+        mem: &'guard MutatorView,
+        parent: Option<&'scope mut Compiler<'scope>>,
+    ) -> Result<Compiler<'scope>, RuntimeError> {
         Ok(Compiler {
             bytecode: CellPtr::new_with(ByteCode::alloc(mem)?),
             // register 0 is reserved for the return value
             next_reg: 1,
             name: None,
             locals: Vec::new(),
-            //parent: None,
+            parent: parent,
             //call_return_reg: None,
         })
     }
@@ -343,7 +346,7 @@ impl Compiler {
         let fn_exprs = &items[1..];
 
         // compile the function to a Function object
-        let fn_object = compile_function(mem, mem.nil(), &fn_params, fn_exprs)?;
+        let fn_object = compile_function(mem, Some(self), mem.nil(), &fn_params, fn_exprs)?;
 
         // load the function object as a literal
         self.push_load_literal(mem, fn_object)
@@ -369,9 +372,10 @@ impl Compiler {
         let fn_exprs = &items[2..];
 
         // compile the function to a Function object
-        let fn_object = compile_function(mem, fn_name, &fn_params, fn_exprs)?;
+        let fn_object = compile_function(mem, Some(self), fn_name, &fn_params, fn_exprs)?;
 
         // load the function object as a literal and associate it with a global name
+        // TODO store in local scope if we're nested in an expression
         let name_reg = self.push_load_literal(mem, fn_name)?;
         let function_reg = self.push_load_literal(mem, fn_object)?;
         self.bytecode
@@ -556,13 +560,14 @@ impl Compiler {
 }
 
 /// Compile a function - parameters and expression, returning a tagged Function object
-fn compile_function<'guard>(
+fn compile_function<'guard, 'scope>(
     mem: &'guard MutatorView,
+    parent: Option<&'scope mut Compiler<'scope>>,
     name: TaggedScopedPtr<'guard>,
     params: &[TaggedScopedPtr<'guard>],
     exprs: &[TaggedScopedPtr<'guard>],
 ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
-    let compiler = Compiler::new(mem)?;
+    let compiler = Compiler::new(mem, parent)?;
     Ok(compiler
         .compile_function(mem, name, params, exprs)?
         .as_tagged(mem))
@@ -573,7 +578,7 @@ pub fn compile<'guard>(
     mem: &'guard MutatorView,
     ast: TaggedScopedPtr<'guard>,
 ) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
-    let compiler = Compiler::new(mem)?;
+    let compiler = Compiler::new(mem, None)?;
     compiler.compile_function(mem, mem.nil(), &[], &[ast])
 }
 
@@ -802,7 +807,7 @@ mod test {
     fn compile_function_with_simple_let() {
         fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
             // this test compiles a let expression that deconstructs and reconstructs a pair list
-            let a_fn  = "(def deconrecon (list) (let ((a (car list)) (b (cdr list))) (cons a b)))";
+            let a_fn = "(def deconrecon (list) (let ((a (car list)) (b (cdr list))) (cons a b)))";
             let query = "(deconrecon '(x y z z y))";
 
             let t = Thread::alloc(mem)?;

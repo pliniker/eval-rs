@@ -12,8 +12,8 @@
 
 ### Compiler
 
- - let
  - tail calls
+ - closures
  - integer math
  - arbitrary sized integers
 
@@ -26,6 +26,8 @@
  - record {...}
  - tuple &(...)
  - cons lists (...)
+ - Custom types based on symbol combinations
+ - Pattern matching
 
 ## Semantics
 

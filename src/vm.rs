@@ -328,6 +328,9 @@ impl Thread {
                         instr.switch_frame(code, 0);
 
                         // Ensure the stack has 256 registers allocated
+                        // TODO reset to nil to avoid accidental leakage of previous call values
+                        // TODO Ruh-roh we shouldn't be able to modify the stack size from
+                        // within an access_slice() call :grimace:
                         stack.fill(mem, new_stack_base + 256, mem.nil())?;
 
                         Ok(())
