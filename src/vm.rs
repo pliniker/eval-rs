@@ -3,8 +3,8 @@ use std::cell::Cell;
 use crate::array::{Array, ArraySize};
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{
-    Container, ContainerFromSlice, FillAnyContainer, HashIndexedAnyContainer, IndexedAnyContainer,
-    IndexedContainer, SliceableContainer, StackAnyContainer, StackContainer,
+    Container, FillAnyContainer, HashIndexedAnyContainer, IndexedContainer, SliceableContainer,
+    StackContainer,
 };
 use crate::dict::Dict;
 use crate::error::{err_eval, RuntimeError};

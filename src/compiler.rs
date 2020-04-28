@@ -32,7 +32,7 @@ impl Scope {
     ) -> Result<(), RuntimeError> {
         let name_string = match *name {
             Value::Symbol(s) => String::from(s.as_str(&name)),
-            _ => return Err(err_eval("A parameter name must be a symbol")),
+            _ => return Err(err_eval("A binding name must be a symbol")),
         };
 
         self.bindings.insert(name_string, reg);
@@ -62,7 +62,11 @@ impl Scope {
     ) -> Result<Option<Register>, RuntimeError> {
         let name_string = match *name {
             Value::Symbol(s) => String::from(s.as_str(&name)),
-            _ => return Err(err_eval("A variable must be represented by a symbol")),
+            _ => {
+                return Err(err_eval(
+                    "Cannot lookup a variable bound to a non-symbol type",
+                ))
+            }
         };
 
         match self.bindings.get(&name_string) {

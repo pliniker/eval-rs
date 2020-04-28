@@ -36,7 +36,7 @@ pub struct ScopedPtr<'guard, T: Sized> {
 
 impl<'guard, T: Sized> ScopedPtr<'guard, T> {
     pub fn new(_guard: &'guard dyn MutatorScope, value: &'guard T) -> ScopedPtr<'guard, T> {
-        ScopedPtr { value: value }
+        ScopedPtr { value }
     }
 
     /// Convert the compile-time type pointer to a runtime type pointer
@@ -133,13 +133,9 @@ pub struct TaggedScopedPtr<'guard> {
 impl<'guard> TaggedScopedPtr<'guard> {
     pub fn new(guard: &'guard dyn MutatorScope, ptr: TaggedPtr) -> TaggedScopedPtr<'guard> {
         TaggedScopedPtr {
-            ptr: ptr,
+            ptr,
             value: FatPtr::from(ptr).as_value(guard),
         }
-    }
-
-    pub fn as_unscoped(&self) -> TaggedPtr {
-        self.ptr
     }
 
     pub fn value(&self) -> Value<'guard> {
@@ -196,13 +192,6 @@ impl TaggedCellPtr {
     pub fn new_with(source: TaggedScopedPtr) -> TaggedCellPtr {
         TaggedCellPtr {
             inner: Cell::new(TaggedPtr::from(source.ptr)),
-        }
-    }
-
-    /// Construct a new TaggedCellPtr from a TaggedPtr
-    pub fn new_with_ptr(ptr: TaggedPtr) -> TaggedCellPtr {
-        TaggedCellPtr {
-            inner: Cell::new(ptr),
         }
     }
 

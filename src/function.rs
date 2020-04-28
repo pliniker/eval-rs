@@ -2,9 +2,7 @@ use itertools::join;
 use std::fmt;
 
 use crate::bytecode::ByteCode;
-use crate::containers::{
-    Container, ContainerFromSlice, IndexedAnyContainer, SliceableContainer, StackContainer,
-};
+use crate::containers::{Container, ContainerFromSlice, SliceableContainer, StackContainer};
 use crate::error::RuntimeError;
 use crate::list::List;
 use crate::memory::MutatorView;
@@ -109,8 +107,8 @@ impl Partial {
         let args_list: ScopedPtr<'guard, List> = ContainerFromSlice::from_slice(mem, &args)?;
 
         mem.alloc(Partial {
-            arity: arity,
-            used: used,
+            arity,
+            used,
             args: CellPtr::new_with(args_list),
             func: CellPtr::new_with(function),
         })
@@ -132,8 +130,8 @@ impl Partial {
         }
 
         mem.alloc(Partial {
-            arity: arity,
-            used: used,
+            arity,
+            used,
             args: CellPtr::new_with(arg_list),
             func: CellPtr::new_with(partial.function(mem)),
         })

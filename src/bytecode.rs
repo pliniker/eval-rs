@@ -2,9 +2,7 @@ use std::cell::Cell;
 use std::fmt;
 
 use crate::array::{ArraySize, ArrayU32};
-use crate::containers::{
-    Container, IndexedAnyContainer, IndexedContainer, StackAnyContainer, StackContainer,
-};
+use crate::containers::{Container, IndexedContainer, StackAnyContainer, StackContainer};
 use crate::error::{err_eval, RuntimeError};
 use crate::list::List;
 use crate::memory::MutatorView;

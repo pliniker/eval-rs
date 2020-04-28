@@ -41,7 +41,7 @@ impl Text {
 
         if let Some(to_ptr) = content.as_ptr() {
             unsafe { from_ptr.copy_to_nonoverlapping(to_ptr as *mut u8, len) }
-            Ok(Text { content: content })
+            Ok(Text { content })
         } else {
             panic!("Text content array expected to have backing storage")
         }
