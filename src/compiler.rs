@@ -195,49 +195,48 @@ impl<'parent> Compiler<'parent> {
         Ok(Function::alloc(mem, fn_name, fn_params, fn_bytecode)?)
     }
 
+    /// Compile an expression - this can be an 'atomic' value or a nested function application
     fn compile_eval<'guard>(
         &mut self,
         mem: &'guard MutatorView,
         ast_node: TaggedScopedPtr<'guard>,
-    ) -> Result<Register, RuntimeError> {
-        let result = self.acquire_reg();
-        self.compile_eval_dest(mem, ast_node, result)
-    }
-
-    /// Compile an expression - this can be an 'atomic' value or a nested function application
-    fn compile_eval_dest<'guard>(
-        &mut self,
-        mem: &'guard MutatorView,
-        ast_node: TaggedScopedPtr<'guard>,
-        dest: Register,
     ) -> Result<Register, RuntimeError> {
         match *ast_node {
             Value::Pair(p) => self.compile_apply(mem, p.first.get(mem), p.second.get(mem)),
 
             Value::Symbol(s) => {
                 match s.as_str(mem) {
-                    "nil" => self.push_op1(mem, Opcode::LOADNIL),
+                    "nil" => {
+                        let dest = self.acquire_reg();
+                        self.push(mem, Opcode::LOADNIL { dest })?;
+                        Ok(dest)
+                    }
 
-                    "true" => self.push_load_literal(mem, mem.lookup_sym("true")),
+                    "true" => {
+                        let dest = self.acquire_reg();
+                        self.push_load_literal(mem, dest, mem.lookup_sym("true"))?;
+                        Ok(dest)
+                    }
 
                     // Search scopes for a binding; if none do a global lookup
                     _ => {
                         // First search local and nonlocal bindings from inner to outermost scope
-                        if let Some((depth, reg)) = self.locals.lookup_binding(ast_node)? {
+                        if let Some((depth, src)) = self.locals.lookup_binding(ast_node)? {
                             if depth > 0 {
                                 // nonlocal nonglobal binding
-                                let result = self.acquire_reg();
-                                self.bytecode.get(mem).push_op3(
+                                let dest = self.acquire_reg();
+                                self.bytecode.get(mem).push(
                                     mem,
-                                    Opcode::LOADNONLOCAL,
-                                    result,
-                                    reg,
-                                    depth,
+                                    Opcode::LOADNONLOCAL {
+                                        dest,
+                                        src,
+                                        frame_offset: depth,
+                                    },
                                 )?;
-                                return Ok(result);
+                                return Ok(dest);
                             } else {
-                                // local register
-                                return Ok(reg);
+                                // local call-frame register
+                                return Ok(src);
                             }
                         }
 
@@ -258,23 +257,12 @@ impl<'parent> Compiler<'parent> {
         }
     }
 
+    /// Compile a function or special-form application
     fn compile_apply<'guard>(
         &mut self,
         mem: &'guard MutatorView,
         function: TaggedScopedPtr<'guard>,
         args: TaggedScopedPtr<'guard>,
-    ) -> Result<Register, RuntimeError> {
-        let result = self.acquire_reg();
-        self.compile_apply_dest(mem, function, args, result)
-    }
-
-    /// Compile a function or special-form application
-    fn compile_apply_dest<'guard>(
-        &mut self,
-        mem: &'guard MutatorView,
-        function: TaggedScopedPtr<'guard>,
-        args: TaggedScopedPtr<'guard>,
-        dest: Register,
     ) -> Result<Register, RuntimeError> {
         match *function {
             Value::Symbol(s) => match s.as_str(mem) {
@@ -555,6 +543,10 @@ impl<'parent> Compiler<'parent> {
         Ok(result)
     }
 
+    fn push<'guard>(&mut self, mem: &'guard MutatorView, op: Opcode) -> Result<(), RuntimeError> {
+        self.bytecode.get(mem).push(mem, op)
+    }
+
     fn push_op1<'guard>(
         &mut self,
         mem: &'guard MutatorView,
@@ -597,12 +589,11 @@ impl<'parent> Compiler<'parent> {
     fn push_load_literal<'guard>(
         &mut self,
         mem: &'guard MutatorView,
+        dest: Register,
         literal: TaggedScopedPtr<'guard>,
-    ) -> Result<Register, RuntimeError> {
-        let reg = self.acquire_reg();
+    ) -> Result<(), RuntimeError> {
         let lit_id = self.bytecode.get(mem).push_lit(mem, literal)?;
-        self.bytecode.get(mem).push_loadlit(mem, reg, lit_id)?;
-        Ok(reg)
+        self.bytecode.get(mem).push_loadlit(mem, dest, lit_id)
     }
 
     // this is a naive way of allocating registers - every result gets it's own register
