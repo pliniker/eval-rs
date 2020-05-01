@@ -5,7 +5,7 @@ use stickyimmix::{
 };
 
 use crate::array::{ArrayU32, ArrayU8};
-use crate::bytecode::{ByteCode, InstructionStream};
+use crate::bytecode::{ArrayOpcode, ByteCode, InstructionStream};
 use crate::dict::Dict;
 use crate::function::{Function, Partial};
 use crate::list::List;
@@ -32,6 +32,7 @@ pub enum TypeList {
     ArrayU8,
     ArrayU32,
     Dict,
+    ArrayOpcode,
     ByteCode,
     InstructionStream,
     Function,
@@ -87,8 +88,8 @@ impl AllocHeader for ObjectHeader {
         mark: Mark,
     ) -> ObjectHeader {
         ObjectHeader {
-            mark: mark,
-            size_class: size_class,
+            mark,
+            size_class,
             type_id: O::TYPE_ID,
             size_bytes: size,
         }
@@ -96,8 +97,8 @@ impl AllocHeader for ObjectHeader {
 
     fn new_array(size: ArraySize, size_class: SizeClass, mark: Mark) -> ObjectHeader {
         ObjectHeader {
-            mark: mark,
-            size_class: size_class,
+            mark,
+            size_class,
             type_id: TypeList::Array,
             size_bytes: size as u32,
         }
@@ -141,6 +142,7 @@ declare_allocobject!(List, List);
 declare_allocobject!(ArrayU8, ArrayU8);
 declare_allocobject!(ArrayU32, ArrayU32);
 declare_allocobject!(Dict, Dict);
+declare_allocobject!(ArrayOpcode, ArrayOpcode);
 declare_allocobject!(ByteCode, ByteCode);
 declare_allocobject!(InstructionStream, InstructionStream);
 declare_allocobject!(Function, Function);
