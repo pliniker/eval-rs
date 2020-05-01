@@ -195,11 +195,21 @@ impl<'parent> Compiler<'parent> {
         Ok(Function::alloc(mem, fn_name, fn_params, fn_bytecode)?)
     }
 
-    /// Compile an expression - this can be an 'atomic' value or a nested function application
     fn compile_eval<'guard>(
         &mut self,
         mem: &'guard MutatorView,
         ast_node: TaggedScopedPtr<'guard>,
+    ) -> Result<Register, RuntimeError> {
+        let result = self.acquire_reg();
+        self.compile_eval_dest(mem, ast_node, result)
+    }
+
+    /// Compile an expression - this can be an 'atomic' value or a nested function application
+    fn compile_eval_dest<'guard>(
+        &mut self,
+        mem: &'guard MutatorView,
+        ast_node: TaggedScopedPtr<'guard>,
+        dest: Register,
     ) -> Result<Register, RuntimeError> {
         match *ast_node {
             Value::Pair(p) => self.compile_apply(mem, p.first.get(mem), p.second.get(mem)),
@@ -248,12 +258,23 @@ impl<'parent> Compiler<'parent> {
         }
     }
 
-    /// Compile a function or special-form application
     fn compile_apply<'guard>(
         &mut self,
         mem: &'guard MutatorView,
         function: TaggedScopedPtr<'guard>,
         args: TaggedScopedPtr<'guard>,
+    ) -> Result<Register, RuntimeError> {
+        let result = self.acquire_reg();
+        self.compile_apply_dest(mem, function, args, result)
+    }
+
+    /// Compile a function or special-form application
+    fn compile_apply_dest<'guard>(
+        &mut self,
+        mem: &'guard MutatorView,
+        function: TaggedScopedPtr<'guard>,
+        args: TaggedScopedPtr<'guard>,
+        dest: Register,
     ) -> Result<Register, RuntimeError> {
         match *function {
             Value::Symbol(s) => match s.as_str(mem) {
