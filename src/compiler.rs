@@ -190,7 +190,7 @@ impl<'parent> Compiler<'parent> {
         // instruction is a CALL, can the CALL be converted to a TAILCALL?
 
         let fn_bytecode = self.bytecode.get(mem);
-        fn_bytecode.push_op1(mem, Opcode::RETURN, result_reg)?;
+        fn_bytecode.push(mem, Opcode::RETURN { reg: result_reg })?;
 
         Ok(Function::alloc(mem, fn_name, fn_params, fn_bytecode)?)
     }
@@ -344,13 +344,13 @@ impl<'parent> Compiler<'parent> {
             self.reset_reg(result);
             self.push_op1(mem, Opcode::LOADNIL)?;
             let offset = bytecode.next_instruction() - address - 1;
-            bytecode.write_jump_offset(mem, address, offset)?;
+            bytecode.update_jump_offset(mem, address, offset)?;
         }
 
         // Update all the post-expr jumps to point at the next instruction after the entire cond
         for address in end_jumps.iter() {
             let offset = bytecode.next_instruction() - address - 1;
-            bytecode.write_jump_offset(mem, *address, offset)?;
+            bytecode.update_jump_offset(mem, *address, offset)?;
         }
 
         Ok(result)
@@ -532,15 +532,6 @@ impl<'parent> Compiler<'parent> {
         self.locals.scopes.pop();
         self.reset_reg(result + 1);
         Ok(result)
-    }
-
-    fn _push_op0<'guard>(
-        &mut self,
-        mem: &'guard MutatorView,
-        op: Opcode,
-    ) -> Result<(), RuntimeError> {
-        self.bytecode.get(mem).push_op0(mem, op)?;
-        Ok(())
     }
 
     fn push_op1<'guard>(

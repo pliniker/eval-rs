@@ -67,7 +67,8 @@ pub enum Opcode {
     },
     IS {
         dest: Register,
-        test: Register,
+        test1: Register,
+        test2: Register,
     },
     JMP {
         offset: JumpOffset,
@@ -93,8 +94,8 @@ pub enum Opcode {
     },
     CALL {
         function: Register,
-        return_reg: Register,
-        nargs: NumArgs,
+        dest: Register,
+        arg_count: NumArgs,
     },
     LOADINT {
         dest: Register,
@@ -131,7 +132,7 @@ pub enum Opcode {
     },
 }
 
-/// Bytecode is stored as fixed-width 32-bit operator+operand values.
+/// Bytecode is stored as fixed-width 32-bit values.
 /// This is not the most efficient format but it is easy to work with.
 pub type ArrayOpcode = Array<Opcode>;
 

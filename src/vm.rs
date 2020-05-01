@@ -48,7 +48,7 @@ impl CallFrame {
         CallFrame {
             function: CellPtr::new_with(function),
             ip: Cell::new(ip),
-            base: base,
+            base,
         }
     }
 
@@ -114,12 +114,11 @@ impl Thread {
             let opcode = instr.get_next_opcode(mem)?;
 
             match opcode {
-                Opcode::HALT => return Ok(EvalStatus::Halt),
+                Opcode::NOP => return Ok(EvalStatus::Pending),
 
-                Opcode::RETURN => {
+                Opcode::RETURN { reg } => {
                     // write the return value to register 0
-                    let reg = instr.get_reg_acc() as usize;
-                    let result = window[reg].get_ptr();
+                    let result = window[reg as usize].get_ptr();
                     window[0].set_to_ptr(result);
 
                     // remove this function's stack frame
@@ -136,147 +135,119 @@ impl Thread {
                     }
                 }
 
-                Opcode::LOADLIT => {
-                    let acc = instr.get_reg_acc() as usize;
-                    let literal_ptr = instr.get_literal(mem)?;
-                    window[acc].set_to_ptr(literal_ptr);
+                Opcode::LOADLIT { dest, literal_id } => {
+                    let literal_ptr = instr.get_literal(mem, literal_id)?;
+                    window[dest as usize].set_to_ptr(literal_ptr);
                 }
 
-                Opcode::NIL => {
-                    let acc = instr.get_reg_acc() as usize;
-                    let reg1 = instr.get_reg1() as usize;
+                Opcode::NIL { dest, test } => {
+                    let test_val = window[test as usize].get(mem);
 
-                    let reg1_val = window[reg1].get(mem);
-
-                    match *reg1_val {
-                        Value::Nil => window[acc].set(mem.lookup_sym("true")),
-                        _ => window[acc].set_to_nil(),
+                    match *test_val {
+                        Value::Nil => window[dest as usize].set(mem.lookup_sym("true")),
+                        _ => window[dest as usize].set_to_nil(),
                     }
                 }
 
-                Opcode::ATOM => {
-                    let acc = instr.get_reg_acc() as usize;
-                    let reg1 = instr.get_reg1() as usize;
+                Opcode::ATOM { dest, test } => {
+                    let test_val = window[test as usize].get(mem);
 
-                    let reg1_val = window[reg1].get(mem);
-
-                    match *reg1_val {
-                        Value::Pair(_) => window[acc].set_to_nil(),
-                        Value::Nil => window[acc].set_to_nil(),
-                        _ => window[acc].set(mem.lookup_sym("true")),
+                    match *test_val {
+                        Value::Pair(_) => window[dest as usize].set_to_nil(),
+                        Value::Nil => window[dest as usize].set_to_nil(),
+                        // TODO what other types?
+                        _ => window[dest as usize].set(mem.lookup_sym("true")),
                     }
                 }
 
-                Opcode::CAR => {
-                    let acc = instr.get_reg_acc() as usize;
-                    let reg1 = instr.get_reg1() as usize;
+                Opcode::CAR { dest, reg } => {
+                    let reg_val = window[reg as usize].get(mem);
 
-                    let reg1_val = window[reg1].get(mem);
-
-                    match *reg1_val {
-                        Value::Pair(p) => window[acc].set_to_ptr(p.first.get_ptr()),
-                        Value::Nil => window[acc].set_to_nil(),
+                    match *reg_val {
+                        Value::Pair(p) => window[dest as usize].set_to_ptr(p.first.get_ptr()),
+                        Value::Nil => window[dest as usize].set_to_nil(),
                         _ => return Err(err_eval("Parameter to CAR is not a list")),
                     }
                 }
 
-                Opcode::CDR => {
-                    let acc = instr.get_reg_acc() as usize;
-                    let reg1 = instr.get_reg1() as usize;
+                Opcode::CDR { dest, reg } => {
+                    let reg_val = window[reg as usize].get(mem);
 
-                    let reg1_val = window[reg1].get(mem);
-
-                    match *reg1_val {
-                        Value::Pair(p) => window[acc].set_to_ptr(p.second.get_ptr()),
-                        Value::Nil => window[acc].set_to_nil(),
+                    match *reg_val {
+                        Value::Pair(p) => window[dest as usize].set_to_ptr(p.second.get_ptr()),
+                        Value::Nil => window[dest as usize].set_to_nil(),
                         _ => return Err(err_eval("Parameter to CDR is not a list")),
                     }
                 }
 
-                Opcode::CONS => {
-                    let acc = instr.get_reg_acc() as usize;
-                    let reg1 = instr.get_reg1() as usize;
-                    let reg2 = instr.get_reg2() as usize;
-
-                    let reg1_val = window[reg1].get_ptr();
-                    let reg2_val = window[reg2].get_ptr();
+                Opcode::CONS { dest, reg1, reg2 } => {
+                    let reg1_val = window[reg1 as usize].get_ptr();
+                    let reg2_val = window[reg2 as usize].get_ptr();
 
                     let new_pair = Pair::new();
                     new_pair.first.set_to_ptr(reg1_val);
                     new_pair.second.set_to_ptr(reg2_val);
 
-                    window[acc].set(mem.alloc_tagged(new_pair)?);
+                    window[dest as usize].set(mem.alloc_tagged(new_pair)?);
                 }
 
-                Opcode::IS => {
-                    let acc = instr.get_reg_acc() as usize;
-                    let reg1 = instr.get_reg1() as usize;
-                    let reg2 = instr.get_reg2() as usize;
-
+                Opcode::IS { dest, test1, test2 } => {
                     // compare raw pointers - identity comparison
-                    let reg1_val = window[reg1].get_ptr();
-                    let reg2_val = window[reg2].get_ptr();
+                    let test1_val = window[test1 as usize].get_ptr();
+                    let test2_val = window[test2 as usize].get_ptr();
 
-                    if reg1_val == reg2_val {
-                        window[acc].set(mem.lookup_sym("true"));
+                    if test1_val == test2_val {
+                        window[dest as usize].set(mem.lookup_sym("true"));
                     } else {
-                        window[acc].set(mem.nil());
+                        window[dest as usize].set(mem.nil());
                     }
                 }
 
-                Opcode::JMP => {
-                    instr.jump();
+                Opcode::JMP { offset } => {
+                    instr.jump(offset);
                 }
 
-                Opcode::JMPT => {
-                    let reg = instr.get_reg_acc() as usize;
-                    let reg_val = window[reg].get(mem);
+                Opcode::JMPT { test, offset } => {
+                    let test_val = window[test as usize].get(mem);
 
                     let true_sym = mem.lookup_sym("true"); // TODO preload keyword syms
 
-                    if reg_val == true_sym {
-                        instr.jump()
+                    if test_val == true_sym {
+                        instr.jump(offset)
                     }
                 }
 
-                Opcode::JMPNT => {
-                    let reg = instr.get_reg_acc() as usize;
-                    let reg_val = window[reg].get(mem);
+                Opcode::JMPNT { test, offset } => {
+                    let test_val = window[test as usize].get(mem);
 
                     let true_sym = mem.lookup_sym("true");
 
-                    if reg_val != true_sym {
-                        instr.jump()
+                    if test_val != true_sym {
+                        instr.jump(offset)
                     }
                 }
 
-                Opcode::LOADNIL => {
-                    let reg = instr.get_reg_acc() as usize;
-                    window[reg].set_to_nil();
+                Opcode::LOADNIL { dest } => {
+                    window[dest as usize].set_to_nil();
                 }
 
-                Opcode::LOADINT => {
-                    let reg = instr.get_reg_acc() as usize;
-                    let integer = instr.get_literal_integer();
+                Opcode::LOADINT { dest, integer } => {
                     let tagged_ptr = TaggedPtr::literal_integer(integer);
-                    window[reg].set_to_ptr(tagged_ptr);
+                    window[dest as usize].set_to_ptr(tagged_ptr);
                 }
 
-                Opcode::LOADGLOBAL => {
-                    let assign_reg = instr.get_reg_acc() as usize;
-                    let reg1 = instr.get_reg1() as usize;
+                Opcode::LOADGLOBAL { dest, name } => {
+                    let name_val = window[name as usize].get(mem);
 
-                    let reg1_val = window[reg1].get(mem);
-
-                    if let Value::Symbol(_) = *reg1_val {
-                        let lookup_result = globals.lookup(mem, reg1_val);
+                    if let Value::Symbol(_) = *name_val {
+                        let lookup_result = globals.lookup(mem, name_val);
 
                         match lookup_result {
-                            Ok(binding) => window[assign_reg].set(binding),
+                            Ok(binding) => window[dest as usize].set(binding),
                             Err(_) => {
                                 return Err(err_eval(&format!(
                                     "Symbol {} is not bound to a value",
-                                    reg1_val
+                                    name_val
                                 )))
                             }
                         }
@@ -285,25 +256,22 @@ impl Thread {
                     }
                 }
 
-                Opcode::STOREGLOBAL => {
-                    let assign_reg = instr.get_reg_acc() as usize;
-                    let reg1 = instr.get_reg1() as usize;
-
-                    let assign_reg_val = window[assign_reg].get(mem);
-                    if let Value::Symbol(_) = *assign_reg_val {
-                        let reg1_val = window[reg1].get(mem);
-                        globals.assoc(mem, assign_reg_val, reg1_val)?;
+                Opcode::STOREGLOBAL { src, name } => {
+                    let name_val = window[name as usize].get(mem);
+                    if let Value::Symbol(_) = *name_val {
+                        let src_val = window[src as usize].get(mem);
+                        globals.assoc(mem, name_val, src_val)?;
                     } else {
                         return Err(err_eval("Cannot bind global to non-symbol type"));
                     }
                 }
 
-                Opcode::CALL => {
-                    let function_reg = instr.get_reg1() as usize;
-                    let result_reg = instr.get_reg_acc() as usize;
-                    let arg_count = instr.get_reg2();
-
-                    let binding = window[function_reg].get(mem);
+                Opcode::CALL {
+                    function,
+                    dest,
+                    arg_count,
+                } => {
+                    let binding = window[function as usize].get(mem);
 
                     // To avoid duplicating code in function and partial application cases,
                     // this is declared as a closure so it can access local variables
@@ -318,7 +286,7 @@ impl Thread {
                         });
 
                         // Create a new call frame, pushing it to the frame stack
-                        let new_stack_base = self.stack_base.get() + result_reg as ArraySize;
+                        let new_stack_base = self.stack_base.get() + dest as ArraySize;
                         let frame = CallFrame::new(function, 0, new_stack_base);
                         frames.push(mem, frame)?;
 
@@ -344,13 +312,13 @@ impl Thread {
 
                             if arg_count < arity {
                                 // Too few args, return a Partial object
-                                let args_start = result_reg + 1;
+                                let args_start = dest as usize + 1;
                                 let args_end = args_start + arg_count as usize;
 
                                 let partial =
                                     Partial::alloc(mem, function, &window[args_start..args_end])?;
 
-                                window[result_reg].set(partial.as_tagged(mem));
+                                window[dest as usize].set(partial.as_tagged(mem));
 
                                 return Ok(EvalStatus::Pending);
                             } else if arg_count > arity {
@@ -371,12 +339,12 @@ impl Thread {
 
                             if arg_count == 0 {
                                 // Partial is unchanged, no args added
-                                window[result_reg].set(partial.as_tagged(mem));
+                                window[dest as usize].set(partial.as_tagged(mem));
                                 return Ok(EvalStatus::Pending);
                             } else if arg_count < arity {
                                 // Too few args, bake a new Partial from the existing one, adding the new
                                 // arguments
-                                let args_start = result_reg + 1;
+                                let args_start = dest as usize + 1;
                                 let args_end = args_start + arg_count as usize;
 
                                 let new_partial = Partial::alloc_clone(
@@ -385,7 +353,7 @@ impl Thread {
                                     &window[args_start..args_end],
                                 )?;
 
-                                window[result_reg].set(new_partial.as_tagged(mem));
+                                window[dest as usize].set(new_partial.as_tagged(mem));
 
                                 return Ok(EvalStatus::Pending);
                             } else if arg_count > arity {
@@ -401,7 +369,7 @@ impl Thread {
                             // Shunt _call_ args back into the window to make space for the
                             // partially applied args
                             let push_dist = partial.used();
-                            let from_reg = result_reg as usize + 1;
+                            let from_reg = dest as usize + 1;
                             let to_reg = from_reg + push_dist as usize;
                             for index in (0..arg_count as usize).rev() {
                                 window[to_reg + index] = window[from_reg + index].clone();
@@ -409,7 +377,7 @@ impl Thread {
 
                             // copy args from Partial to the register window
                             let args = partial.args(mem);
-                            let start_reg = result_reg + 1;
+                            let start_reg = dest as usize + 1;
                             args.access_slice(mem, |items| {
                                 for (index, item) in items.iter().enumerate() {
                                     window[start_reg + index] = item.clone();
@@ -423,33 +391,32 @@ impl Thread {
                     }
                 }
 
-                Opcode::COPYREG => {
-                    let reg_acc = instr.get_reg_acc() as usize;
-                    let reg1 = instr.get_reg1() as usize;
-                    window[reg_acc] = window[reg1].clone();
+                Opcode::COPYREG { dest, src } => {
+                    window[dest as usize] = window[src as usize].clone();
                 }
 
-                Opcode::LOADNONLOCAL => {
-                    let reg_acc = stack_base + instr.get_reg_acc() as usize;
+                Opcode::LOADNONLOCAL {
+                    dest,
+                    src,
+                    frame_offset,
+                } => {
+                    let full_dest = stack_base + dest as usize;
 
-                    let reg = instr.get_reg1() as ArraySize;
-                    let frame_offset = instr.get_reg2() as ArraySize;
-
-                    let frame = frames.get(mem, frames.length() - 1 - frame_offset)?;
+                    let frame = frames.get(mem, frames.length() - 1 - frame_offset as ArraySize)?;
                     let frame_base = frame.base;
-                    let nonlocal_reg = frame_base + reg;
+                    let full_src = frame_base + src as ArraySize;
 
-                    let value = &full_stack[nonlocal_reg as usize];
-                    full_stack[reg_acc] = value.clone();
+                    let value = &full_stack[full_src as usize];
+                    full_stack[full_dest] = value.clone();
                 }
 
-                Opcode::ADD => unimplemented!(),
+                Opcode::ADD { dest, reg1, reg2 } => unimplemented!(),
 
-                Opcode::SUB => unimplemented!(),
+                Opcode::SUB { dest, left, right } => unimplemented!(),
 
-                Opcode::MUL => unimplemented!(),
+                Opcode::MUL { dest, reg1, reg2 } => unimplemented!(),
 
-                Opcode::DIVINTEGER => unimplemented!(),
+                Opcode::DIVINTEGER { dest, num, denom } => unimplemented!(),
             }
 
             Ok(EvalStatus::Pending)
