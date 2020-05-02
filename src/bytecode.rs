@@ -32,7 +32,10 @@ pub type FrameOffset = u8;
 
 /// VM opcodes. These enum variants should be designed to fit into 32 bits. Using
 /// u8 representation seems to make that happen, so long as the struct variants
-/// do not add up to more than 24 bits
+/// do not add up to more than 24 bits.
+/// Defining opcodes like this rather than using u32 directly comes with tradeoffs.
+/// Direct u32 is more ergonomic for the compiler but enum struct variants is
+/// more ergonomic for the vm and probably more performant.
 #[repr(u8)]
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum Opcode {

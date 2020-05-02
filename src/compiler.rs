@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::array::ArraySize;
-use crate::bytecode::{ByteCode, Opcode, Register};
+use crate::bytecode::{ByteCode, JumpOffset, JumpUnknown, Opcode, Register};
 use crate::containers::AnyContainerFromSlice;
 use crate::error::{err_eval, RuntimeError};
 use crate::function::Function;
@@ -212,25 +212,22 @@ impl<'parent> Compiler<'parent> {
                         Ok(dest)
                     }
 
-                    "true" => {
-                        let dest = self.acquire_reg();
-                        self.push_load_literal(mem, dest, mem.lookup_sym("true"))?;
-                        Ok(dest)
-                    }
+                    "true" => self.push_load_literal(mem, mem.lookup_sym("true")),
 
                     // Search scopes for a binding; if none do a global lookup
                     _ => {
                         // First search local and nonlocal bindings from inner to outermost scope
-                        if let Some((depth, src)) = self.locals.lookup_binding(ast_node)? {
-                            if depth > 0 {
+                        if let Some((frame_offset, src)) = self.locals.lookup_binding(ast_node)? {
+                            if frame_offset > 0 {
                                 // nonlocal nonglobal binding
                                 let dest = self.acquire_reg();
-                                self.bytecode.get(mem).push(
+                                // this rustfmt style feels unnecessarily verbose :-(
+                                self.push(
                                     mem,
                                     Opcode::LOADNONLOCAL {
                                         dest,
                                         src,
-                                        frame_offset: depth,
+                                        frame_offset,
                                     },
                                 )?;
                                 return Ok(dest);
@@ -241,14 +238,10 @@ impl<'parent> Compiler<'parent> {
                         }
 
                         // Otherwise do a late-binding global lookup
-                        let reg_acc = self.push_load_literal(mem, ast_node)?;
-                        self.bytecode.get(mem).push_op2(
-                            mem,
-                            Opcode::LOADGLOBAL,
-                            reg_acc,
-                            reg_acc,
-                        )?;
-                        Ok(reg_acc)
+                        let name = self.push_load_literal(mem, ast_node)?;
+                        let dest = name; // reuse the register
+                        self.push(mem, Opcode::LOADGLOBAL { dest, name })?;
+                        Ok(dest)
                     }
                 }
             }
@@ -267,13 +260,21 @@ impl<'parent> Compiler<'parent> {
         match *function {
             Value::Symbol(s) => match s.as_str(mem) {
                 "quote" => self.push_load_literal(mem, value_from_1_pair(mem, args)?),
-                "atom?" => self.push_op2(mem, Opcode::ATOM, args),
-                "nil?" => self.push_op2(mem, Opcode::NIL, args),
-                "car" => self.push_op2(mem, Opcode::CAR, args),
-                "cdr" => self.push_op2(mem, Opcode::CDR, args),
-                "cons" => self.push_op3(mem, Opcode::CONS, args),
+                "atom?" => self.push_op2(mem, args, |dest, test| Opcode::ATOM { dest, test }),
+                "nil?" => self.push_op2(mem, args, |dest, test| Opcode::NIL { dest, test }),
+                "car" => self.push_op2(mem, args, |dest, reg| Opcode::CAR { dest, reg }),
+                "cdr" => self.push_op2(mem, args, |dest, reg| Opcode::CDR { dest, reg }),
+                "cons" => self.push_op3(mem, args, |dest, reg1, reg2| Opcode::CONS {
+                    dest,
+                    reg1,
+                    reg2,
+                }),
                 "cond" => self.compile_apply_cond(mem, args),
-                "is?" => self.push_op3(mem, Opcode::IS, args),
+                "is?" => self.push_op3(mem, args, |dest, test1, test2| Opcode::IS {
+                    dest,
+                    test1,
+                    test2,
+                }),
                 "set" => self.compile_apply_assign(mem, args),
                 "def" => self.compile_named_function(mem, args),
                 "lambda" => self.compile_anonymous_function(mem, args),
@@ -310,7 +311,7 @@ impl<'parent> Compiler<'parent> {
         let mut end_jumps: Vec<ArraySize> = Vec::new();
         let mut last_cond_jump: Option<ArraySize> = None;
 
-        let result = self.next_reg;
+        let dest = self.next_reg;
 
         let mut head = args;
         while let Value::Pair(p) = *head {
@@ -325,22 +326,22 @@ impl<'parent> Compiler<'parent> {
                     // condition-not-true jump to the beginning of this condition
                     if let Some(address) = last_cond_jump {
                         let offset = bytecode.next_instruction() - address - 1;
-                        bytecode.write_jump_offset(mem, address, offset)?;
+                        bytecode.update_jump_offset(mem, address, offset as JumpOffset)?;
                     }
 
                     // We have a condition to evaluate. If the resut is Not True, jump to the
                     // next condition.
-                    self.reset_reg(result); // reuse this register for condition and result
-                    let cond_result = self.compile_eval(mem, cond)?;
-                    self.bytecode
-                        .get(mem)
-                        .push_cond_jump(mem, Opcode::JMPNT, cond_result)?;
+                    self.reset_reg(dest); // reuse this register for condition and dest
+                    let test = self.compile_eval(mem, cond)?;
+                    let offset = JumpUnknown;
+                    self.push(mem, Opcode::JMPNT { test, offset })?;
                     last_cond_jump = Some(bytecode.last_instruction());
 
                     // Compile the expression and jump to the end of the entire cond
-                    self.reset_reg(result); // reuse this register for condition and result
+                    self.reset_reg(dest); // reuse this register for condition and dest
                     let _expr_result = self.compile_eval(mem, expr)?;
-                    bytecode.push_jump(mem)?;
+                    let offset = JumpUnknown;
+                    bytecode.push(mem, Opcode::JMP { offset })?;
                     end_jumps.push(bytecode.last_instruction());
                 }
 
@@ -348,21 +349,21 @@ impl<'parent> Compiler<'parent> {
             }
         }
 
-        // Close out with a default NIL result if none of the conditions passed
+        // Close out with a default nil result if none of the conditions passed
         if let Some(address) = last_cond_jump {
-            self.reset_reg(result);
-            self.push_op1(mem, Opcode::LOADNIL)?;
+            self.reset_reg(dest);
+            self.push(mem, Opcode::LOADNIL { dest })?;
             let offset = bytecode.next_instruction() - address - 1;
-            bytecode.update_jump_offset(mem, address, offset)?;
+            bytecode.update_jump_offset(mem, address, offset as JumpOffset)?;
         }
 
         // Update all the post-expr jumps to point at the next instruction after the entire cond
         for address in end_jumps.iter() {
             let offset = bytecode.next_instruction() - address - 1;
-            bytecode.update_jump_offset(mem, *address, offset)?;
+            bytecode.update_jump_offset(mem, *address, offset as JumpOffset)?;
         }
 
-        Ok(result)
+        Ok(dest)
     }
 
     /// Assignment expression - evaluate the two expressions, binding the result of the first
@@ -374,12 +375,10 @@ impl<'parent> Compiler<'parent> {
         params: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         let (first, second) = values_from_2_pairs(mem, params)?;
-        let expr = self.compile_eval(mem, second)?;
-        let assign_to = self.compile_eval(mem, first)?;
-        self.bytecode
-            .get(mem)
-            .push_op2(mem, Opcode::STOREGLOBAL, assign_to, expr)?;
-        Ok(expr)
+        let src = self.compile_eval(mem, second)?;
+        let name = self.compile_eval(mem, first)?;
+        self.push(mem, Opcode::STOREGLOBAL { src, name })?;
+        Ok(src)
     }
 
     /// (lambda (args) (exprs))
@@ -433,51 +432,55 @@ impl<'parent> Compiler<'parent> {
 
         // load the function object as a literal and associate it with a global name
         // TODO store in local scope if we're nested in an expression
-        let name_reg = self.push_load_literal(mem, fn_name)?;
-        let function_reg = self.push_load_literal(mem, fn_object)?;
-        self.bytecode
-            .get(mem)
-            .push_op2(mem, Opcode::STOREGLOBAL, name_reg, function_reg)?;
+        let name = self.push_load_literal(mem, fn_name)?;
+        let src = self.push_load_literal(mem, fn_object)?;
+        self.push(mem, Opcode::STOREGLOBAL { src, name })?;
 
-        Ok(function_reg)
+        Ok(src)
     }
 
     /// (name <arg-expr-1> <arg-expr-n>)
     fn compile_apply_call<'guard>(
         &mut self,
         mem: &'guard MutatorView,
-        function: TaggedScopedPtr<'guard>,
+        function_expr: TaggedScopedPtr<'guard>,
         args: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
         let bytecode = self.bytecode.get(mem);
 
         // allocate a register for the return value
-        let result = self.acquire_reg();
+        let dest = self.acquire_reg();
 
         // evaluate arguments first
         let arg_list = vec_from_pairs(mem, args)?;
         let arg_count = arg_list.len() as u8;
 
         for arg in arg_list {
-            let reg = self.compile_eval(mem, arg)?;
+            let src = self.compile_eval(mem, arg)?;
             // if a local variable register was returned, we need to copy the register to the arg
             // list. Bound registers are necessarily lower indexes than where the function call is
             // situated because expression scope and register acquisition progresses the register
             // index in use.
-            if reg <= result {
-                let arg_reg = self.acquire_reg();
-                bytecode.push_op2(mem, Opcode::COPYREG, arg_reg, reg)?;
+            if src <= dest {
+                let dest = self.acquire_reg();
+                self.push(mem, Opcode::COPYREG { dest, src })?;
             }
         }
 
         // put the function pointer in the last register of the call so it'll be discarded
-        let fn_reg = self.compile_eval(mem, function)?;
-
-        bytecode.push_op3(mem, Opcode::CALL, result, fn_reg, arg_count)?;
+        let function = self.compile_eval(mem, function_expr)?;
+        self.push(
+            mem,
+            Opcode::CALL {
+                function,
+                dest,
+                arg_count,
+            },
+        )?;
 
         // ignore use of any registers beyond the result once the call is complete
-        self.reset_reg(result + 1);
-        Ok(result)
+        self.reset_reg(dest + 1);
+        Ok(dest)
     }
 
     /// Basic non-recursive let expressions
@@ -509,8 +512,8 @@ impl<'parent> Compiler<'parent> {
             vec_of_tuples
         };
 
-        // acquire a result reg
-        let result = self.acquire_reg();
+        // acquire a let expression dest reg
+        let dest = self.acquire_reg();
 
         // get the names of each binding to push a scope, assigning registers post-result for
         // each binding
@@ -522,66 +525,74 @@ impl<'parent> Compiler<'parent> {
 
         // compile each binding expression
         for (name, expr) in let_exprs {
-            let expr_result = self.compile_eval(mem, expr)?;
-            let name_reg = self.compile_eval(mem, name)?;
-            // TODO - more efficient to be able to write the expr_result directly to the binding reg
-            bytecode.push_op2(mem, Opcode::COPYREG, name_reg, expr_result)?;
+            let src = self.compile_eval(mem, expr)?;
+            let dest = self.compile_eval(mem, name)?;
+            // TODO - more efficient to be able to write the result directly to the let binding reg
+            self.push(mem, Opcode::COPYREG { dest, src })?;
         }
 
         // compile the expressions after the bindings
         let result_exprs = &let_expr[1..];
 
         for expr in result_exprs {
-            let expr_result = self.compile_eval(mem, *expr)?;
-            // TODO - more efficient to be able to write the expr_result directly to the result reg
-            bytecode.push_op2(mem, Opcode::COPYREG, result, expr_result)?;
+            let src = self.compile_eval(mem, *expr)?;
+            // TODO - more efficient to be able to write the result directly to the let binding reg
+            self.push(mem, Opcode::COPYREG { dest, src })?;
         }
 
         // finish up - pop the scope, de-scope all registers except the result, return the result
         self.locals.scopes.pop();
-        self.reset_reg(result + 1);
-        Ok(result)
+        self.reset_reg(dest + 1);
+        Ok(dest)
     }
 
+    /// Push an instruction to the function bytecode list
     fn push<'guard>(&mut self, mem: &'guard MutatorView, op: Opcode) -> Result<(), RuntimeError> {
         self.bytecode.get(mem).push(mem, op)
     }
 
-    fn push_op1<'guard>(
+    fn push_op1<'guard, F>(
         &mut self,
         mem: &'guard MutatorView,
-        op: Opcode,
-    ) -> Result<Register, RuntimeError> {
+        f: F,
+    ) -> Result<Register, RuntimeError>
+    where
+        F: Fn(Register) -> Opcode,
+    {
         let result = self.acquire_reg();
-        self.bytecode.get(mem).push_op1(mem, op, result)?;
+        self.bytecode.get(mem).push(mem, f(result))?;
         Ok(result)
     }
 
-    fn push_op2<'guard>(
+    fn push_op2<'guard, F>(
         &mut self,
         mem: &'guard MutatorView,
-        op: Opcode,
         params: TaggedScopedPtr<'guard>,
-    ) -> Result<Register, RuntimeError> {
+        f: F,
+    ) -> Result<Register, RuntimeError>
+    where
+        F: Fn(Register, Register) -> Opcode,
+    {
         let result = self.acquire_reg();
         let reg1 = self.compile_eval(mem, value_from_1_pair(mem, params)?)?;
-        self.bytecode.get(mem).push_op2(mem, op, result, reg1)?;
+        self.bytecode.get(mem).push(mem, f(result, reg1))?;
         Ok(result)
     }
 
-    fn push_op3<'guard>(
+    fn push_op3<'guard, F>(
         &mut self,
         mem: &'guard MutatorView,
-        op: Opcode,
         params: TaggedScopedPtr<'guard>,
-    ) -> Result<Register, RuntimeError> {
+        f: F,
+    ) -> Result<Register, RuntimeError>
+    where
+        F: Fn(Register, Register, Register) -> Opcode,
+    {
         let result = self.acquire_reg();
         let (first, second) = values_from_2_pairs(mem, params)?;
         let reg1 = self.compile_eval(mem, first)?;
         let reg2 = self.compile_eval(mem, second)?;
-        self.bytecode
-            .get(mem)
-            .push_op3(mem, op, result, reg1, reg2)?;
+        self.bytecode.get(mem).push(mem, f(result, reg1, reg2))?;
         Ok(result)
     }
 
@@ -589,11 +600,12 @@ impl<'parent> Compiler<'parent> {
     fn push_load_literal<'guard>(
         &mut self,
         mem: &'guard MutatorView,
-        dest: Register,
         literal: TaggedScopedPtr<'guard>,
-    ) -> Result<(), RuntimeError> {
+    ) -> Result<Register, RuntimeError> {
+        let result = self.acquire_reg();
         let lit_id = self.bytecode.get(mem).push_lit(mem, literal)?;
-        self.bytecode.get(mem).push_loadlit(mem, dest, lit_id)
+        self.bytecode.get(mem).push_loadlit(mem, result, lit_id)?;
+        Ok(result)
     }
 
     // this is a naive way of allocating registers - every result gets it's own register
@@ -602,6 +614,24 @@ impl<'parent> Compiler<'parent> {
         let reg = self.next_reg;
         self.next_reg += 1;
         reg
+    }
+
+    // this is a naive way of allocating registers - every result gets it's own register
+    fn acquire_dest_reg(&mut self, push_dest: Option<Register>) -> Result<Register, RuntimeError> {
+        if let Some(dest) = push_dest {
+            Ok(dest)
+        } else {
+            let dest = self.next_reg;
+            // check for 8 bit overflow. A function cannot allocate more than 255 registers for
+            // itself.
+            if dest == 255 {
+                return Err(err_eval(
+                    "Compiler ran out of registers for this function, consider reducing complexity",
+                ));
+            }
+            self.next_reg += 1;
+            Ok(dest)
+        }
     }
 
     // reset the next register back to the given one so that it is reused
