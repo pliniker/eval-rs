@@ -171,19 +171,13 @@ impl ByteCode {
         &self,
         mem: &'guard MutatorView,
         instruction: ArraySize,
-        new_offset: JumpOffset,
+        offset: JumpOffset,
     ) -> Result<(), RuntimeError> {
         let code = self.code.get(mem, instruction)?;
         let new_code = match code {
-            Opcode::JMP { offset } => Opcode::JMP { offset: new_offset },
-            Opcode::JMPT { test, offset } => Opcode::JMPT {
-                test,
-                offset: new_offset,
-            },
-            Opcode::JMPNT { test, offset } => Opcode::JMPNT {
-                test,
-                offset: new_offset,
-            },
+            Opcode::JMP { offset: _ } => Opcode::JMP { offset },
+            Opcode::JMPT { test, offset: _ } => Opcode::JMPT { test, offset },
+            Opcode::JMPNT { test, offset: _ } => Opcode::JMPNT { test, offset },
             _ => {
                 return Err(err_eval(
                     "Cannot modify jump offset for non-jump instruction",
@@ -224,6 +218,19 @@ impl ByteCode {
     /// Get the index into the bytecode array of the next instruction that will be pushed
     pub fn next_instruction(&self) -> ArraySize {
         self.code.length()
+    }
+
+    /// To construct a closure, a lambda is lifted so that all free variables are converted into
+    /// function parameters. All existing parameter and evaluation registers must be punted
+    /// further back into the register window to make space. This function iterates over all
+    /// instructions, incrementing each register by 1, to make space for 1 free variable/param.
+    pub fn increment_all_registers<'guard>(&self) -> Result<(), RuntimeError> {
+        // TODO
+        // 1. get code as slice
+        // 2. iter over slice
+        // 3. match opcode
+        // 4. write back opcode with registers + 1
+        unimplemented!()
     }
 }
 

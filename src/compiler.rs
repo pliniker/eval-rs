@@ -551,19 +551,7 @@ impl<'parent> Compiler<'parent> {
         self.bytecode.get(mem).push(mem, op)
     }
 
-    fn push_op1<'guard, F>(
-        &mut self,
-        mem: &'guard MutatorView,
-        f: F,
-    ) -> Result<Register, RuntimeError>
-    where
-        F: Fn(Register) -> Opcode,
-    {
-        let result = self.acquire_reg();
-        self.bytecode.get(mem).push(mem, f(result))?;
-        Ok(result)
-    }
-
+    /// Push an instruction with a result and a single argument to the function bytecode list
     fn push_op2<'guard, F>(
         &mut self,
         mem: &'guard MutatorView,
@@ -579,6 +567,7 @@ impl<'parent> Compiler<'parent> {
         Ok(result)
     }
 
+    /// Push an instruction with a result and two arguments to the function bytecode list
     fn push_op3<'guard, F>(
         &mut self,
         mem: &'guard MutatorView,
