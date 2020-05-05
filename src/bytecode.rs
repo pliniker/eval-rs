@@ -2,7 +2,9 @@ use std::cell::Cell;
 use std::fmt;
 
 use crate::array::{Array, ArraySize};
-use crate::containers::{Container, IndexedContainer, StackAnyContainer, StackContainer};
+use crate::containers::{
+    Container, IndexedContainer, SliceableContainer, StackAnyContainer, StackContainer,
+};
 use crate::error::{err_eval, RuntimeError};
 use crate::list::List;
 use crate::memory::MutatorView;
@@ -224,13 +226,115 @@ impl ByteCode {
     /// function parameters. All existing parameter and evaluation registers must be punted
     /// further back into the register window to make space. This function iterates over all
     /// instructions, incrementing each register by 1, to make space for 1 free variable/param.
-    pub fn increment_all_registers<'guard>(&self) -> Result<(), RuntimeError> {
-        // TODO
-        // 1. get code as slice
-        // 2. iter over slice
-        // 3. match opcode
-        // 4. write back opcode with registers + 1
-        unimplemented!()
+    pub fn increment_all_registers<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+    ) -> Result<(), RuntimeError> {
+        use Opcode::*;
+        self.code.access_slice(guard, |code| {
+            for opcode in code {
+                *opcode = match *opcode {
+                    NOP => NOP,
+                    RETURN { reg } => RETURN { reg: reg + 1 },
+                    LOADLIT { dest, literal_id } => LOADLIT {
+                        dest: dest + 1,
+                        literal_id,
+                    },
+                    NIL { dest, test } => NIL {
+                        dest: dest + 1,
+                        test: test + 1,
+                    },
+                    ATOM { dest, test } => ATOM {
+                        dest: dest + 1,
+                        test: test + 1,
+                    },
+                    CAR { dest, reg } => CAR {
+                        dest: dest + 1,
+                        reg: reg + 1,
+                    },
+                    CDR { dest, reg } => CDR {
+                        dest: dest + 1,
+                        reg: reg + 1,
+                    },
+                    CONS { dest, reg1, reg2 } => CONS {
+                        dest: dest + 1,
+                        reg1: reg1 + 1,
+                        reg2: reg2 + 1,
+                    },
+                    IS { dest, test1, test2 } => IS {
+                        dest: dest + 1,
+                        test1: test1 + 1,
+                        test2: test2 + 1,
+                    },
+                    JMP { offset } => JMP { offset },
+                    JMPT { test, offset } => JMPT {
+                        test: test + 1,
+                        offset,
+                    },
+                    JMPNT { test, offset } => JMPNT {
+                        test: test + 1,
+                        offset,
+                    },
+                    LOADNIL { dest } => LOADNIL { dest: dest + 1 },
+                    LOADGLOBAL { dest, name } => LOADGLOBAL {
+                        dest: dest + 1,
+                        name: name + 1,
+                    },
+                    STOREGLOBAL { src, name } => STOREGLOBAL {
+                        src: src + 1,
+                        name: name + 1,
+                    },
+                    CALL {
+                        function,
+                        dest,
+                        arg_count,
+                    } => CALL {
+                        function: function + 1,
+                        dest: dest + 1,
+                        arg_count,
+                    },
+                    LOADINT { dest, integer } => LOADINT {
+                        dest: dest + 1,
+                        integer,
+                    },
+                    COPYREG { dest, src } => COPYREG {
+                        dest: dest + 1,
+                        src: src + 1,
+                    },
+                    LOADNONLOCAL {
+                        dest,
+                        src,
+                        frame_offset,
+                    } => LOADNONLOCAL {
+                        dest: dest + 1,
+                        src: src + 1,
+                        frame_offset,
+                    },
+                    ADD { dest, reg1, reg2 } => ADD {
+                        dest: dest + 1,
+                        reg1: reg1 + 1,
+                        reg2: reg2 + 1,
+                    },
+                    SUB { dest, left, right } => SUB {
+                        dest: dest + 1,
+                        left: right + 1,
+                        right: right + 1,
+                    },
+                    MUL { dest, reg1, reg2 } => MUL {
+                        dest: dest + 1,
+                        reg1: reg1 + 1,
+                        reg2: reg2 + 1,
+                    },
+                    DIVINTEGER { dest, num, denom } => DIVINTEGER {
+                        dest: dest + 1,
+                        num: num + 1,
+                        denom: denom + 1,
+                    },
+                }
+            }
+        });
+
+        Ok(())
     }
 }
 
@@ -318,12 +422,244 @@ impl InstructionStream {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::memory::{Memory, Mutator};
     use std::mem::size_of;
+
+    // TODO - create common module for test utilities
+    fn test_helper(test_fn: fn(&MutatorView) -> Result<(), RuntimeError>) {
+        let mem = Memory::new();
+
+        struct Test {}
+        impl Mutator for Test {
+            type Input = fn(&MutatorView) -> Result<(), RuntimeError>;
+            type Output = ();
+
+            fn run(
+                &self,
+                mem: &MutatorView,
+                test_fn: Self::Input,
+            ) -> Result<Self::Output, RuntimeError> {
+                test_fn(mem)
+            }
+        }
+
+        let test = Test {};
+        mem.mutate(&test, test_fn).unwrap();
+    }
 
     #[test]
     fn test_opcode_is_32_bits() {
         // An Opcode should be 32 bits; anything bigger and we've mis-defined some
         // discriminant
         assert!(size_of::<Opcode>() == 4);
+    }
+
+    #[test]
+    fn test_increment_all_registers() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            use Opcode::*;
+
+            let code = ByteCode::alloc(mem)?;
+            code.push(mem, NOP)?;
+            code.push(mem, RETURN { reg: 1 })?;
+            code.push(
+                mem,
+                LOADLIT {
+                    dest: 1,
+                    literal_id: 0,
+                },
+            )?;
+            code.push(mem, NIL { dest: 1, test: 1 })?;
+            code.push(mem, ATOM { dest: 1, test: 1 })?;
+            code.push(mem, CAR { dest: 1, reg: 1 })?;
+            code.push(mem, CDR { dest: 1, reg: 1 })?;
+            code.push(
+                mem,
+                CONS {
+                    dest: 1,
+                    reg1: 1,
+                    reg2: 1,
+                },
+            )?;
+            code.push(
+                mem,
+                IS {
+                    dest: 1,
+                    test1: 1,
+                    test2: 1,
+                },
+            )?;
+            code.push(mem, JMP { offset: 0 })?;
+            code.push(mem, JMPT { test: 1, offset: 0 })?;
+            code.push(mem, JMPNT { test: 1, offset: 0 })?;
+            code.push(mem, LOADNIL { dest: 1 })?;
+            code.push(mem, LOADGLOBAL { dest: 1, name: 1 })?;
+            code.push(mem, STOREGLOBAL { src: 1, name: 1 })?;
+            code.push(
+                mem,
+                CALL {
+                    function: 1,
+                    dest: 1,
+                    arg_count: 0,
+                },
+            )?;
+            code.push(
+                mem,
+                LOADINT {
+                    dest: 1,
+                    integer: 0,
+                },
+            )?;
+            code.push(mem, COPYREG { dest: 1, src: 1 })?;
+            code.push(
+                mem,
+                LOADNONLOCAL {
+                    dest: 1,
+                    src: 1,
+                    frame_offset: 0,
+                },
+            )?;
+            code.push(
+                mem,
+                ADD {
+                    dest: 1,
+                    reg1: 1,
+                    reg2: 1,
+                },
+            )?;
+            code.push(
+                mem,
+                SUB {
+                    dest: 1,
+                    left: 1,
+                    right: 1,
+                },
+            )?;
+            code.push(
+                mem,
+                MUL {
+                    dest: 1,
+                    reg1: 1,
+                    reg2: 1,
+                },
+            )?;
+            code.push(
+                mem,
+                DIVINTEGER {
+                    dest: 1,
+                    num: 1,
+                    denom: 1,
+                },
+            )?;
+
+            code.increment_all_registers(mem)?;
+
+            code.code.access_slice(mem, |code| {
+                for opcode in code {
+                    match *opcode {
+                        NOP => (),
+                        RETURN { reg } => assert!(reg == 2),
+                        LOADLIT { dest, literal_id } => {
+                            assert!(dest == 2);
+                            assert!(literal_id == 0);
+                        }
+                        NIL { dest, test } => {
+                            assert!(dest == 2);
+                            assert!(test == 2);
+                        }
+                        ATOM { dest, test } => {
+                            assert!(dest == 2);
+                            assert!(test == 2);
+                        }
+                        CAR { dest, reg } => {
+                            assert!(dest == 2);
+                            assert!(reg == 2);
+                        }
+                        CDR { dest, reg } => {
+                            assert!(dest == 2);
+                            assert!(reg == 2);
+                        }
+                        CONS { dest, reg1, reg2 } => {
+                            assert!(dest == 2);
+                            assert!(reg1 == 2);
+                            assert!(reg2 == 2);
+                        }
+                        IS { dest, test1, test2 } => {
+                            assert!(dest == 2);
+                            assert!(test1 == 2);
+                            assert!(test2 == 2);
+                        }
+                        JMP { offset } => assert!(offset == 0),
+                        JMPT { test, offset } => {
+                            assert!(test == 2);
+                            assert!(offset == 0);
+                        }
+                        JMPNT { test, offset } => {
+                            assert!(test == 2);
+                            assert!(offset == 0);
+                        }
+                        LOADNIL { dest } => assert!(dest == 2),
+                        LOADGLOBAL { dest, name } => {
+                            assert!(dest == 2);
+                            assert!(name == 2);
+                        }
+                        STOREGLOBAL { src, name } => {
+                            assert!(src == 2);
+                            assert!(name == 2);
+                        }
+                        CALL {
+                            function,
+                            dest,
+                            arg_count,
+                        } => {
+                            assert!(function == 2);
+                            assert!(dest == 2);
+                            assert!(arg_count == 0);
+                        }
+                        LOADINT { dest, integer } => {
+                            assert!(dest == 2);
+                            assert!(integer == 0);
+                        }
+                        COPYREG { dest, src } => {
+                            assert!(dest == 2);
+                            assert!(src == 2);
+                        }
+                        LOADNONLOCAL {
+                            dest,
+                            src,
+                            frame_offset,
+                        } => {
+                            assert!(dest == 2);
+                            assert!(src == 2);
+                            assert!(frame_offset == 0);
+                        }
+                        ADD { dest, reg1, reg2 } => {
+                            assert!(dest == 2);
+                            assert!(reg1 == 2);
+                            assert!(reg2 == 2);
+                        }
+                        SUB { dest, left, right } => {
+                            assert!(dest == 2);
+                            assert!(left == 2);
+                            assert!(right == 2);
+                        }
+                        MUL { dest, reg1, reg2 } => {
+                            assert!(dest == 2);
+                            assert!(reg1 == 2);
+                            assert!(reg2 == 2);
+                        }
+                        DIVINTEGER { dest, num, denom } => {
+                            assert!(dest == 2);
+                            assert!(num == 2);
+                            assert!(denom == 2);
+                        }
+                    }
+                }
+            });
+
+            Ok(())
+        }
+
+        test_helper(test_inner);
     }
 }
