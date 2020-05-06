@@ -20,7 +20,6 @@ use crate::taggedptr::{TaggedPtr, Value};
 pub enum EvalStatus<'guard> {
     Pending,
     Return(TaggedScopedPtr<'guard>),
-    Halt,
 }
 
 /// A call frame, separate from the register stack
@@ -322,7 +321,7 @@ impl Thread {
 
                                 return Ok(EvalStatus::Pending);
                             } else if arg_count > arity {
-                                // Too many args, we haven't got a continuations stack
+                                // Too many args, we haven't got a continuations stack (yet)
                                 return Err(err_eval(&format!(
                                     "Function {} expected {} arguments, got {}",
                                     binding,
@@ -391,6 +390,18 @@ impl Thread {
                     }
                 }
 
+                Opcode::MAKE_CLOSURE {
+                    dest,
+                    function,
+                    function_scope,
+                } => {
+                    // TODO
+                    // 1. create new Partial
+                    // 2. iter over function nonlocals, offset by function_scope, copying to new Partial
+                    // 3. set dest to Partial
+                    unimplemented!()
+                }
+
                 Opcode::COPYREG { dest, src } => {
                     window[dest as usize] = window[src as usize].clone();
                 }
@@ -438,7 +449,6 @@ impl Thread {
                 // Evaluation paused or completed without error
                 Ok(exit_cond) => match exit_cond {
                     EvalStatus::Return(value) => return Ok(EvalStatus::Return(value)),
-                    EvalStatus::Halt => return Ok(EvalStatus::Halt),
                     _ => (),
                 },
 
@@ -487,7 +497,6 @@ impl Thread {
             status = self.vm_eval_stream(mem, code, 1024)?;
             match status {
                 EvalStatus::Return(value) => return Ok(value),
-                EvalStatus::Halt => return Err(err_eval("Program halted")),
                 _ => (),
             }
         }

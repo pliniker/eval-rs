@@ -1,6 +1,7 @@
 use itertools::join;
 use std::fmt;
 
+use crate::array::ArrayU8;
 use crate::bytecode::ByteCode;
 use crate::containers::{Container, ContainerFromSlice, SliceableContainer, StackContainer};
 use crate::error::RuntimeError;
@@ -17,9 +18,10 @@ pub struct Function {
     name: TaggedCellPtr,
     arity: u8,
     code: CellPtr<ByteCode>,
+    // Param names are stored for examination of a function signature
     param_names: CellPtr<List>,
     // TODO - list of negative indexes into stack where free variable values should be copied from
-    // free_variables: CellPtr<ArrayU32> <- but signed integers
+    nonlocal_refs: CellPtr<ArrayU8>,
 }
 
 impl Function {
@@ -29,13 +31,14 @@ impl Function {
         name: TaggedScopedPtr<'guard>,
         param_names: ScopedPtr<'guard, List>,
         code: ScopedPtr<'guard, ByteCode>,
-        //free_variables
+        nonlocal_refs: ScopedPtr<'guard, ArrayU8>,
     ) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
         mem.alloc(Function {
             name: TaggedCellPtr::new_with(name),
             arity: param_names.length() as u8,
             code: CellPtr::new_with(code),
             param_names: CellPtr::new_with(param_names),
+            nonlocal_refs: CellPtr::new_with(nonlocal_refs),
         })
     }
 

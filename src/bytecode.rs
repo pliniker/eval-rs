@@ -1,3 +1,4 @@
+use itertools::join;
 use std::cell::Cell;
 use std::fmt;
 
@@ -24,7 +25,7 @@ pub type LiteralId = u16;
 /// An instruction jump target is a signed integer, relative to the jump instruction
 pub type JumpOffset = i16;
 /// Jump offset when the target is still unknown.
-pub const JumpUnknown: i16 = 0x7fff;
+pub const JUMP_UNKNOWN: i16 = 0x7fff;
 
 /// Argument count for a function call or partial application
 pub type NumArgs = u8;
@@ -37,11 +38,12 @@ pub type FrameOffset = u8;
 /// do not add up to more than 24 bits.
 /// Defining opcodes like this rather than using u32 directly comes with tradeoffs.
 /// Direct u32 is more ergonomic for the compiler but enum struct variants is
-/// more ergonomic for the vm and probably more performant.
+/// more ergonomic for the vm and probably more performant. Lots of match repetition
+/// though :(
 #[repr(u8)]
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum Opcode {
-    NOP,
+    NoOp,
     RETURN {
         reg: Register,
     },
@@ -101,6 +103,11 @@ pub enum Opcode {
         function: Register,
         dest: Register,
         arg_count: NumArgs,
+    },
+    MAKE_CLOSURE {
+        dest: Register,
+        function: Register,
+        function_scope: FrameOffset,
     },
     LOADINT {
         dest: Register,
@@ -225,7 +232,8 @@ impl ByteCode {
     /// To construct a closure, a lambda is lifted so that all free variables are converted into
     /// function parameters. All existing parameter and evaluation registers must be punted
     /// further back into the register window to make space. This function iterates over all
-    /// instructions, incrementing each register by 1, to make space for 1 free variable/param.
+    /// instructions, incrementing each register by 1, to make space for 1 free variable param
+    /// at the head of the register window.
     pub fn increment_all_registers<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
@@ -234,7 +242,7 @@ impl ByteCode {
         self.code.access_slice(guard, |code| {
             for opcode in code {
                 *opcode = match *opcode {
-                    NOP => NOP,
+                    NoOp => NoOp,
                     RETURN { reg } => RETURN { reg: reg + 1 },
                     LOADLIT { dest, literal_id } => LOADLIT {
                         dest: dest + 1,
@@ -293,6 +301,15 @@ impl ByteCode {
                         dest: dest + 1,
                         arg_count,
                     },
+                    MAKE_CLOSURE {
+                        dest,
+                        function,
+                        function_scope,
+                    } => MAKE_CLOSURE {
+                        dest: dest + 1,
+                        function: function + 1,
+                        function_scope,
+                    },
                     LOADINT { dest, integer } => LOADINT {
                         dest: dest + 1,
                         integer,
@@ -317,7 +334,7 @@ impl ByteCode {
                     },
                     SUB { dest, left, right } => SUB {
                         dest: dest + 1,
-                        left: right + 1,
+                        left: left + 1,
                         right: right + 1,
                     },
                     MUL { dest, reg1, reg2 } => MUL {
@@ -344,13 +361,13 @@ impl Print for ByteCode {
         guard: &'guard dyn MutatorScope,
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
-        for index in 0..self.code.length() {
-            let instr = self.code.get(guard, index)?;
-            match instr {
-                _ => (), // TODO
-            }
-        }
-        Ok(())
+        let mut instr_str = String::new();
+
+        self.code.access_slice(guard, |code| {
+            instr_str = join(code.iter().map(|opcode| format!("{:?}", opcode)), "\n")
+        });
+
+        write!(f, "{}", instr_str)
     }
 }
 
@@ -460,7 +477,7 @@ mod test {
             use Opcode::*;
 
             let code = ByteCode::alloc(mem)?;
-            code.push(mem, NOP)?;
+            code.push(mem, NoOp)?;
             code.push(mem, RETURN { reg: 1 })?;
             code.push(
                 mem,
@@ -501,6 +518,14 @@ mod test {
                     function: 1,
                     dest: 1,
                     arg_count: 0,
+                },
+            )?;
+            code.push(
+                mem,
+                MAKE_CLOSURE {
+                    dest: 1,
+                    function: 1,
+                    function_scope: 0,
                 },
             )?;
             code.push(
@@ -557,7 +582,7 @@ mod test {
             code.code.access_slice(mem, |code| {
                 for opcode in code {
                     match *opcode {
-                        NOP => (),
+                        NoOp => (),
                         RETURN { reg } => assert!(reg == 2),
                         LOADLIT { dest, literal_id } => {
                             assert!(dest == 2);
@@ -615,6 +640,15 @@ mod test {
                             assert!(function == 2);
                             assert!(dest == 2);
                             assert!(arg_count == 0);
+                        }
+                        MAKE_CLOSURE {
+                            dest,
+                            function,
+                            function_scope,
+                        } => {
+                            assert!(dest == 2);
+                            assert!(function == 2);
+                            assert!(function_scope == 0);
                         }
                         LOADINT { dest, integer } => {
                             assert!(dest == 2);

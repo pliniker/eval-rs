@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use crate::array::ArraySize;
-use crate::bytecode::{ByteCode, JumpOffset, JumpUnknown, Opcode, Register};
+use crate::array::{Array, ArraySize};
+use crate::bytecode::{ByteCode, JumpOffset, Opcode, Register, JUMP_UNKNOWN};
 use crate::containers::AnyContainerFromSlice;
 use crate::error::{err_eval, RuntimeError};
 use crate::function::Function;
@@ -74,6 +74,17 @@ impl Scope {
             None => Ok(None),
         }
     }
+
+    /// To construct a closure, a lambda is lifted so that all free variables are converted into
+    /// function parameters. All existing parameter and evaluation registers must be punted
+    /// further back into the register window to make space. This function iterates over all
+    /// instructions, incrementing each register by 1, to make space for 1 free variable param
+    /// at the head of the register window.
+    fn increment_all_registers(&mut self) {
+        for entry in self.bindings.iter_mut() {
+            *entry.1 += 1;
+        }
+    }
 }
 
 /// A Scope instance represents a set of nested local binding scopes for a single function
@@ -110,6 +121,17 @@ impl<'parent> Locals<'parent> {
         }
 
         Ok(None)
+    }
+
+    /// To construct a closure, a lambda is lifted so that all free variables are converted into
+    /// function parameters. All existing parameter and evaluation registers must be punted
+    /// further back into the register window to make space. This function iterates over all
+    /// instructions, incrementing each register by 1, to make space for 1 free variable param
+    /// at the head of the register window.
+    fn increment_all_registers(&mut self) {
+        for scope in self.scopes.iter_mut() {
+            scope.increment_all_registers();
+        }
     }
 }
 
@@ -192,7 +214,16 @@ impl<'parent> Compiler<'parent> {
         let fn_bytecode = self.bytecode.get(mem);
         fn_bytecode.push(mem, Opcode::RETURN { reg: result_reg })?;
 
-        Ok(Function::alloc(mem, fn_name, fn_params, fn_bytecode)?)
+        use crate::printer::Print;
+        println!("{}", fn_bytecode.as_tagged(mem));
+
+        Ok(Function::alloc(
+            mem,
+            fn_name,
+            fn_params,
+            fn_bytecode,
+            Array::alloc(mem)?,
+        )?)
     }
 
     /// Compile an expression - this can be an 'atomic' value or a nested function application
@@ -221,7 +252,6 @@ impl<'parent> Compiler<'parent> {
                             if frame_offset > 0 {
                                 // nonlocal nonglobal binding
                                 let dest = self.acquire_reg();
-                                // this rustfmt style feels unnecessarily verbose :-(
                                 self.push(
                                     mem,
                                     Opcode::LOADNONLOCAL {
@@ -333,14 +363,14 @@ impl<'parent> Compiler<'parent> {
                     // next condition.
                     self.reset_reg(dest); // reuse this register for condition and dest
                     let test = self.compile_eval(mem, cond)?;
-                    let offset = JumpUnknown;
+                    let offset = JUMP_UNKNOWN;
                     self.push(mem, Opcode::JMPNT { test, offset })?;
                     last_cond_jump = Some(bytecode.last_instruction());
 
                     // Compile the expression and jump to the end of the entire cond
                     self.reset_reg(dest); // reuse this register for condition and dest
                     let _expr_result = self.compile_eval(mem, expr)?;
-                    let offset = JumpUnknown;
+                    let offset = JUMP_UNKNOWN;
                     bytecode.push(mem, Opcode::JMP { offset })?;
                     end_jumps.push(bytecode.last_instruction());
                 }

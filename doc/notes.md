@@ -94,6 +94,14 @@ Chaining partials? Stack of partials?
 
 iterate until arg stack is empty
 
+### Closures
+
+(def bob (x)             # scope 0
+  (let (
+    (y (lambda () x))    # scope 1a
+    (z (lambda () (y)))  # scope 1b, must call y knowing y's scope so that x is loaded from bob's call frame
+    z))
+
 ### Functors, Applicative, Monads
 
 data Maybe = Just a | Nothing
