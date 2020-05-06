@@ -113,9 +113,9 @@ impl Thread {
             let opcode = instr.get_next_opcode(mem)?;
 
             match opcode {
-                Opcode::NOP => return Ok(EvalStatus::Pending),
+                Opcode::NoOp => return Ok(EvalStatus::Pending),
 
-                Opcode::RETURN { reg } => {
+                Opcode::Return { reg } => {
                     // write the return value to register 0
                     let result = window[reg as usize].get_ptr();
                     window[0].set_to_ptr(result);
@@ -134,12 +134,12 @@ impl Thread {
                     }
                 }
 
-                Opcode::LOADLIT { dest, literal_id } => {
+                Opcode::LoadLiteral { dest, literal_id } => {
                     let literal_ptr = instr.get_literal(mem, literal_id)?;
                     window[dest as usize].set_to_ptr(literal_ptr);
                 }
 
-                Opcode::NIL { dest, test } => {
+                Opcode::IsNil { dest, test } => {
                     let test_val = window[test as usize].get(mem);
 
                     match *test_val {
@@ -148,7 +148,7 @@ impl Thread {
                     }
                 }
 
-                Opcode::ATOM { dest, test } => {
+                Opcode::IsAtom { dest, test } => {
                     let test_val = window[test as usize].get(mem);
 
                     match *test_val {
@@ -159,27 +159,27 @@ impl Thread {
                     }
                 }
 
-                Opcode::CAR { dest, reg } => {
+                Opcode::FirstOfPair { dest, reg } => {
                     let reg_val = window[reg as usize].get(mem);
 
                     match *reg_val {
                         Value::Pair(p) => window[dest as usize].set_to_ptr(p.first.get_ptr()),
                         Value::Nil => window[dest as usize].set_to_nil(),
-                        _ => return Err(err_eval("Parameter to CAR is not a list")),
+                        _ => return Err(err_eval("Parameter to FirstOfPair is not a list")),
                     }
                 }
 
-                Opcode::CDR { dest, reg } => {
+                Opcode::SecondOfPair { dest, reg } => {
                     let reg_val = window[reg as usize].get(mem);
 
                     match *reg_val {
                         Value::Pair(p) => window[dest as usize].set_to_ptr(p.second.get_ptr()),
                         Value::Nil => window[dest as usize].set_to_nil(),
-                        _ => return Err(err_eval("Parameter to CDR is not a list")),
+                        _ => return Err(err_eval("Parameter to SecondOfPair is not a list")),
                     }
                 }
 
-                Opcode::CONS { dest, reg1, reg2 } => {
+                Opcode::MakePair { dest, reg1, reg2 } => {
                     let reg1_val = window[reg1 as usize].get_ptr();
                     let reg2_val = window[reg2 as usize].get_ptr();
 
@@ -190,7 +190,7 @@ impl Thread {
                     window[dest as usize].set(mem.alloc_tagged(new_pair)?);
                 }
 
-                Opcode::IS { dest, test1, test2 } => {
+                Opcode::IsIdentical { dest, test1, test2 } => {
                     // compare raw pointers - identity comparison
                     let test1_val = window[test1 as usize].get_ptr();
                     let test2_val = window[test2 as usize].get_ptr();
@@ -202,11 +202,11 @@ impl Thread {
                     }
                 }
 
-                Opcode::JMP { offset } => {
+                Opcode::Jump { offset } => {
                     instr.jump(offset);
                 }
 
-                Opcode::JMPT { test, offset } => {
+                Opcode::JumpIfTrue { test, offset } => {
                     let test_val = window[test as usize].get(mem);
 
                     let true_sym = mem.lookup_sym("true"); // TODO preload keyword syms
@@ -216,7 +216,7 @@ impl Thread {
                     }
                 }
 
-                Opcode::JMPNT { test, offset } => {
+                Opcode::JumpIfNotTrue { test, offset } => {
                     let test_val = window[test as usize].get(mem);
 
                     let true_sym = mem.lookup_sym("true");
@@ -226,16 +226,16 @@ impl Thread {
                     }
                 }
 
-                Opcode::LOADNIL { dest } => {
+                Opcode::LoadNil { dest } => {
                     window[dest as usize].set_to_nil();
                 }
 
-                Opcode::LOADINT { dest, integer } => {
+                Opcode::LoadInteger { dest, integer } => {
                     let tagged_ptr = TaggedPtr::literal_integer(integer);
                     window[dest as usize].set_to_ptr(tagged_ptr);
                 }
 
-                Opcode::LOADGLOBAL { dest, name } => {
+                Opcode::LoadGlobal { dest, name } => {
                     let name_val = window[name as usize].get(mem);
 
                     if let Value::Symbol(_) = *name_val {
@@ -255,7 +255,7 @@ impl Thread {
                     }
                 }
 
-                Opcode::STOREGLOBAL { src, name } => {
+                Opcode::StoreGlobal { src, name } => {
                     let name_val = window[name as usize].get(mem);
                     if let Value::Symbol(_) = *name_val {
                         let src_val = window[src as usize].get(mem);
@@ -265,7 +265,7 @@ impl Thread {
                     }
                 }
 
-                Opcode::CALL {
+                Opcode::Call {
                     function,
                     dest,
                     arg_count,
@@ -390,7 +390,7 @@ impl Thread {
                     }
                 }
 
-                Opcode::MAKE_CLOSURE {
+                Opcode::MakeClosure {
                     dest,
                     function,
                     function_scope,
@@ -402,11 +402,11 @@ impl Thread {
                     unimplemented!()
                 }
 
-                Opcode::COPYREG { dest, src } => {
+                Opcode::CopyRegister { dest, src } => {
                     window[dest as usize] = window[src as usize].clone();
                 }
 
-                Opcode::LOADNONLOCAL {
+                Opcode::LoadNonLocal {
                     dest,
                     src,
                     frame_offset,
@@ -421,13 +421,13 @@ impl Thread {
                     full_stack[full_dest] = value.clone();
                 }
 
-                Opcode::ADD { dest, reg1, reg2 } => unimplemented!(),
+                Opcode::Add { dest, reg1, reg2 } => unimplemented!(),
 
-                Opcode::SUB { dest, left, right } => unimplemented!(),
+                Opcode::Subtract { dest, left, right } => unimplemented!(),
 
-                Opcode::MUL { dest, reg1, reg2 } => unimplemented!(),
+                Opcode::Multiply { dest, reg1, reg2 } => unimplemented!(),
 
-                Opcode::DIVINTEGER { dest, num, denom } => unimplemented!(),
+                Opcode::DivideInteger { dest, num, denom } => unimplemented!(),
             }
 
             Ok(EvalStatus::Pending)

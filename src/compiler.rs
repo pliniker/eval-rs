@@ -208,14 +208,11 @@ impl<'parent> Compiler<'parent> {
             result_reg = self.compile_eval(mem, *expr)?;
         }
 
-        // TODO Question: for every RETURN instruction in the bytecode, if the preceding
-        // instruction is a CALL, can the CALL be converted to a TAILCALL?
+        // TODO Question: for every Return instruction in the bytecode, if the preceding
+        // instruction is a Call, can the Call be converted to a TAILCall?
 
         let fn_bytecode = self.bytecode.get(mem);
-        fn_bytecode.push(mem, Opcode::RETURN { reg: result_reg })?;
-
-        use crate::printer::Print;
-        println!("{}", fn_bytecode.as_tagged(mem));
+        fn_bytecode.push(mem, Opcode::Return { reg: result_reg })?;
 
         Ok(Function::alloc(
             mem,
@@ -239,7 +236,7 @@ impl<'parent> Compiler<'parent> {
                 match s.as_str(mem) {
                     "nil" => {
                         let dest = self.acquire_reg();
-                        self.push(mem, Opcode::LOADNIL { dest })?;
+                        self.push(mem, Opcode::LoadNil { dest })?;
                         Ok(dest)
                     }
 
@@ -254,7 +251,7 @@ impl<'parent> Compiler<'parent> {
                                 let dest = self.acquire_reg();
                                 self.push(
                                     mem,
-                                    Opcode::LOADNONLOCAL {
+                                    Opcode::LoadNonLocal {
                                         dest,
                                         src,
                                         frame_offset,
@@ -270,7 +267,7 @@ impl<'parent> Compiler<'parent> {
                         // Otherwise do a late-binding global lookup
                         let name = self.push_load_literal(mem, ast_node)?;
                         let dest = name; // reuse the register
-                        self.push(mem, Opcode::LOADGLOBAL { dest, name })?;
+                        self.push(mem, Opcode::LoadGlobal { dest, name })?;
                         Ok(dest)
                     }
                 }
@@ -290,17 +287,17 @@ impl<'parent> Compiler<'parent> {
         match *function {
             Value::Symbol(s) => match s.as_str(mem) {
                 "quote" => self.push_load_literal(mem, value_from_1_pair(mem, args)?),
-                "atom?" => self.push_op2(mem, args, |dest, test| Opcode::ATOM { dest, test }),
-                "nil?" => self.push_op2(mem, args, |dest, test| Opcode::NIL { dest, test }),
-                "car" => self.push_op2(mem, args, |dest, reg| Opcode::CAR { dest, reg }),
-                "cdr" => self.push_op2(mem, args, |dest, reg| Opcode::CDR { dest, reg }),
-                "cons" => self.push_op3(mem, args, |dest, reg1, reg2| Opcode::CONS {
+                "atom?" => self.push_op2(mem, args, |dest, test| Opcode::IsAtom { dest, test }),
+                "nil?" => self.push_op2(mem, args, |dest, test| Opcode::IsNil { dest, test }),
+                "car" => self.push_op2(mem, args, |dest, reg| Opcode::FirstOfPair { dest, reg }),
+                "cdr" => self.push_op2(mem, args, |dest, reg| Opcode::SecondOfPair { dest, reg }),
+                "cons" => self.push_op3(mem, args, |dest, reg1, reg2| Opcode::MakePair {
                     dest,
                     reg1,
                     reg2,
                 }),
                 "cond" => self.compile_apply_cond(mem, args),
-                "is?" => self.push_op3(mem, args, |dest, test1, test2| Opcode::IS {
+                "is?" => self.push_op3(mem, args, |dest, test1, test2| Opcode::IsIdentical {
                     dest,
                     test1,
                     test2,
@@ -364,14 +361,14 @@ impl<'parent> Compiler<'parent> {
                     self.reset_reg(dest); // reuse this register for condition and dest
                     let test = self.compile_eval(mem, cond)?;
                     let offset = JUMP_UNKNOWN;
-                    self.push(mem, Opcode::JMPNT { test, offset })?;
+                    self.push(mem, Opcode::JumpIfNotTrue { test, offset })?;
                     last_cond_jump = Some(bytecode.last_instruction());
 
                     // Compile the expression and jump to the end of the entire cond
                     self.reset_reg(dest); // reuse this register for condition and dest
                     let _expr_result = self.compile_eval(mem, expr)?;
                     let offset = JUMP_UNKNOWN;
-                    bytecode.push(mem, Opcode::JMP { offset })?;
+                    bytecode.push(mem, Opcode::Jump { offset })?;
                     end_jumps.push(bytecode.last_instruction());
                 }
 
@@ -382,7 +379,7 @@ impl<'parent> Compiler<'parent> {
         // Close out with a default nil result if none of the conditions passed
         if let Some(address) = last_cond_jump {
             self.reset_reg(dest);
-            self.push(mem, Opcode::LOADNIL { dest })?;
+            self.push(mem, Opcode::LoadNil { dest })?;
             let offset = bytecode.next_instruction() - address - 1;
             bytecode.update_jump_offset(mem, address, offset as JumpOffset)?;
         }
@@ -407,7 +404,7 @@ impl<'parent> Compiler<'parent> {
         let (first, second) = values_from_2_pairs(mem, params)?;
         let src = self.compile_eval(mem, second)?;
         let name = self.compile_eval(mem, first)?;
-        self.push(mem, Opcode::STOREGLOBAL { src, name })?;
+        self.push(mem, Opcode::StoreGlobal { src, name })?;
         Ok(src)
     }
 
@@ -464,7 +461,7 @@ impl<'parent> Compiler<'parent> {
         // TODO store in local scope if we're nested in an expression
         let name = self.push_load_literal(mem, fn_name)?;
         let src = self.push_load_literal(mem, fn_object)?;
-        self.push(mem, Opcode::STOREGLOBAL { src, name })?;
+        self.push(mem, Opcode::StoreGlobal { src, name })?;
 
         Ok(src)
     }
@@ -476,8 +473,6 @@ impl<'parent> Compiler<'parent> {
         function_expr: TaggedScopedPtr<'guard>,
         args: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
-        let bytecode = self.bytecode.get(mem);
-
         // allocate a register for the return value
         let dest = self.acquire_reg();
 
@@ -493,7 +488,7 @@ impl<'parent> Compiler<'parent> {
             // index in use.
             if src <= dest {
                 let dest = self.acquire_reg();
-                self.push(mem, Opcode::COPYREG { dest, src })?;
+                self.push(mem, Opcode::CopyRegister { dest, src })?;
             }
         }
 
@@ -501,7 +496,7 @@ impl<'parent> Compiler<'parent> {
         let function = self.compile_eval(mem, function_expr)?;
         self.push(
             mem,
-            Opcode::CALL {
+            Opcode::Call {
                 function,
                 dest,
                 arg_count,
@@ -558,7 +553,7 @@ impl<'parent> Compiler<'parent> {
             let src = self.compile_eval(mem, expr)?;
             let dest = self.compile_eval(mem, name)?;
             // TODO - more efficient to be able to write the result directly to the let binding reg
-            self.push(mem, Opcode::COPYREG { dest, src })?;
+            self.push(mem, Opcode::CopyRegister { dest, src })?;
         }
 
         // compile the expressions after the bindings
@@ -567,7 +562,7 @@ impl<'parent> Compiler<'parent> {
         for expr in result_exprs {
             let src = self.compile_eval(mem, *expr)?;
             // TODO - more efficient to be able to write the result directly to the let binding reg
-            self.push(mem, Opcode::COPYREG { dest, src })?;
+            self.push(mem, Opcode::CopyRegister { dest, src })?;
         }
 
         // finish up - pop the scope, de-scope all registers except the result, return the result

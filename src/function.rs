@@ -86,6 +86,14 @@ impl Print for Function {
             _ => write!(f, "(Function ({}))", param_string),
         }
     }
+
+    fn debug<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
+        self.code.get(guard).debug(guard, f)
+    }
 }
 
 /// A partial function application object type

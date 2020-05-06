@@ -44,100 +44,100 @@ pub type FrameOffset = u8;
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum Opcode {
     NoOp,
-    RETURN {
+    Return {
         reg: Register,
     },
-    LOADLIT {
+    LoadLiteral {
         dest: Register,
         literal_id: LiteralId,
     },
-    NIL {
+    IsNil {
         dest: Register,
         test: Register,
     },
-    ATOM {
+    IsAtom {
         dest: Register,
         test: Register,
     },
-    CAR {
+    FirstOfPair {
         dest: Register,
         reg: Register,
     },
-    CDR {
+    SecondOfPair {
         dest: Register,
         reg: Register,
     },
-    CONS {
+    MakePair {
         dest: Register,
         reg1: Register,
         reg2: Register,
     },
-    IS {
+    IsIdentical {
         dest: Register,
         test1: Register,
         test2: Register,
     },
-    JMP {
+    Jump {
         offset: JumpOffset,
     },
-    JMPT {
+    JumpIfTrue {
         test: Register,
         offset: JumpOffset,
     },
-    JMPNT {
+    JumpIfNotTrue {
         test: Register,
         offset: JumpOffset,
     },
-    LOADNIL {
+    LoadNil {
         dest: Register,
     },
-    LOADGLOBAL {
+    LoadGlobal {
         dest: Register,
         name: Register,
     },
-    STOREGLOBAL {
+    StoreGlobal {
         src: Register,
         name: Register,
     },
-    CALL {
+    Call {
         function: Register,
         dest: Register,
         arg_count: NumArgs,
     },
-    MAKE_CLOSURE {
+    MakeClosure {
         dest: Register,
         function: Register,
         function_scope: FrameOffset,
     },
-    LOADINT {
+    LoadInteger {
         dest: Register,
         integer: LiteralInteger,
     },
-    COPYREG {
+    CopyRegister {
         dest: Register,
         src: Register,
     },
-    LOADNONLOCAL {
+    LoadNonLocal {
         dest: Register,
         src: Register,
         frame_offset: FrameOffset,
     },
-    ADD {
+    Add {
         dest: Register,
         reg1: Register,
         reg2: Register,
     },
-    SUB {
+    Subtract {
         dest: Register,
         left: Register,
         right: Register,
     },
-    MUL {
+    Multiply {
         dest: Register,
         reg1: Register,
         reg2: Register,
     },
-    DIVINTEGER {
+    DivideInteger {
         dest: Register,
         num: Register,
         denom: Register,
@@ -184,9 +184,9 @@ impl ByteCode {
     ) -> Result<(), RuntimeError> {
         let code = self.code.get(mem, instruction)?;
         let new_code = match code {
-            Opcode::JMP { offset: _ } => Opcode::JMP { offset },
-            Opcode::JMPT { test, offset: _ } => Opcode::JMPT { test, offset },
-            Opcode::JMPNT { test, offset: _ } => Opcode::JMPNT { test, offset },
+            Opcode::Jump { offset: _ } => Opcode::Jump { offset },
+            Opcode::JumpIfTrue { test, offset: _ } => Opcode::JumpIfTrue { test, offset },
+            Opcode::JumpIfNotTrue { test, offset: _ } => Opcode::JumpIfNotTrue { test, offset },
             _ => {
                 return Err(err_eval(
                     "Cannot modify jump offset for non-jump instruction",
@@ -205,7 +205,8 @@ impl ByteCode {
         literal_id: LiteralId,
     ) -> Result<(), RuntimeError> {
         // TODO clone anything mutable
-        self.code.push(mem, Opcode::LOADLIT { dest, literal_id })
+        self.code
+            .push(mem, Opcode::LoadLiteral { dest, literal_id })
     }
 
     /// Push a literal pointer/value to the back of the literals list and return it's index
@@ -243,106 +244,106 @@ impl ByteCode {
             for opcode in code {
                 *opcode = match *opcode {
                     NoOp => NoOp,
-                    RETURN { reg } => RETURN { reg: reg + 1 },
-                    LOADLIT { dest, literal_id } => LOADLIT {
+                    Return { reg } => Return { reg: reg + 1 },
+                    LoadLiteral { dest, literal_id } => LoadLiteral {
                         dest: dest + 1,
                         literal_id,
                     },
-                    NIL { dest, test } => NIL {
+                    IsNil { dest, test } => IsNil {
                         dest: dest + 1,
                         test: test + 1,
                     },
-                    ATOM { dest, test } => ATOM {
+                    IsAtom { dest, test } => IsAtom {
                         dest: dest + 1,
                         test: test + 1,
                     },
-                    CAR { dest, reg } => CAR {
+                    FirstOfPair { dest, reg } => FirstOfPair {
                         dest: dest + 1,
                         reg: reg + 1,
                     },
-                    CDR { dest, reg } => CDR {
+                    SecondOfPair { dest, reg } => SecondOfPair {
                         dest: dest + 1,
                         reg: reg + 1,
                     },
-                    CONS { dest, reg1, reg2 } => CONS {
+                    MakePair { dest, reg1, reg2 } => MakePair {
                         dest: dest + 1,
                         reg1: reg1 + 1,
                         reg2: reg2 + 1,
                     },
-                    IS { dest, test1, test2 } => IS {
+                    IsIdentical { dest, test1, test2 } => IsIdentical {
                         dest: dest + 1,
                         test1: test1 + 1,
                         test2: test2 + 1,
                     },
-                    JMP { offset } => JMP { offset },
-                    JMPT { test, offset } => JMPT {
+                    Jump { offset } => Jump { offset },
+                    JumpIfTrue { test, offset } => JumpIfTrue {
                         test: test + 1,
                         offset,
                     },
-                    JMPNT { test, offset } => JMPNT {
+                    JumpIfNotTrue { test, offset } => JumpIfNotTrue {
                         test: test + 1,
                         offset,
                     },
-                    LOADNIL { dest } => LOADNIL { dest: dest + 1 },
-                    LOADGLOBAL { dest, name } => LOADGLOBAL {
+                    LoadNil { dest } => LoadNil { dest: dest + 1 },
+                    LoadGlobal { dest, name } => LoadGlobal {
                         dest: dest + 1,
                         name: name + 1,
                     },
-                    STOREGLOBAL { src, name } => STOREGLOBAL {
+                    StoreGlobal { src, name } => StoreGlobal {
                         src: src + 1,
                         name: name + 1,
                     },
-                    CALL {
+                    Call {
                         function,
                         dest,
                         arg_count,
-                    } => CALL {
+                    } => Call {
                         function: function + 1,
                         dest: dest + 1,
                         arg_count,
                     },
-                    MAKE_CLOSURE {
+                    MakeClosure {
                         dest,
                         function,
                         function_scope,
-                    } => MAKE_CLOSURE {
+                    } => MakeClosure {
                         dest: dest + 1,
                         function: function + 1,
                         function_scope,
                     },
-                    LOADINT { dest, integer } => LOADINT {
+                    LoadInteger { dest, integer } => LoadInteger {
                         dest: dest + 1,
                         integer,
                     },
-                    COPYREG { dest, src } => COPYREG {
+                    CopyRegister { dest, src } => CopyRegister {
                         dest: dest + 1,
                         src: src + 1,
                     },
-                    LOADNONLOCAL {
+                    LoadNonLocal {
                         dest,
                         src,
                         frame_offset,
-                    } => LOADNONLOCAL {
+                    } => LoadNonLocal {
                         dest: dest + 1,
                         src: src + 1,
                         frame_offset,
                     },
-                    ADD { dest, reg1, reg2 } => ADD {
+                    Add { dest, reg1, reg2 } => Add {
                         dest: dest + 1,
                         reg1: reg1 + 1,
                         reg2: reg2 + 1,
                     },
-                    SUB { dest, left, right } => SUB {
+                    Subtract { dest, left, right } => Subtract {
                         dest: dest + 1,
                         left: left + 1,
                         right: right + 1,
                     },
-                    MUL { dest, reg1, reg2 } => MUL {
+                    Multiply { dest, reg1, reg2 } => Multiply {
                         dest: dest + 1,
                         reg1: reg1 + 1,
                         reg2: reg2 + 1,
                     },
-                    DIVINTEGER { dest, num, denom } => DIVINTEGER {
+                    DivideInteger { dest, num, denom } => DivideInteger {
                         dest: dest + 1,
                         num: num + 1,
                         denom: denom + 1,
@@ -478,21 +479,21 @@ mod test {
 
             let code = ByteCode::alloc(mem)?;
             code.push(mem, NoOp)?;
-            code.push(mem, RETURN { reg: 1 })?;
+            code.push(mem, Return { reg: 1 })?;
             code.push(
                 mem,
-                LOADLIT {
+                LoadLiteral {
                     dest: 1,
                     literal_id: 0,
                 },
             )?;
-            code.push(mem, NIL { dest: 1, test: 1 })?;
-            code.push(mem, ATOM { dest: 1, test: 1 })?;
-            code.push(mem, CAR { dest: 1, reg: 1 })?;
-            code.push(mem, CDR { dest: 1, reg: 1 })?;
+            code.push(mem, IsNil { dest: 1, test: 1 })?;
+            code.push(mem, IsAtom { dest: 1, test: 1 })?;
+            code.push(mem, FirstOfPair { dest: 1, reg: 1 })?;
+            code.push(mem, SecondOfPair { dest: 1, reg: 1 })?;
             code.push(
                 mem,
-                CONS {
+                MakePair {
                     dest: 1,
                     reg1: 1,
                     reg2: 1,
@@ -500,21 +501,21 @@ mod test {
             )?;
             code.push(
                 mem,
-                IS {
+                IsIdentical {
                     dest: 1,
                     test1: 1,
                     test2: 1,
                 },
             )?;
-            code.push(mem, JMP { offset: 0 })?;
-            code.push(mem, JMPT { test: 1, offset: 0 })?;
-            code.push(mem, JMPNT { test: 1, offset: 0 })?;
-            code.push(mem, LOADNIL { dest: 1 })?;
-            code.push(mem, LOADGLOBAL { dest: 1, name: 1 })?;
-            code.push(mem, STOREGLOBAL { src: 1, name: 1 })?;
+            code.push(mem, Jump { offset: 0 })?;
+            code.push(mem, JumpIfTrue { test: 1, offset: 0 })?;
+            code.push(mem, JumpIfNotTrue { test: 1, offset: 0 })?;
+            code.push(mem, LoadNil { dest: 1 })?;
+            code.push(mem, LoadGlobal { dest: 1, name: 1 })?;
+            code.push(mem, StoreGlobal { src: 1, name: 1 })?;
             code.push(
                 mem,
-                CALL {
+                Call {
                     function: 1,
                     dest: 1,
                     arg_count: 0,
@@ -522,7 +523,7 @@ mod test {
             )?;
             code.push(
                 mem,
-                MAKE_CLOSURE {
+                MakeClosure {
                     dest: 1,
                     function: 1,
                     function_scope: 0,
@@ -530,15 +531,15 @@ mod test {
             )?;
             code.push(
                 mem,
-                LOADINT {
+                LoadInteger {
                     dest: 1,
                     integer: 0,
                 },
             )?;
-            code.push(mem, COPYREG { dest: 1, src: 1 })?;
+            code.push(mem, CopyRegister { dest: 1, src: 1 })?;
             code.push(
                 mem,
-                LOADNONLOCAL {
+                LoadNonLocal {
                     dest: 1,
                     src: 1,
                     frame_offset: 0,
@@ -546,7 +547,7 @@ mod test {
             )?;
             code.push(
                 mem,
-                ADD {
+                Add {
                     dest: 1,
                     reg1: 1,
                     reg2: 1,
@@ -554,7 +555,7 @@ mod test {
             )?;
             code.push(
                 mem,
-                SUB {
+                Subtract {
                     dest: 1,
                     left: 1,
                     right: 1,
@@ -562,7 +563,7 @@ mod test {
             )?;
             code.push(
                 mem,
-                MUL {
+                Multiply {
                     dest: 1,
                     reg1: 1,
                     reg2: 1,
@@ -570,7 +571,7 @@ mod test {
             )?;
             code.push(
                 mem,
-                DIVINTEGER {
+                DivideInteger {
                     dest: 1,
                     num: 1,
                     denom: 1,
@@ -583,56 +584,56 @@ mod test {
                 for opcode in code {
                     match *opcode {
                         NoOp => (),
-                        RETURN { reg } => assert!(reg == 2),
-                        LOADLIT { dest, literal_id } => {
+                        Return { reg } => assert!(reg == 2),
+                        LoadLiteral { dest, literal_id } => {
                             assert!(dest == 2);
                             assert!(literal_id == 0);
                         }
-                        NIL { dest, test } => {
+                        IsNil { dest, test } => {
                             assert!(dest == 2);
                             assert!(test == 2);
                         }
-                        ATOM { dest, test } => {
+                        IsAtom { dest, test } => {
                             assert!(dest == 2);
                             assert!(test == 2);
                         }
-                        CAR { dest, reg } => {
+                        FirstOfPair { dest, reg } => {
                             assert!(dest == 2);
                             assert!(reg == 2);
                         }
-                        CDR { dest, reg } => {
+                        SecondOfPair { dest, reg } => {
                             assert!(dest == 2);
                             assert!(reg == 2);
                         }
-                        CONS { dest, reg1, reg2 } => {
+                        MakePair { dest, reg1, reg2 } => {
                             assert!(dest == 2);
                             assert!(reg1 == 2);
                             assert!(reg2 == 2);
                         }
-                        IS { dest, test1, test2 } => {
+                        IsIdentical { dest, test1, test2 } => {
                             assert!(dest == 2);
                             assert!(test1 == 2);
                             assert!(test2 == 2);
                         }
-                        JMP { offset } => assert!(offset == 0),
-                        JMPT { test, offset } => {
+                        Jump { offset } => assert!(offset == 0),
+                        JumpIfTrue { test, offset } => {
                             assert!(test == 2);
                             assert!(offset == 0);
                         }
-                        JMPNT { test, offset } => {
+                        JumpIfNotTrue { test, offset } => {
                             assert!(test == 2);
                             assert!(offset == 0);
                         }
-                        LOADNIL { dest } => assert!(dest == 2),
-                        LOADGLOBAL { dest, name } => {
+                        LoadNil { dest } => assert!(dest == 2),
+                        LoadGlobal { dest, name } => {
                             assert!(dest == 2);
                             assert!(name == 2);
                         }
-                        STOREGLOBAL { src, name } => {
+                        StoreGlobal { src, name } => {
                             assert!(src == 2);
                             assert!(name == 2);
                         }
-                        CALL {
+                        Call {
                             function,
                             dest,
                             arg_count,
@@ -641,7 +642,7 @@ mod test {
                             assert!(dest == 2);
                             assert!(arg_count == 0);
                         }
-                        MAKE_CLOSURE {
+                        MakeClosure {
                             dest,
                             function,
                             function_scope,
@@ -650,15 +651,15 @@ mod test {
                             assert!(function == 2);
                             assert!(function_scope == 0);
                         }
-                        LOADINT { dest, integer } => {
+                        LoadInteger { dest, integer } => {
                             assert!(dest == 2);
                             assert!(integer == 0);
                         }
-                        COPYREG { dest, src } => {
+                        CopyRegister { dest, src } => {
                             assert!(dest == 2);
                             assert!(src == 2);
                         }
-                        LOADNONLOCAL {
+                        LoadNonLocal {
                             dest,
                             src,
                             frame_offset,
@@ -667,22 +668,22 @@ mod test {
                             assert!(src == 2);
                             assert!(frame_offset == 0);
                         }
-                        ADD { dest, reg1, reg2 } => {
+                        Add { dest, reg1, reg2 } => {
                             assert!(dest == 2);
                             assert!(reg1 == 2);
                             assert!(reg2 == 2);
                         }
-                        SUB { dest, left, right } => {
+                        Subtract { dest, left, right } => {
                             assert!(dest == 2);
                             assert!(left == 2);
                             assert!(right == 2);
                         }
-                        MUL { dest, reg1, reg2 } => {
+                        Multiply { dest, reg1, reg2 } => {
                             assert!(dest == 2);
                             assert!(reg1 == 2);
                             assert!(reg2 == 2);
                         }
-                        DIVINTEGER { dest, num, denom } => {
+                        DivideInteger { dest, num, denom } => {
                             assert!(dest == 2);
                             assert!(num == 2);
                             assert!(denom == 2);
