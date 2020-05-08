@@ -92,7 +92,9 @@ impl Print for Function {
         guard: &'guard dyn MutatorScope,
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
-        self.code.get(guard).debug(guard, f)
+        self.print(guard, f)?;
+        write!(f, "\nbytecode follows:\n")?;
+        self.code(guard).debug(guard, f)
     }
 }
 

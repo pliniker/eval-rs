@@ -519,8 +519,6 @@ impl<'parent> Compiler<'parent> {
         mem: &'guard MutatorView,
         args: TaggedScopedPtr<'guard>,
     ) -> Result<Register, RuntimeError> {
-        let bytecode = self.bytecode.get(mem);
-
         let let_expr = vec_from_pairs(mem, args)?;
         if let_expr.len() < 2 {
             return Err(err_eval("A let expression must have at least 2 arguments"));
