@@ -28,6 +28,7 @@ use crate::printer::Print;
 use crate::safeptr::{MutatorScope, ScopedPtr};
 use crate::symbol::Symbol;
 use crate::text::Text;
+use crate::vm::Upvalue;
 
 /// A safe interface to GC-heap managed objects. The `'guard` lifetime must be a safe lifetime for
 /// the GC not to move or collect the referenced object.
@@ -46,6 +47,7 @@ pub enum Value<'guard> {
     Dict(ScopedPtr<'guard, Dict>),
     Function(ScopedPtr<'guard, Function>),
     Partial(ScopedPtr<'guard, Partial>),
+    Upvalue(ScopedPtr<'guard, Upvalue>),
 }
 
 /// `Value` can have a safe `Display` implementation
@@ -63,6 +65,7 @@ impl<'guard> fmt::Display for Value<'guard> {
             Value::Dict(d) => d.print(self, f),
             Value::Function(n) => n.print(self, f),
             Value::Partial(p) => p.print(self, f),
+            Value::Upvalue(u) => write!(f, "Upvalue"),
             _ => write!(f, "<unidentified-object-type>"),
         }
     }
@@ -82,6 +85,7 @@ impl<'guard> fmt::Debug for Value<'guard> {
             Value::Dict(d) => d.debug(self, f),
             Value::Function(n) => n.debug(self, f),
             Value::Partial(p) => p.debug(self, f),
+            Value::Upvalue(u) => write!(f, "Upvalue"),
             _ => write!(f, "<unidentified-object-type>"),
         }
     }
@@ -105,6 +109,7 @@ pub enum FatPtr {
     Dict(RawPtr<Dict>),
     Function(RawPtr<Function>),
     Partial(RawPtr<Partial>),
+    Upvalue(RawPtr<Upvalue>),
 }
 
 impl FatPtr {
@@ -136,6 +141,9 @@ impl FatPtr {
             FatPtr::Partial(raw_ptr) => {
                 Value::Partial(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
             }
+            FatPtr::Upvalue(raw_ptr) => {
+                Value::Upvalue(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
+            }
         }
     }
 }
@@ -161,6 +169,7 @@ fatptr_from_rawptr!(ArrayU32, ArrayU32);
 fatptr_from_rawptr!(Dict, Dict);
 fatptr_from_rawptr!(Function, Function);
 fatptr_from_rawptr!(Partial, Partial);
+fatptr_from_rawptr!(Upvalue, Upvalue);
 
 /// Conversion from a TaggedPtr type
 impl From<TaggedPtr> for FatPtr {
@@ -281,6 +290,7 @@ impl From<FatPtr> for TaggedPtr {
             FatPtr::Dict(raw) => TaggedPtr::object(raw),
             FatPtr::Function(raw) => TaggedPtr::object(raw),
             FatPtr::Partial(raw) => TaggedPtr::object(raw),
+            FatPtr::Upvalue(raw) => TaggedPtr::object(raw),
         }
     }
 }

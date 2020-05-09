@@ -142,6 +142,14 @@ pub enum Opcode {
         num: Register,
         denom: Register,
     },
+    GetUpvalue {
+        dest: Register,
+        src: Register,
+    },
+    SetUpvalue {
+        dest: Register,
+        src: Register,
+    },
 }
 
 /// Bytecode is stored as fixed-width 32-bit values.
@@ -347,6 +355,14 @@ impl ByteCode {
                         dest: dest + 1,
                         num: num + 1,
                         denom: denom + 1,
+                    },
+                    GetUpvalue { dest, src } => GetUpvalue {
+                        dest: dest + 1,
+                        src: src + 1,
+                    },
+                    SetUpvalue { dest, src } => SetUpvalue {
+                        dest: dest + 1,
+                        src: src + 1,
                     },
                 }
             }
@@ -577,6 +593,8 @@ mod test {
                     denom: 1,
                 },
             )?;
+            code.push(mem, GetUpvalue { dest: 1, src: 1 })?;
+            code.push(mem, SetUpvalue { dest: 1, src: 1 })?;
 
             code.increment_all_registers(mem)?;
 
@@ -659,6 +677,7 @@ mod test {
                             assert!(dest == 2);
                             assert!(src == 2);
                         }
+                        // TODO deprecate
                         LoadNonLocal {
                             dest,
                             src,
@@ -687,6 +706,14 @@ mod test {
                             assert!(dest == 2);
                             assert!(num == 2);
                             assert!(denom == 2);
+                        }
+                        GetUpvalue { dest, src } => {
+                            assert!(dest == 2);
+                            assert!(src == 2);
+                        }
+                        SetUpvalue { dest, src } => {
+                            assert!(dest == 2);
+                            assert!(src == 2);
                         }
                     }
                 }

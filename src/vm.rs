@@ -87,10 +87,10 @@ impl Upvalue {
         &self,
         guard: &'guard dyn MutatorScope,
         stack: ScopedPtr<'guard, List>,
-    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
+    ) -> Result<TaggedPtr, RuntimeError> {
         match &self.closed {
-            Some(value) => Ok(value.get(guard)),
-            None => IndexedAnyContainer::get(&*stack, guard, self.location),
+            Some(value) => Ok(value.get_ptr()),
+            None => Ok(IndexedContainer::get(&*stack, guard, self.location)?.get_ptr()),
         }
     }
 
@@ -491,6 +491,16 @@ impl Thread {
                 Opcode::Multiply { dest, reg1, reg2 } => unimplemented!(),
 
                 Opcode::DivideInteger { dest, num, denom } => unimplemented!(),
+
+                Opcode::GetUpvalue { dest, src } => {
+                    let upvalue_ptr = window[src as usize].get(mem);
+
+                    if let Value::Upvalue(upvalue) = *upvalue_ptr {
+                        window[dest as usize].set_to_ptr(upvalue.get(mem, stack)?);
+                    }
+                }
+
+                Opcode::SetUpvalue { dest, src } => unimplemented!(),
             }
 
             Ok(EvalStatus::Pending)
