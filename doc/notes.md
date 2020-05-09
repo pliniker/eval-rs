@@ -138,7 +138,7 @@ Need an Upvalue type:
 ```
 struct Upvalue {
     closed: TaggedCellPtr,
-    location: ArraySize,
+    location: ArraySize,  // this might be a pointer but...
     open: bool,
     next: Option<CellPtr<UpValue>>,
 }

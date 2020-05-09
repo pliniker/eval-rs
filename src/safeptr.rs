@@ -195,6 +195,12 @@ impl TaggedCellPtr {
         }
     }
 
+    pub fn new_ptr(source: TaggedPtr) -> TaggedCellPtr {
+        TaggedCellPtr {
+            inner: Cell::new(source),
+        }
+    }
+
     /// Return the pointer as a `TaggedScopedPtr` type that carries a copy of the `TaggedPtr` and
     /// a `Value` type for both copying and access convenience
     pub fn get<'guard>(&self, guard: &'guard dyn MutatorScope) -> TaggedScopedPtr<'guard> {

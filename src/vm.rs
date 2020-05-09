@@ -3,8 +3,8 @@ use std::cell::Cell;
 use crate::array::{Array, ArraySize};
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{
-    Container, FillAnyContainer, HashIndexedAnyContainer, IndexedContainer, SliceableContainer,
-    StackContainer,
+    Container, FillAnyContainer, HashIndexedAnyContainer, IndexedAnyContainer, IndexedContainer,
+    SliceableContainer, StackContainer,
 };
 use crate::dict::Dict;
 use crate::error::{err_eval, RuntimeError};
@@ -12,7 +12,7 @@ use crate::function::{Function, Partial};
 use crate::list::List;
 use crate::memory::MutatorView;
 use crate::pair::Pair;
-use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr, TaggedScopedPtr};
+use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr, TaggedCellPtr, TaggedScopedPtr};
 use crate::taggedptr::{TaggedPtr, Value};
 
 /// Control flow flags
@@ -59,6 +59,69 @@ impl CallFrame {
 
 /// A stack of CallFrame instances
 pub type CallFrameList = Array<CallFrame>;
+
+/// Closure upvalue as generally described by Lua 5.1 implementation
+#[derive(Clone)]
+pub struct Upvalue {
+    // Upvalue location can't be a pointer because it would be a pointer into the dynamically
+    // alloocated stack List - the pointer would be invalidated if the stack gets reallocated.
+    closed: Option<TaggedCellPtr>,
+    location: ArraySize,
+    next: Option<CellPtr<Upvalue>>,
+}
+
+impl Upvalue {
+    fn alloc<'guard>(
+        mem: &'guard MutatorView,
+        location: ArraySize,
+    ) -> Result<ScopedPtr<'guard, Upvalue>, RuntimeError> {
+        mem.alloc(Upvalue {
+            closed: None,
+            location,
+            next: None,
+        })
+    }
+
+    // Dereference the upvalue
+    fn get<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        stack: ScopedPtr<'guard, List>,
+    ) -> Result<TaggedScopedPtr<'guard>, RuntimeError> {
+        match &self.closed {
+            Some(value) => Ok(value.get(guard)),
+            None => IndexedAnyContainer::get(&*stack, guard, self.location),
+        }
+    }
+
+    // Write a new value to the Upvalue, placing it here or on the stack depending on the
+    // closedness of it.
+    fn set<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        stack: ScopedPtr<'guard, List>,
+        ptr: TaggedPtr,
+    ) -> Result<(), RuntimeError> {
+        match &self.closed {
+            Some(value) => value.set_to_ptr(ptr),
+            None => {
+                IndexedContainer::set(&*stack, guard, self.location, TaggedCellPtr::new_ptr(ptr))?
+            }
+        };
+        Ok(())
+    }
+
+    // Close the upvalue, copying the stack variable's value into the Upvalue
+    fn close<'guard>(
+        &mut self,
+        guard: &'guard dyn MutatorScope,
+        stack: ScopedPtr<'guard, List>,
+    ) -> Result<(), RuntimeError> {
+        let ptr = IndexedContainer::get(&*stack, guard, self.location)?;
+        self.closed = Some(ptr.clone());
+        Ok(())
+    }
+}
 
 /// The set of data structures comprising an execution thread
 pub struct Thread {
