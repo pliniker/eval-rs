@@ -65,7 +65,8 @@ pub type CallFrameList = Array<CallFrame>;
 pub struct Upvalue {
     // Upvalue location can't be a pointer because it would be a pointer into the dynamically
     // alloocated stack List - the pointer would be invalidated if the stack gets reallocated.
-    closed: Option<TaggedCellPtr>,
+    value: TaggedCellPtr,
+    closed: Cell<bool>,
     location: ArraySize,
     next: Option<CellPtr<Upvalue>>,
 }
@@ -76,7 +77,8 @@ impl Upvalue {
         location: ArraySize,
     ) -> Result<ScopedPtr<'guard, Upvalue>, RuntimeError> {
         mem.alloc(Upvalue {
-            closed: None,
+            value: TaggedCellPtr::new_nil(),
+            closed: Cell::new(false),
             location,
             next: None,
         })
@@ -88,9 +90,9 @@ impl Upvalue {
         guard: &'guard dyn MutatorScope,
         stack: ScopedPtr<'guard, List>,
     ) -> Result<TaggedPtr, RuntimeError> {
-        match &self.closed {
-            Some(value) => Ok(value.get_ptr()),
-            None => Ok(IndexedContainer::get(&*stack, guard, self.location)?.get_ptr()),
+        match self.closed.get() {
+            true => Ok(self.value.get_ptr()),
+            false => Ok(IndexedContainer::get(&*stack, guard, self.location)?.get_ptr()),
         }
     }
 
@@ -102,9 +104,9 @@ impl Upvalue {
         stack: ScopedPtr<'guard, List>,
         ptr: TaggedPtr,
     ) -> Result<(), RuntimeError> {
-        match &self.closed {
-            Some(value) => value.set_to_ptr(ptr),
-            None => {
+        match self.closed.get() {
+            true => self.value.set_to_ptr(ptr),
+            false => {
                 IndexedContainer::set(&*stack, guard, self.location, TaggedCellPtr::new_ptr(ptr))?
             }
         };
@@ -113,12 +115,13 @@ impl Upvalue {
 
     // Close the upvalue, copying the stack variable's value into the Upvalue
     fn close<'guard>(
-        &mut self,
+        &self,
         guard: &'guard dyn MutatorScope,
         stack: ScopedPtr<'guard, List>,
     ) -> Result<(), RuntimeError> {
-        let ptr = IndexedContainer::get(&*stack, guard, self.location)?;
-        self.closed = Some(ptr.clone());
+        let ptr = IndexedContainer::get(&*stack, guard, self.location)?.get_ptr();
+        self.value.set_to_ptr(ptr);
+        self.closed.set(true);
         Ok(())
     }
 }
@@ -453,14 +456,12 @@ impl Thread {
                     }
                 }
 
-                Opcode::MakeClosure {
-                    dest,
-                    function,
-                    function_scope,
-                } => {
+                Opcode::MakeClosure { dest, function } => {
                     // TODO
                     // 1. create new Partial
-                    // 2. iter over function nonlocals, offset by function_scope, copying to new Partial
+                    // 2. iter over function nonlocals
+                    //   - find or create Upvalue for each
+                    //   - copy Upvalue ref to Partial applied args
                     // 3. set dest to Partial
                     unimplemented!()
                 }
@@ -497,10 +498,35 @@ impl Thread {
 
                     if let Value::Upvalue(upvalue) = *upvalue_ptr {
                         window[dest as usize].set_to_ptr(upvalue.get(mem, stack)?);
+                    } else {
+                        return Err(err_eval("Expected to find Upvalue"));
                     }
                 }
 
-                Opcode::SetUpvalue { dest, src } => unimplemented!(),
+                Opcode::SetUpvalue { dest, src } => {
+                    let upvalue_ptr = window[dest as usize].get(mem);
+
+                    if let Value::Upvalue(upvalue) = *upvalue_ptr {
+                        upvalue.set(mem, stack, window[src as usize].get_ptr())?;
+                    } else {
+                        return Err(err_eval("Expected to find Upvalue"));
+                    }
+                }
+
+                Opcode::CloseUpvalues { reg1, reg2, reg3 } => {
+                    for reg in &[reg1, reg2, reg3] {
+                        // a zero value is not a valid upvalue pointing register, ignore it
+                        if *reg > 0 {
+                            let upvalue_ptr = window[*reg as usize].get(mem);
+
+                            if let Value::Upvalue(upvalue) = *upvalue_ptr {
+                                upvalue.close(mem, stack)?;
+                            } else {
+                                return Err(err_eval("Expected to find Upvalue"));
+                            }
+                        }
+                    }
+                }
             }
 
             Ok(EvalStatus::Pending)

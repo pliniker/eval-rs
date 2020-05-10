@@ -107,7 +107,6 @@ pub enum Opcode {
     MakeClosure {
         dest: Register,
         function: Register,
-        function_scope: FrameOffset,
     },
     LoadInteger {
         dest: Register,
@@ -149,6 +148,11 @@ pub enum Opcode {
     SetUpvalue {
         dest: Register,
         src: Register,
+    },
+    CloseUpvalues {
+        reg1: Register,
+        reg2: Register,
+        reg3: Register,
     },
 }
 
@@ -310,14 +314,9 @@ impl ByteCode {
                         dest: dest + 1,
                         arg_count,
                     },
-                    MakeClosure {
-                        dest,
-                        function,
-                        function_scope,
-                    } => MakeClosure {
+                    MakeClosure { dest, function } => MakeClosure {
                         dest: dest + 1,
                         function: function + 1,
-                        function_scope,
                     },
                     LoadInteger { dest, integer } => LoadInteger {
                         dest: dest + 1,
@@ -363,6 +362,12 @@ impl ByteCode {
                     SetUpvalue { dest, src } => SetUpvalue {
                         dest: dest + 1,
                         src: src + 1,
+                    },
+                    // if an upvalue register is 0, it doesn't point to an upvalue
+                    CloseUpvalues { reg1, reg2, reg3 } => CloseUpvalues {
+                        reg1: if reg1 == 0 { 0 } else { reg1 + 1 },
+                        reg2: if reg2 == 0 { 0 } else { reg2 + 1 },
+                        reg3: if reg3 == 0 { 0 } else { reg3 + 1 },
                     },
                 }
             }
@@ -542,7 +547,6 @@ mod test {
                 MakeClosure {
                     dest: 1,
                     function: 1,
-                    function_scope: 0,
                 },
             )?;
             code.push(
@@ -595,6 +599,14 @@ mod test {
             )?;
             code.push(mem, GetUpvalue { dest: 1, src: 1 })?;
             code.push(mem, SetUpvalue { dest: 1, src: 1 })?;
+            code.push(
+                mem,
+                CloseUpvalues {
+                    reg1: 1,
+                    reg2: 1,
+                    reg3: 0,
+                },
+            )?;
 
             code.increment_all_registers(mem)?;
 
@@ -660,14 +672,9 @@ mod test {
                             assert!(dest == 2);
                             assert!(arg_count == 0);
                         }
-                        MakeClosure {
-                            dest,
-                            function,
-                            function_scope,
-                        } => {
+                        MakeClosure { dest, function } => {
                             assert!(dest == 2);
                             assert!(function == 2);
-                            assert!(function_scope == 0);
                         }
                         LoadInteger { dest, integer } => {
                             assert!(dest == 2);
@@ -714,6 +721,11 @@ mod test {
                         SetUpvalue { dest, src } => {
                             assert!(dest == 2);
                             assert!(src == 2);
+                        }
+                        CloseUpvalues { reg1, reg2, reg3 } => {
+                            assert!(reg1 == 2);
+                            assert!(reg2 == 2);
+                            assert!(reg3 == 0);
                         }
                     }
                 }
