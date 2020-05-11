@@ -460,10 +460,43 @@ impl Thread {
                     // TODO
                     // 1. create new Partial
                     // 2. iter over function nonlocals
-                    //   - find or create Upvalue for each
+                    //   - calculate absolute stack offset for each
+                    //   - find or create new Upvalue for each
                     //   - copy Upvalue ref to Partial applied args
                     // 3. set dest to Partial
-                    unimplemented!()
+                    let function_ptr = window[function as usize].get(mem);
+                    if let Value::Function(f) = *function_ptr {
+                        // Allocate a temp array on the native stack
+                        let mut upvalue_refs: [ArraySize; 255] = [0; 255];
+
+                        // iter over function nonlocals, calculating absolute stack offset for each
+                        f.nonlocals(mem).access_slice(
+                            mem,
+                            |nonlocals| -> Result<(), RuntimeError> {
+                                for (index, compound) in nonlocals.iter().enumerate() {
+                                    let frame_offset = (*compound >> 8) as ArraySize;
+                                    let window_offset = (*compound & 0xff) as ArraySize;
+
+                                    // subtract 2:
+                                    //  - 1 because frames.length() a 0-based index
+                                    //  - 1 because the function counts it's frame offsets from
+                                    //    inside it's scope and we're outside it here
+                                    let frame =
+                                        frames.get(mem, frames.length() - 2 - frame_offset)?;
+                                    let frame_base = frame.base;
+                                    let location = frame_base + window_offset;
+                                    upvalue_refs[index] = location;
+                                }
+                                Ok(())
+                            },
+                        )?;
+
+                        let partial = Partial::alloc(mem, f, &window[args_start..args_end])?;
+
+                        window[dest as usize].set(partial.as_tagged(mem));
+                    } else {
+                        return Err(err_eval("Cannot make a closure from a non-Function type"));
+                    }
                 }
 
                 Opcode::CopyRegister { dest, src } => {

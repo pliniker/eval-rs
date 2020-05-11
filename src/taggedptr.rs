@@ -16,7 +16,7 @@ use std::ptr::NonNull;
 
 use stickyimmix::{AllocRaw, RawPtr};
 
-use crate::array::{ArrayU32, ArrayU8};
+use crate::array::{ArrayU16, ArrayU32, ArrayU8};
 use crate::dict::Dict;
 use crate::function::{Function, Partial};
 use crate::list::List;
@@ -43,6 +43,7 @@ pub enum Value<'guard> {
     Text(ScopedPtr<'guard, Text>),
     List(ScopedPtr<'guard, List>),
     ArrayU8(ScopedPtr<'guard, ArrayU8>),
+    ArrayU16(ScopedPtr<'guard, ArrayU16>),
     ArrayU32(ScopedPtr<'guard, ArrayU32>),
     Dict(ScopedPtr<'guard, Dict>),
     Function(ScopedPtr<'guard, Function>),
@@ -61,6 +62,7 @@ impl<'guard> fmt::Display for Value<'guard> {
             Value::Text(t) => t.print(self, f),
             Value::List(a) => a.print(self, f),
             Value::ArrayU8(a) => a.print(self, f),
+            Value::ArrayU16(a) => a.print(self, f),
             Value::ArrayU32(a) => a.print(self, f),
             Value::Dict(d) => d.print(self, f),
             Value::Function(n) => n.print(self, f),
@@ -81,6 +83,7 @@ impl<'guard> fmt::Debug for Value<'guard> {
             Value::Text(t) => t.debug(self, f),
             Value::List(a) => a.debug(self, f),
             Value::ArrayU8(a) => a.debug(self, f),
+            Value::ArrayU16(a) => a.debug(self, f),
             Value::ArrayU32(a) => a.debug(self, f),
             Value::Dict(d) => d.debug(self, f),
             Value::Function(n) => n.debug(self, f),
@@ -105,6 +108,7 @@ pub enum FatPtr {
     Text(RawPtr<Text>),
     List(RawPtr<List>),
     ArrayU8(RawPtr<ArrayU8>),
+    ArrayU16(RawPtr<ArrayU16>),
     ArrayU32(RawPtr<ArrayU32>),
     Dict(RawPtr<Dict>),
     Function(RawPtr<Function>),
@@ -130,6 +134,9 @@ impl FatPtr {
             FatPtr::List(raw_ptr) => Value::List(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard))),
             FatPtr::ArrayU8(raw_ptr) => {
                 Value::ArrayU8(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
+            }
+            FatPtr::ArrayU16(raw_ptr) => {
+                Value::ArrayU16(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
             }
             FatPtr::ArrayU32(raw_ptr) => {
                 Value::ArrayU32(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
@@ -165,6 +172,7 @@ fatptr_from_rawptr!(NumberObject, NumberObject);
 fatptr_from_rawptr!(Text, Text);
 fatptr_from_rawptr!(List, List);
 fatptr_from_rawptr!(ArrayU8, ArrayU8);
+fatptr_from_rawptr!(ArrayU16, ArrayU16);
 fatptr_from_rawptr!(ArrayU32, ArrayU32);
 fatptr_from_rawptr!(Dict, Dict);
 fatptr_from_rawptr!(Function, Function);
@@ -286,6 +294,7 @@ impl From<FatPtr> for TaggedPtr {
             FatPtr::Text(raw) => TaggedPtr::object(raw),
             FatPtr::List(raw) => TaggedPtr::object(raw),
             FatPtr::ArrayU8(raw) => TaggedPtr::object(raw),
+            FatPtr::ArrayU16(raw) => TaggedPtr::object(raw),
             FatPtr::ArrayU32(raw) => TaggedPtr::object(raw),
             FatPtr::Dict(raw) => TaggedPtr::object(raw),
             FatPtr::Function(raw) => TaggedPtr::object(raw),

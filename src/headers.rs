@@ -4,7 +4,7 @@ use stickyimmix::{
     AllocHeader, AllocObject, AllocRaw, AllocTypeId, ArraySize, Mark, RawPtr, SizeClass,
 };
 
-use crate::array::{ArrayU32, ArrayU8};
+use crate::array::{ArrayU16, ArrayU32, ArrayU8};
 use crate::bytecode::{ArrayOpcode, ByteCode, InstructionStream};
 use crate::dict::Dict;
 use crate::function::{Function, Partial};
@@ -30,6 +30,7 @@ pub enum TypeList {
     Array, // type id for array backing bytes
     List,
     ArrayU8,
+    ArrayU16,
     ArrayU32,
     Dict,
     ArrayOpcode,
@@ -67,6 +68,7 @@ impl ObjectHeader {
             }
             TypeList::Text => FatPtr::Text(RawPtr::untag(object_addr.cast::<Text>())),
             TypeList::ArrayU8 => FatPtr::ArrayU8(RawPtr::untag(object_addr.cast::<ArrayU8>())),
+            TypeList::ArrayU16 => FatPtr::ArrayU16(RawPtr::untag(object_addr.cast::<ArrayU16>())),
             TypeList::ArrayU32 => FatPtr::ArrayU32(RawPtr::untag(object_addr.cast::<ArrayU32>())),
             TypeList::List => FatPtr::List(RawPtr::untag(object_addr.cast::<List>())),
             TypeList::Dict => FatPtr::Dict(RawPtr::untag(object_addr.cast::<Dict>())),
@@ -141,6 +143,7 @@ declare_allocobject!(NumberObject, NumberObject);
 declare_allocobject!(Text, Text);
 declare_allocobject!(List, List);
 declare_allocobject!(ArrayU8, ArrayU8);
+declare_allocobject!(ArrayU16, ArrayU16);
 declare_allocobject!(ArrayU32, ArrayU32);
 declare_allocobject!(Dict, Dict);
 declare_allocobject!(ArrayOpcode, ArrayOpcode);

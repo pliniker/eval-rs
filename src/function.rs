@@ -1,7 +1,7 @@
 use itertools::join;
 use std::fmt;
 
-use crate::array::ArrayU8;
+use crate::array::ArrayU16;
 use crate::bytecode::ByteCode;
 use crate::containers::{Container, ContainerFromSlice, SliceableContainer, StackContainer};
 use crate::error::RuntimeError;
@@ -20,18 +20,23 @@ pub struct Function {
     code: CellPtr<ByteCode>,
     // Param names are stored for examination of a function signature
     param_names: CellPtr<List>,
-    // TODO - list of negative indexes into stack where free variable values should be copied from
-    nonlocal_refs: CellPtr<ArrayU8>,
+    // List of (CallFrame-index: u8 | Window-index: u8) indexes into the call stack
+    // where nonlocal variables will be found
+    nonlocal_refs: CellPtr<ArrayU16>,
 }
 
 impl Function {
-    /// Allocate a Function object on the heap
+    /// Allocate a Function object on the heap.
+    ///
+    /// The nonlocal_refs arg must contain a list of 16 bit values composed of two
+    /// 8 bit values: CallFrame Index << 8 | Window Index
+    /// These values should follow the same order as given in param_names
     pub fn alloc<'guard>(
         mem: &'guard MutatorView,
         name: TaggedScopedPtr<'guard>,
         param_names: ScopedPtr<'guard, List>,
         code: ScopedPtr<'guard, ByteCode>,
-        nonlocal_refs: ScopedPtr<'guard, ArrayU8>,
+        nonlocal_refs: ScopedPtr<'guard, ArrayU16>,
     ) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
         mem.alloc(Function {
             name: TaggedCellPtr::new_with(name),
@@ -64,6 +69,14 @@ impl Function {
     /// Return the ByteCode object associated with the Function
     pub fn code<'guard>(&self, guard: &'guard dyn MutatorScope) -> ScopedPtr<'guard, ByteCode> {
         self.code.get(guard)
+    }
+
+    /// Return a list of nonlocal stack references referenced by the function
+    pub fn nonlocals<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+    ) -> ScopedPtr<'guard, ArrayU16> {
+        self.nonlocal_refs.get(guard)
     }
 }
 

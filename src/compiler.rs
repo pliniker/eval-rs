@@ -248,6 +248,8 @@ impl<'parent> Compiler<'parent> {
                         if let Some((frame_offset, src)) = self.locals.lookup_binding(ast_node)? {
                             if frame_offset > 0 {
                                 // nonlocal nonglobal binding
+                                // TODO instead of issuing a LoadNonLocal, add this variable to the
+                                // parameter scope as an Upvalue and issue a GetUpvalue instruction
                                 let dest = self.acquire_reg();
                                 self.push(
                                     mem,
@@ -433,6 +435,8 @@ impl<'parent> Compiler<'parent> {
 
         // load the function object as a literal
         self.push_load_literal(mem, fn_object)
+
+        // TODO if fn_object has nonlocal refs, compile a MakeClosure instruction in addition
     }
 
     /// (def name (args) (expr))
@@ -464,6 +468,8 @@ impl<'parent> Compiler<'parent> {
         self.push(mem, Opcode::StoreGlobal { src, name })?;
 
         Ok(src)
+
+        // TODO if fn_object has nonlocal refs, compile a MakeClosure instruction in addition
     }
 
     /// (name <arg-expr-1> <arg-expr-n>)
