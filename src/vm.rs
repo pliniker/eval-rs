@@ -3,8 +3,8 @@ use std::cell::Cell;
 use crate::array::{Array, ArraySize};
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{
-    Container, FillAnyContainer, HashIndexedAnyContainer, IndexedAnyContainer, IndexedContainer,
-    SliceableContainer, StackContainer,
+    Container, FillAnyContainer, HashIndexedAnyContainer, IndexedContainer, SliceableContainer,
+    StackContainer,
 };
 use crate::dict::Dict;
 use crate::error::{err_eval, RuntimeError};
@@ -15,22 +15,28 @@ use crate::pair::Pair;
 use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr, TaggedCellPtr, TaggedScopedPtr};
 use crate::taggedptr::{TaggedPtr, Value};
 
-/// Control flow flags
+/// Evaluation control flow flags
 #[derive(PartialEq)]
 pub enum EvalStatus<'guard> {
+    /// Eval result is pending, more instructions must be executed
     Pending,
+    /// Eval is complete, here is the resulting value
     Return(TaggedScopedPtr<'guard>),
 }
 
 /// A call frame, separate from the register stack
 #[derive(Clone)]
 pub struct CallFrame {
+    /// Pointer to the Function being executed
     function: CellPtr<Function>,
+    /// Return IP when returning from a nested function call
     ip: Cell<ArraySize>,
+    /// Stack base - index into the register stack where register window for this function begins
     base: ArraySize,
 }
 
 impl CallFrame {
+    /// Instantiate an outer-level call frame at the beginning of the stack
     pub fn new_main<'guard>(main_fn: ScopedPtr<'guard, Function>) -> CallFrame {
         CallFrame {
             function: CellPtr::new_with(main_fn),
@@ -39,6 +45,8 @@ impl CallFrame {
         }
     }
 
+    /// Instantiate a new stack frame for the given function, beginning execution at the given
+    /// instruction pointer and a register window at `base`
     fn new<'guard>(
         function: ScopedPtr<'guard, Function>,
         ip: ArraySize,
@@ -51,16 +59,22 @@ impl CallFrame {
         }
     }
 
+    /// Return a string representation of this stack frame
     fn as_string<'guard>(&self, guard: &'guard dyn MutatorScope) -> String {
         let function = self.function.get(guard);
         format!("in {}", function)
     }
 }
 
-/// A stack of CallFrame instances
+/// Call frames are stored in a separate stack to the register window stack. This simplifies types
+/// and stack math.
 pub type CallFrameList = Array<CallFrame>;
 
-/// Closure upvalue as generally described by Lua 5.1 implementation
+/// A closure upvalue as generally described by Lua 5.1 implementation.
+/// There is one main difference - in the Lua (and Crafting Interpreters) documentation, an upvalue
+/// is closed by pointing the `location` pointer at the `closed` pointer directly in the struct.
+/// This isn't a good idea _here_ because a stack location may be invalidated by the stack List
+/// object being reallocated. This VM doesn't support pointers into objects.
 #[derive(Clone)]
 pub struct Upvalue {
     // Upvalue location can't be a pointer because it would be a pointer into the dynamically
@@ -72,6 +86,8 @@ pub struct Upvalue {
 }
 
 impl Upvalue {
+    /// Allocate a new Upvalue on the heap. The absolute stack index of the object must be
+    /// provided.
     fn alloc<'guard>(
         mem: &'guard MutatorView,
         location: ArraySize,
@@ -84,7 +100,7 @@ impl Upvalue {
         })
     }
 
-    // Dereference the upvalue
+    /// Dereference the upvalue
     fn get<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
@@ -96,8 +112,8 @@ impl Upvalue {
         }
     }
 
-    // Write a new value to the Upvalue, placing it here or on the stack depending on the
-    // closedness of it.
+    /// Write a new value to the Upvalue, placing it here or on the stack depending on the
+    /// closedness of it.
     fn set<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
@@ -113,7 +129,7 @@ impl Upvalue {
         Ok(())
     }
 
-    // Close the upvalue, copying the stack variable's value into the Upvalue
+    /// Close the upvalue, copying the stack variable value into the Upvalue
     fn close<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
@@ -467,7 +483,7 @@ impl Thread {
                     let function_ptr = window[function as usize].get(mem);
                     if let Value::Function(f) = *function_ptr {
                         // Allocate a temp array on the native stack
-                        let mut upvalue_refs: [ArraySize; 255] = [0; 255];
+                        let mut stack_locations: [ArraySize; 255] = [0; 255];
 
                         // iter over function nonlocals, calculating absolute stack offset for each
                         f.nonlocals(mem).access_slice(
@@ -485,14 +501,25 @@ impl Thread {
                                         frames.get(mem, frames.length() - 2 - frame_offset)?;
                                     let frame_base = frame.base;
                                     let location = frame_base + window_offset;
-                                    upvalue_refs[index] = location;
+                                    stack_locations[index] = location;
                                 }
                                 Ok(())
                             },
                         )?;
 
-                        let partial = Partial::alloc(mem, f, &window[args_start..args_end])?;
+                        // allocate a block of the register window to push upvalues into
+                        let num_upvalues = f.nonlocals(mem).length();
+                        let args_start = dest as usize + 1;
+                        let args_end = args_start as usize + num_upvalues as usize;
 
+                        for index in 0..num_upvalues {
+                            // TODO - find or create Upvalue object, put it in the register at
+                            // window[args_start + index]
+                        }
+
+                        // Instantiate a Partial function application from the Upvalues and set the
+                        // destination register
+                        let partial = Partial::alloc(mem, f, &window[args_start..args_end])?;
                         window[dest as usize].set(partial.as_tagged(mem));
                     } else {
                         return Err(err_eval("Cannot make a closure from a non-Function type"));
