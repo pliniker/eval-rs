@@ -182,12 +182,12 @@ impl ByteCode {
         })
     }
 
-    /// Push an instuction to the back of the sequence
+    /// Append an instuction to the back of the sequence
     pub fn push<'guard>(&self, mem: &'guard MutatorView, op: Opcode) -> Result<(), RuntimeError> {
         self.code.push(mem, op)
     }
 
-    /// Set the jump offset of a jump instruction to a new value
+    /// Set the jump offset of an existing jump instruction to a new value
     pub fn update_jump_offset<'guard>(
         &self,
         mem: &'guard MutatorView,
@@ -209,7 +209,7 @@ impl ByteCode {
         Ok(())
     }
 
-    /// Push a literal-load operation to the back of the sequence
+    /// Append a literal-load operation to the back of the sequence
     pub fn push_loadlit<'guard>(
         &self,
         mem: &'guard MutatorView,
@@ -393,7 +393,8 @@ impl Print for ByteCode {
     }
 }
 
-/// Interpret a ByteCode as a stream of instructions, handling an instruction-pointer abstraction.
+/// An InstructionStream is a pointer to a ByteCode instance and an instruction pointer giving the
+/// current index into the ByteCode
 pub struct InstructionStream {
     instructions: CellPtr<ByteCode>,
     ip: Cell<ArraySize>,
@@ -417,7 +418,7 @@ impl InstructionStream {
         self.ip.set(ip);
     }
 
-    /// Retrieve the next instruction and return the Opcode, if it correctly decodes
+    /// Retrieve the next instruction and return it, incrementing the instruction pointer
     pub fn get_next_opcode<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
@@ -431,7 +432,7 @@ impl InstructionStream {
         Ok(instr)
     }
 
-    /// Retrieve the literal pointer from the current instruction
+    /// Given an index into the literals list, return the pointer in the list at that index.
     pub fn get_literal<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,

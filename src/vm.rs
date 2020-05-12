@@ -188,7 +188,7 @@ impl Thread {
         })
     }
 
-    /// Execute the next instruction in the instruction stream
+    /// Execute the next instruction in the current instruction stream
     fn eval_next_instr<'guard>(
         &self,
         mem: &'guard MutatorView,
