@@ -14,14 +14,16 @@ use crate::taggedptr::Value;
 /// A function object type
 #[derive(Clone)]
 pub struct Function {
-    // name could be a Symbol, or nil if it is an anonymous fn
+    /// name could be a Symbol, or nil if it is an anonymous fn
     name: TaggedCellPtr,
+    /// Number of arguments required to activate the function
     arity: u8,
+    /// Instructions comprising the function code
     code: CellPtr<ByteCode>,
-    // Param names are stored for examination of a function signature
+    /// Param names are stored for introspection of a function signature
     param_names: CellPtr<List>,
-    // List of (CallFrame-index: u8 | Window-index: u8) indexes into the call stack
-    // where nonlocal variables will be found
+    /// List of (CallFrame-index: u8 | Window-index: u8) relative offsets from this function's
+    /// declaration where nonlocal variables will be found
     nonlocal_refs: CellPtr<ArrayU16>,
 }
 
@@ -29,7 +31,7 @@ impl Function {
     /// Allocate a Function object on the heap.
     ///
     /// The nonlocal_refs arg must contain a list of 16 bit values composed of two
-    /// 8 bit values: CallFrame Index << 8 | Window Index
+    /// 8 bit values: CallFrame relative offset << 8 | Window offset
     /// These values should follow the same order as given in param_names
     pub fn alloc<'guard>(
         mem: &'guard MutatorView,
@@ -81,6 +83,7 @@ impl Function {
 }
 
 impl Print for Function {
+    /// Prints a string representation of the function
     fn print<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
@@ -100,6 +103,7 @@ impl Print for Function {
         }
     }
 
+    /// Prints the disassembled bytecode
     fn debug<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
@@ -114,14 +118,18 @@ impl Print for Function {
 /// A partial function application object type
 #[derive(Clone)]
 pub struct Partial {
+    /// Remaining number of arguments required to activate the function
     arity: u8,
+    /// Number of arguments already applied
     used: u8,
+    /// List of argument values already applied
     args: CellPtr<List>,
+    /// Function that will be activated when all arguments are applied
     func: CellPtr<Function>,
 }
 
 impl Partial {
-    /// Allocate a Partial application of a Function on the heap
+    /// Allocate a Partial application of a Function on the heap with the given set of arguments
     pub fn alloc<'guard>(
         mem: &'guard MutatorView,
         function: ScopedPtr<'guard, Function>,
@@ -130,6 +138,7 @@ impl Partial {
         let used = args.len() as u8;
         let arity = function.arity() - used;
 
+        // copy args to the Partial's own list
         let args_list: ScopedPtr<'guard, List> = ContainerFromSlice::from_slice(mem, &args)?;
 
         mem.alloc(Partial {
@@ -140,8 +149,7 @@ impl Partial {
         })
     }
 
-    /// Allocate a clone of an existing Partial application, adding the given arguments to the
-    /// list of existing args.
+    /// Clone an existing Partial application, appending the given arguments to the list
     pub fn alloc_clone<'guard>(
         mem: &'guard MutatorView,
         partial: ScopedPtr<'guard, Partial>,
@@ -150,7 +158,9 @@ impl Partial {
         let used = partial.used() + new_args.len() as u8;
         let arity = partial.arity() - new_args.len() as u8;
 
+        // clone the parent Partial's args
         let arg_list = List::alloc_clone(mem, partial.args(mem))?;
+        // append any new args
         for arg in new_args {
             arg_list.push(mem, arg.clone())?
         }
@@ -185,6 +195,7 @@ impl Partial {
 }
 
 impl Print for Partial {
+    /// Prints a string representation of the Partial object
     fn print<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
