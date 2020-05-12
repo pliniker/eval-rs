@@ -141,6 +141,10 @@ impl<'guard> TaggedScopedPtr<'guard> {
     pub fn value(&self) -> Value<'guard> {
         self.value
     }
+
+    pub fn get_ptr(&self) -> TaggedPtr {
+        self.ptr
+    }
 }
 
 /// Anything that _has_ a scope lifetime can pass as a scope representation. `Value` also implements

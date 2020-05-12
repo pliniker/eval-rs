@@ -142,25 +142,34 @@ impl Upvalue {
     }
 }
 
-/// The set of data structures comprising an execution thread
+/// An execution Thread object.
+/// It is composed of all the data structures required for execution of a bytecode stream -
+/// register stack, call frames, closure upvalues, thread-local global associations and the current
+/// instruction pointer.
 pub struct Thread {
     frames: CellPtr<CallFrameList>,
     stack: CellPtr<List>,
+    upvalues: CellPtr<Dict>,
     globals: CellPtr<Dict>,
     instr: CellPtr<InstructionStream>,
     stack_base: Cell<ArraySize>,
 }
 
 impl Thread {
+    /// Allocate a new Thread with a minimal stack preallocated but not associated with any
+    /// bytecode yet.
     pub fn alloc<'guard>(
         mem: &'guard MutatorView,
     ) -> Result<ScopedPtr<'guard, Thread>, RuntimeError> {
         // create an empty stack frame array
-        let frames = CallFrameList::alloc_with_capacity(mem, 32)?;
+        let frames = CallFrameList::alloc_with_capacity(mem, 16)?;
 
         // create a minimal value stack
         let stack = List::alloc_with_capacity(mem, 256)?;
         stack.fill(mem, 256, mem.nil())?;
+
+        // create an empty upvalue mapping
+        let upvalues = Dict::alloc(mem)?;
 
         // create an empty globals dict
         let globals = Dict::alloc(mem)?;
@@ -172,31 +181,41 @@ impl Thread {
         mem.alloc(Thread {
             frames: CellPtr::new_with(frames),
             stack: CellPtr::new_with(stack),
+            upvalues: CellPtr::new_with(upvalues),
             globals: CellPtr::new_with(globals),
             instr: CellPtr::new_with(instr),
             stack_base: Cell::new(0),
         })
     }
 
+    /// Execute the next instruction in the instruction stream
     fn eval_next_instr<'guard>(
         &self,
         mem: &'guard MutatorView,
     ) -> Result<EvalStatus<'guard>, RuntimeError> {
+        // TODO not all these locals are required in every opcode - optimize and get them only
+        // where needed
         let frames = self.frames.get(mem);
         let stack = self.stack.get(mem);
+        let upvalues = self.upvalues.get(mem);
         let globals = self.globals.get(mem);
         let instr = self.instr.get(mem);
 
-        // create a 256-register window into the stack from the stack base
+        // Establish a 256-register window into the stack from the stack base
         stack.access_slice(mem, |full_stack| {
             let stack_base = self.stack_base.get() as usize;
             let window = &mut full_stack[stack_base..stack_base + 256];
 
+            // Fetch the next instruction and identify it
             let opcode = instr.get_next_opcode(mem)?;
 
             match opcode {
+                // Do nothing.
                 Opcode::NoOp => return Ok(EvalStatus::Pending),
 
+                // Set the return register to the given register's value and pop the top call
+                // frame, updating the instruction stream to the previous call frame's saved state.
+                // If the call frame stack is empty, the program completed.
                 Opcode::Return { reg } => {
                     // write the return value to register 0
                     let result = window[reg as usize].get_ptr();
@@ -216,11 +235,14 @@ impl Thread {
                     }
                 }
 
+                // Load a literal into a register from the function literals array
                 Opcode::LoadLiteral { dest, literal_id } => {
                     let literal_ptr = instr.get_literal(mem, literal_id)?;
                     window[dest as usize].set_to_ptr(literal_ptr);
                 }
 
+                // Evaluate whether the `test` register contains `nil` - if so, set the `dest`
+                // register to the symbol "true", otherwise set it to `nil`
                 Opcode::IsNil { dest, test } => {
                     let test_val = window[test as usize].get(mem);
 
@@ -230,6 +252,8 @@ impl Thread {
                     }
                 }
 
+                // Evaluate whether the `test` register contains an atomic value - i.e. a
+                // non-container type. Set the `dest` register to "true" or `nil`.
                 Opcode::IsAtom { dest, test } => {
                     let test_val = window[test as usize].get(mem);
 
@@ -241,6 +265,7 @@ impl Thread {
                     }
                 }
 
+                // CAR - get the first value of a Pair object
                 Opcode::FirstOfPair { dest, reg } => {
                     let reg_val = window[reg as usize].get(mem);
 
@@ -251,6 +276,7 @@ impl Thread {
                     }
                 }
 
+                // CDR - get the second value of a Pair object
                 Opcode::SecondOfPair { dest, reg } => {
                     let reg_val = window[reg as usize].get(mem);
 
@@ -261,6 +287,7 @@ impl Thread {
                     }
                 }
 
+                // CONS - create a Pair, pointing to `reg1` and `reg2`
                 Opcode::MakePair { dest, reg1, reg2 } => {
                     let reg1_val = window[reg1 as usize].get_ptr();
                     let reg2_val = window[reg2 as usize].get_ptr();
@@ -272,6 +299,8 @@ impl Thread {
                     window[dest as usize].set(mem.alloc_tagged(new_pair)?);
                 }
 
+                // Identity comparison - if `test1` and `test2` are identical pointers, set `dest`
+                // to the symbol "true"
                 Opcode::IsIdentical { dest, test1, test2 } => {
                     // compare raw pointers - identity comparison
                     let test1_val = window[test1 as usize].get_ptr();
@@ -284,10 +313,12 @@ impl Thread {
                     }
                 }
 
+                // Unconditional jump - advance the instruction pointer by `offset`
                 Opcode::Jump { offset } => {
                     instr.jump(offset);
                 }
 
+                // Jump if the `test` register contains the symbol "true"
                 Opcode::JumpIfTrue { test, offset } => {
                     let test_val = window[test as usize].get(mem);
 
@@ -298,6 +329,7 @@ impl Thread {
                     }
                 }
 
+                // Jump if the `test` register does not contain the symbol "true"
                 Opcode::JumpIfNotTrue { test, offset } => {
                     let test_val = window[test as usize].get(mem);
 
@@ -308,15 +340,18 @@ impl Thread {
                     }
                 }
 
+                // Set the register `dest` to `nil`
                 Opcode::LoadNil { dest } => {
                     window[dest as usize].set_to_nil();
                 }
 
+                // Set the register `dest` to the inline integer literal
                 Opcode::LoadInteger { dest, integer } => {
                     let tagged_ptr = TaggedPtr::literal_integer(integer);
                     window[dest as usize].set_to_ptr(tagged_ptr);
                 }
 
+                // Lookup a global binding and put it in the register `dest`
                 Opcode::LoadGlobal { dest, name } => {
                     let name_val = window[name as usize].get(mem);
 
@@ -337,6 +372,7 @@ impl Thread {
                     }
                 }
 
+                // Bind a symbol to the `src` register in the globals dict
                 Opcode::StoreGlobal { src, name } => {
                     let name_val = window[name as usize].get(mem);
                     if let Value::Symbol(_) = *name_val {
@@ -473,19 +509,18 @@ impl Thread {
                 }
 
                 Opcode::MakeClosure { dest, function } => {
-                    // TODO
-                    // 1. create new Partial
-                    // 2. iter over function nonlocals
+                    // 1. iter over function nonlocals
                     //   - calculate absolute stack offset for each
-                    //   - find or create new Upvalue for each
-                    //   - copy Upvalue ref to Partial applied args
+                    //   - find existing or create new Upvalue for each
+                    //   - copy Upvalue ref to Partial applied args on the stack
+                    // 2. create new Partial
                     // 3. set dest to Partial
                     let function_ptr = window[function as usize].get(mem);
                     if let Value::Function(f) = *function_ptr {
                         // Allocate a temp array on the native stack
-                        let mut stack_locations: [ArraySize; 255] = [0; 255];
+                        let mut stack_locations: [ArraySize; 254] = [0; 254];
 
-                        // iter over function nonlocals, calculating absolute stack offset for each
+                        // Iter over function nonlocals, calculating absolute stack offset for each
                         f.nonlocals(mem).access_slice(
                             mem,
                             |nonlocals| -> Result<(), RuntimeError> {
@@ -508,13 +543,31 @@ impl Thread {
                         )?;
 
                         // allocate a block of the register window to push upvalues into
-                        let num_upvalues = f.nonlocals(mem).length();
+                        let num_upvalues = f.nonlocals(mem).length() as usize;
                         let args_start = dest as usize + 1;
-                        let args_end = args_start as usize + num_upvalues as usize;
+                        let args_end = args_start + num_upvalues;
 
-                        for index in 0..num_upvalues {
-                            // TODO - find or create Upvalue object, put it in the register at
-                            // window[args_start + index]
+                        // For each absolute stack index, find an existing Upvalue or create a new
+                        // one. Put the Upvalue pointer on the register stack.
+                        for index in 0..num_upvalues as usize {
+                            // Convert the location integer to a TaggedScopedPtr for passing
+                            // into the VM's upvalues Dict
+                            let location = stack_locations[index];
+                            let location_as_ptr =
+                                TaggedScopedPtr::new(mem, TaggedPtr::number(location as isize));
+
+                            match upvalues.lookup(mem, location_as_ptr) {
+                                // An Upvalue already exists
+                                Ok(upvalue) => {
+                                    window[args_start + index].set_to_ptr(upvalue.get_ptr());
+                                }
+                                // Need to create a new Upvalue
+                                Err(_) => {
+                                    let upvalue = Upvalue::alloc(mem, location)?.as_tagged(mem);
+                                    upvalues.assoc(mem, location_as_ptr, upvalue)?;
+                                    window[args_start + index].set_to_ptr(upvalue.get_ptr());
+                                }
+                            }
                         }
 
                         // Instantiate a Partial function application from the Upvalues and set the
@@ -575,12 +628,22 @@ impl Thread {
 
                 Opcode::CloseUpvalues { reg1, reg2, reg3 } => {
                     for reg in &[reg1, reg2, reg3] {
-                        // a zero value is not a valid upvalue pointing register, ignore it
+                        // The zero register is always the return register and so is never a valid
+                        // upvalue pointer.
                         if *reg > 0 {
                             let upvalue_ptr = window[*reg as usize].get(mem);
 
                             if let Value::Upvalue(upvalue) = *upvalue_ptr {
                                 upvalue.close(mem, stack)?;
+                                // Convert the location integer to a TaggedScopedPtr for passing
+                                // into the VM's upvalues Dict
+                                let location = TaggedScopedPtr::new(
+                                    mem,
+                                    TaggedPtr::number(upvalue.location as isize),
+                                );
+                                // Remove this upvalue from the mapping of stack locations to heap
+                                // Upvalue objects, it is now closed.
+                                upvalues.dissoc(mem, location)?;
                             } else {
                                 return Err(err_eval("Expected to find Upvalue"));
                             }

@@ -67,7 +67,7 @@ impl<'guard> fmt::Display for Value<'guard> {
             Value::Dict(d) => d.print(self, f),
             Value::Function(n) => n.print(self, f),
             Value::Partial(p) => p.print(self, f),
-            Value::Upvalue(u) => write!(f, "Upvalue"),
+            Value::Upvalue(_) => write!(f, "Upvalue"),
             _ => write!(f, "<unidentified-object-type>"),
         }
     }
@@ -88,7 +88,7 @@ impl<'guard> fmt::Debug for Value<'guard> {
             Value::Dict(d) => d.debug(self, f),
             Value::Function(n) => n.debug(self, f),
             Value::Partial(p) => p.debug(self, f),
-            Value::Upvalue(u) => write!(f, "Upvalue"),
+            Value::Upvalue(_) => write!(f, "Upvalue"),
             _ => write!(f, "<unidentified-object-type>"),
         }
     }
@@ -179,6 +179,14 @@ fatptr_from_rawptr!(Function, Function);
 fatptr_from_rawptr!(Partial, Partial);
 fatptr_from_rawptr!(Upvalue, Upvalue);
 
+/// Conversion from an integer type
+impl From<isize> for FatPtr {
+    fn from(num: isize) -> FatPtr {
+        // TODO big numbers
+        FatPtr::Number(num)
+    }
+}
+
 /// Conversion from a TaggedPtr type
 impl From<TaggedPtr> for FatPtr {
     fn from(ptr: TaggedPtr) -> FatPtr {
@@ -246,7 +254,7 @@ impl TaggedPtr {
 
     /// Construct an inline integer TaggedPtr
     // TODO deal with big numbers later
-    fn number(value: isize) -> TaggedPtr {
+    pub fn number(value: isize) -> TaggedPtr {
         TaggedPtr {
             number: (((value as usize) << 2) | TAG_NUMBER) as isize,
         }

@@ -37,16 +37,20 @@ impl DictItem {
 }
 
 /// Generate a hash value for a key
+/// TODO move this function somewhere more suitable
 fn hash_key<'guard>(
     guard: &'guard dyn MutatorScope,
-    key: TaggedScopedPtr,
+    key: TaggedScopedPtr<'guard>,
 ) -> Result<u64, RuntimeError> {
-    let mut hasher = FnvHasher::default();
     match *key {
-        Value::Symbol(s) => s.hash(guard, &mut hasher),
-        _ => return Err(RuntimeError::new(ErrorKind::UnhashableError)),
+        Value::Symbol(s) => {
+            let mut hasher = FnvHasher::default();
+            s.hash(guard, &mut hasher);
+            Ok(hasher.finish())
+        }
+        Value::Number(n) => Ok(n as u64),
+        _ => Err(RuntimeError::new(ErrorKind::UnhashableError)),
     }
-    Ok(hasher.finish())
 }
 
 /// Given a key, generate the hash and search for an entry that either matches this hash
