@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::collections::HashMap;
 
 use crate::array::{Array, ArraySize};
@@ -11,10 +12,74 @@ use crate::pair::{value_from_1_pair, values_from_2_pairs, vec_from_pairs};
 use crate::safeptr::{CellPtr, ScopedPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 
+/// A variable can be of three different kinds depending on how a closure refers to it.
+#[derive(Copy, Clone, PartialEq)]
+enum VariableKind {
+    /// An Unclosed variable is one never refered to by a closure
+    Unclosed,
+    /// An Upvalue variable is one refered to by a closure and must be converted to an Upvalue
+    /// when it goes out of scope
+    Upvalue,
+    /// To construct a closure, a lambda is lifted so that all free variables are converted into
+    /// function parameters. An UpvalueParam is a free variable converted to a parameter. Such a
+    /// variable must be treated as an invisible binding by further nested scopes. As an example,
+    /// suppose function F binds variable x and contains a nested function G that refers to x. G
+    /// then gets it's own UpvalueParam reference to x. Suppose then that function G contains a
+    /// nested function H that also refers to x. H should refer to F's binding of x, not G's.
+    UpvalueParam,
+}
+
+/// A variable is a named register. It has compile time metadata about how it is used by closures.
+struct Variable {
+    register: Cell<Register>,
+    kind: Cell<VariableKind>,
+}
+
+impl Variable {
+    /// A variable can be initialised as Unclosed
+    fn new_unclosed(register: Register) -> Variable {
+        Variable {
+            register: Cell::new(register),
+            kind: Cell::new(VariableKind::Unclosed),
+        }
+    }
+
+    /// A variable can be initialized as an UpvalueParam
+    fn new_upvalue_param(register: Register) -> Variable {
+        Variable {
+            register: Cell::new(register),
+            kind: Cell::new(VariableKind::UpvalueParam),
+        }
+    }
+
+    fn register(&self) -> Register {
+        self.register.get()
+    }
+
+    fn kind(&self) -> VariableKind {
+        self.kind.get()
+    }
+
+    /// Convert the variable to an Upvalue. This is not a valid operation for a variable that is an
+    /// UpvalueParam.
+    fn make_upvalue(&self) {
+        if self.kind.get() == VariableKind::UpvalueParam {
+            panic!("Cannot convert an UpvalueParam variable to an Upvalue!");
+        }
+        self.kind.set(VariableKind::Upvalue);
+    }
+
+    /// Pushing an UpvalueParam into the parameter scope of a function forces all other registers
+    /// to increment by 1
+    fn increment_register(&self) {
+        self.register.set(self.register.get() + 1);
+    }
+}
+
 /// A Scope contains a set of local variable to register bindings
 struct Scope {
-    // symbol -> register mapping
-    bindings: HashMap<String, Register>,
+    /// symbol -> variable mapping
+    bindings: HashMap<String, Variable>,
 }
 
 impl Scope {
@@ -35,13 +100,14 @@ impl Scope {
             _ => return Err(err_eval("A binding name must be a symbol")),
         };
 
-        self.bindings.insert(name_string, reg);
+        self.bindings
+            .insert(name_string, Variable::new_unclosed(reg));
 
         Ok(())
     }
 
     // Push a block of bindings into this scope, returning the next register available
-    // after these bound registers
+    // after these bound registers. All these variables will be Unclosed by default.
     fn push_bindings<'guard>(
         &mut self,
         names: &[TaggedScopedPtr<'guard>],
@@ -59,7 +125,7 @@ impl Scope {
     fn lookup_binding<'guard>(
         &self,
         name: TaggedScopedPtr<'guard>,
-    ) -> Result<Option<Register>, RuntimeError> {
+    ) -> Result<Option<&Variable>, RuntimeError> {
         let name_string = match *name {
             Value::Symbol(s) => String::from(s.as_str(&name)),
             _ => {
@@ -70,7 +136,7 @@ impl Scope {
         };
 
         match self.bindings.get(&name_string) {
-            Some(reg) => Ok(Some(*reg)),
+            Some(var) => Ok(Some(var)),
             None => Ok(None),
         }
     }
@@ -82,7 +148,7 @@ impl Scope {
     /// at the head of the register window.
     fn increment_all_registers(&mut self) {
         for entry in self.bindings.iter_mut() {
-            *entry.1 += 1;
+            entry.1.increment_register();
         }
     }
 }
@@ -106,14 +172,22 @@ impl<'parent> Locals<'parent> {
     fn lookup_binding<'guard>(
         &self,
         name: TaggedScopedPtr<'guard>,
-    ) -> Result<Option<(u8, Register)>, RuntimeError> {
-        //  return value should be (count-of-parents-followed, register-in-locals)
+    ) -> Result<Option<(u8, &Variable)>, RuntimeError> {
+        //  return value should be (count-of-parent-functions-followed, Variable)
+
+        // The depth is the number of parent nesting functions searched for a variable
         let mut depth: u8 = 0;
+
         let mut locals = Some(self);
         while let Some(l) = locals {
             for scope in l.scopes.iter().rev() {
-                if let Some(reg) = scope.lookup_binding(name)? {
-                    return Ok(Some((depth, reg)));
+                if let Some(var) = scope.lookup_binding(name)? {
+                    // If the matched variable is an UpvalueParam and the call frame depth is
+                    // nonzero, discard this result and keep looking for the original Unclosed or
+                    // Upvalue variable
+                    if depth == 0 || var.kind() != VariableKind::UpvalueParam {
+                        return Ok(Some((depth, var)));
+                    }
                 }
             }
             locals = l.parent;
@@ -143,7 +217,6 @@ impl<'parent> Locals<'parent> {
 struct Compiler<'parent> {
     bytecode: CellPtr<ByteCode>,
     next_reg: Register,
-    // TODO:
     // optional function name
     name: Option<String>,
     // function-local nested scopes bindings list (including parameters at outer level)
