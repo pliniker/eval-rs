@@ -11,6 +11,7 @@ use crate::memory::MutatorView;
 use crate::pair::{value_from_1_pair, values_from_2_pairs, vec_from_pairs};
 use crate::safeptr::{CellPtr, ScopedPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
+use crate::vm::FIRST_ARG_REG;
 
 /// A variable can be of three different kinds depending on how a closure refers to it.
 #[derive(Copy, Clone, PartialEq)]
@@ -20,13 +21,6 @@ enum VariableKind {
     /// An Upvalue variable is one refered to by a closure and must be converted to an Upvalue
     /// when it goes out of scope
     Upvalue,
-    /// To construct a closure, a lambda is lifted so that all free variables are converted into
-    /// function parameters. An UpvalueParam is a free variable converted to a parameter. Such a
-    /// variable must be treated as an invisible binding by further nested scopes. As an example,
-    /// suppose function F binds variable x and contains a nested function G that refers to x. G
-    /// then gets it's own UpvalueParam reference to x. Suppose then that function G contains a
-    /// nested function H that also refers to x. H should refer to F's binding of x, not G's.
-    UpvalueParam,
 }
 
 /// A variable is a named register. It has compile time metadata about how it is used by closures.
@@ -44,14 +38,6 @@ impl Variable {
         }
     }
 
-    /// A variable can be initialized as an UpvalueParam
-    fn new_upvalue_param(register: Register) -> Variable {
-        Variable {
-            register: Cell::new(register),
-            kind: Cell::new(VariableKind::UpvalueParam),
-        }
-    }
-
     fn register(&self) -> Register {
         self.register.get()
     }
@@ -60,19 +46,9 @@ impl Variable {
         self.kind.get()
     }
 
-    /// Convert the variable to an Upvalue. This is not a valid operation for a variable that is an
-    /// UpvalueParam.
+    /// Convert the variable to an Upvalue.
     fn make_upvalue(&self) {
-        if self.kind.get() == VariableKind::UpvalueParam {
-            panic!("Cannot convert an UpvalueParam variable to an Upvalue!");
-        }
         self.kind.set(VariableKind::Upvalue);
-    }
-
-    /// Pushing an UpvalueParam into the parameter scope of a function forces all other registers
-    /// to increment by 1
-    fn increment_register(&self) {
-        self.register.set(self.register.get() + 1);
     }
 }
 
@@ -140,17 +116,6 @@ impl Scope {
             None => Ok(None),
         }
     }
-
-    /// To construct a closure, a lambda is lifted so that all free variables are converted into
-    /// function parameters. All existing parameter and evaluation registers must be punted
-    /// further back into the register window to make space. This function iterates over all
-    /// instructions, incrementing each register by 1, to make space for 1 free variable param
-    /// at the head of the register window.
-    fn increment_all_registers(&mut self) {
-        for entry in self.bindings.iter_mut() {
-            entry.1.increment_register();
-        }
-    }
 }
 
 /// A Scope instance represents a set of nested local binding scopes for a single function
@@ -182,12 +147,7 @@ impl<'parent> Locals<'parent> {
         while let Some(l) = locals {
             for scope in l.scopes.iter().rev() {
                 if let Some(var) = scope.lookup_binding(name)? {
-                    // If the matched variable is an UpvalueParam and the call frame depth is
-                    // nonzero, discard this result and keep looking for the original Unclosed or
-                    // Upvalue variable
-                    if depth == 0 || var.kind() != VariableKind::UpvalueParam {
-                        return Ok(Some((depth, var)));
-                    }
+                    return Ok(Some((depth, var)));
                 }
             }
             locals = l.parent;
@@ -195,17 +155,6 @@ impl<'parent> Locals<'parent> {
         }
 
         Ok(None)
-    }
-
-    /// To construct a closure, a lambda is lifted so that all free variables are converted into
-    /// function parameters. All existing parameter and evaluation registers must be punted
-    /// further back into the register window to make space. This function iterates over all
-    /// instructions, incrementing each register by 1, to make space for 1 free variable param
-    /// at the head of the register window.
-    fn increment_all_registers(&mut self) {
-        for scope in self.scopes.iter_mut() {
-            scope.increment_all_registers();
-        }
     }
 }
 
@@ -231,8 +180,8 @@ impl<'parent> Compiler<'parent> {
     ) -> Result<Compiler<'parent>, RuntimeError> {
         Ok(Compiler {
             bytecode: CellPtr::new_with(ByteCode::alloc(mem)?),
-            // register 0 is reserved for the return value
-            next_reg: 1,
+            // register 0 is reserved for the return value, 1 is reserved for a closure environment
+            next_reg: FIRST_ARG_REG as u8,
             name: None,
             locals: Locals::new(parent),
         })
@@ -319,6 +268,8 @@ impl<'parent> Compiler<'parent> {
                     _ => {
                         // First search local and nonlocal bindings from inner to outermost scope
                         if let Some((frame_offset, src)) = self.locals.lookup_binding(ast_node)? {
+                            let src_register = src.register();
+
                             if frame_offset > 0 {
                                 // nonlocal nonglobal binding
                                 // TODO instead of issuing a LoadNonLocal, add this variable to the
@@ -328,14 +279,14 @@ impl<'parent> Compiler<'parent> {
                                     mem,
                                     Opcode::LoadNonLocal {
                                         dest,
-                                        src,
+                                        src: src_register,
                                         frame_offset,
                                     },
                                 )?;
                                 return Ok(dest);
                             } else {
                                 // local call-frame register
-                                return Ok(src);
+                                return Ok(src.register());
                             }
                         }
 
@@ -554,6 +505,8 @@ impl<'parent> Compiler<'parent> {
     ) -> Result<Register, RuntimeError> {
         // allocate a register for the return value
         let dest = self.acquire_reg();
+        // allocate a register for a closure environment pointer
+        let _closure_env = self.acquire_reg();
 
         // evaluate arguments first
         let arg_list = vec_from_pairs(mem, args)?;

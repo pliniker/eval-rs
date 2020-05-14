@@ -23,7 +23,7 @@ pub struct Function {
     /// Param names are stored for introspection of a function signature
     param_names: CellPtr<List>,
     /// List of (CallFrame-index: u8 | Window-index: u8) relative offsets from this function's
-    /// declaration where nonlocal variables will be found
+    /// declaration where nonlocal variables will be found. Needed when creating a closure.
     nonlocal_refs: CellPtr<ArrayU16>,
 }
 
@@ -124,6 +124,8 @@ pub struct Partial {
     used: u8,
     /// List of argument values already applied
     args: CellPtr<List>,
+    /// List of Upvalues if this is a closure
+    upvalues: CellPtr<List>,
     /// Function that will be activated when all arguments are applied
     func: CellPtr<Function>,
 }
@@ -145,6 +147,7 @@ impl Partial {
             arity,
             used,
             args: CellPtr::new_with(args_list),
+            upvalues: CellPtr::new_with(List::alloc(mem)?),
             func: CellPtr::new_with(function),
         })
     }
@@ -169,6 +172,7 @@ impl Partial {
             arity,
             used,
             args: CellPtr::new_with(arg_list),
+            upvalues: CellPtr::new_with(partial.upvalues(mem)),
             func: CellPtr::new_with(partial.function(mem)),
         })
     }
@@ -186,6 +190,10 @@ impl Partial {
     /// Return the arguments already supplied to the Partial
     pub fn args<'guard>(&self, guard: &'guard dyn MutatorScope) -> ScopedPtr<'guard, List> {
         self.args.get(guard)
+    }
+
+    pub fn upvalues<'guard>(&self, guard: &'guard dyn MutatorScope) -> ScopedPtr<'guard, List> {
+        self.upvalues.get(guard)
     }
 
     /// Return the Function object that the Partial will call

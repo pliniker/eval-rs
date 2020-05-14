@@ -3,8 +3,8 @@ use std::cell::Cell;
 use crate::array::{Array, ArraySize};
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{
-    Container, FillAnyContainer, HashIndexedAnyContainer, IndexedContainer, SliceableContainer,
-    StackContainer,
+    Container, FillAnyContainer, HashIndexedAnyContainer, IndexedAnyContainer, IndexedContainer,
+    SliceableContainer, StackContainer,
 };
 use crate::dict::Dict;
 use crate::error::{err_eval, RuntimeError};
@@ -14,6 +14,10 @@ use crate::memory::MutatorView;
 use crate::pair::Pair;
 use crate::safeptr::{CellPtr, MutatorScope, ScopedPtr, TaggedCellPtr, TaggedScopedPtr};
 use crate::taggedptr::{TaggedPtr, Value};
+
+pub const RETURN_REG: usize = 0;
+pub const ENV_REG: usize = 1;
+pub const FIRST_ARG_REG: usize = 2;
 
 /// Evaluation control flow flags
 #[derive(PartialEq)]
@@ -147,11 +151,18 @@ impl Upvalue {
 /// register stack, call frames, closure upvalues, thread-local global associations and the current
 /// instruction pointer.
 pub struct Thread {
+    /// An array of StackFrames
     frames: CellPtr<CallFrameList>,
+    /// An array of pointers any object type
     stack: CellPtr<List>,
+    /// A dict that should only contain Number keys and Upvalue values. This is a mapping of
+    /// absolute stack indeces to Upvalue objects where stack values are closed over.
     upvalues: CellPtr<Dict>,
+    /// A dict that should only contain Symbol keys but any type as values
     globals: CellPtr<Dict>,
+    /// The current instruction location
     instr: CellPtr<InstructionStream>,
+    /// The current stack base pointer
     stack_base: Cell<ArraySize>,
 }
 
@@ -219,14 +230,14 @@ impl Thread {
                 Opcode::Return { reg } => {
                     // write the return value to register 0
                     let result = window[reg as usize].get_ptr();
-                    window[0].set_to_ptr(result);
+                    window[RETURN_REG].set_to_ptr(result);
 
                     // remove this function's stack frame
                     frames.pop(mem)?;
 
                     // if we just returned from the last stack frame, program evaluation is complete
                     if frames.length() == 0 {
-                        return Ok(EvalStatus::Return(window[0].get(mem)));
+                        return Ok(EvalStatus::Return(window[RETURN_REG].get(mem)));
                     } else {
                         // otherwise restore the previous stack frame settings
                         let frame = frames.top(mem)?;
@@ -439,7 +450,7 @@ impl Thread {
 
                             if arg_count < arity {
                                 // Too few args, return a Partial object
-                                let args_start = dest as usize + 1;
+                                let args_start = dest as usize + FIRST_ARG_REG;
                                 let args_end = args_start + arg_count as usize;
 
                                 let partial =
@@ -471,7 +482,7 @@ impl Thread {
                             } else if arg_count < arity {
                                 // Too few args, bake a new Partial from the existing one, adding the new
                                 // arguments
-                                let args_start = dest as usize + 1;
+                                let args_start = dest as usize + FIRST_ARG_REG;
                                 let args_end = args_start + arg_count as usize;
 
                                 let new_partial = Partial::alloc_clone(
@@ -496,7 +507,7 @@ impl Thread {
                             // Shunt _call_ args back into the window to make space for the
                             // partially applied args
                             let push_dist = partial.used();
-                            let from_reg = dest as usize + 1;
+                            let from_reg = dest as usize + FIRST_ARG_REG;
                             let to_reg = from_reg + push_dist as usize;
                             for index in (0..arg_count as usize).rev() {
                                 window[to_reg + index] = window[from_reg + index].clone();
@@ -504,7 +515,7 @@ impl Thread {
 
                             // copy args from Partial to the register window
                             let args = partial.args(mem);
-                            let start_reg = dest as usize + 1;
+                            let start_reg = dest as usize + FIRST_ARG_REG;
                             args.access_slice(mem, |items| {
                                 for (index, item) in items.iter().enumerate() {
                                     window[start_reg + index] = item.clone();
@@ -629,48 +640,76 @@ impl Thread {
                 // Follow the indirection of an Upvalue to retrieve the value, copy the value to a
                 // local register
                 Opcode::GetUpvalue { dest, src } => {
-                    let upvalue_ptr = window[src as usize].get(mem);
+                    let closure_env = window[ENV_REG].get(mem);
 
-                    if let Value::Upvalue(upvalue) = *upvalue_ptr {
-                        window[dest as usize].set_to_ptr(upvalue.get(mem, stack)?);
-                    } else {
-                        return Err(err_eval("Expected to find Upvalue"));
+                    match *closure_env {
+                        Value::List(env) => {
+                            let upvalue_ptr =
+                                IndexedAnyContainer::get(&*env, mem, src as ArraySize)?;
+
+                            match *upvalue_ptr {
+                                Value::Upvalue(upvalue) => {
+                                    window[dest as usize].set_to_ptr(upvalue.get(mem, stack)?)
+                                }
+                                // a closure env should only contain Upvalue objects, anything else
+                                // is a bug!
+                                _ => unreachable!(),
+                            }
+                        }
+                        // the closure env should _always always always_ be a List or nil but there
+                        // is a compiler bug if we tried to access a closure environment for a
+                        // non-closure function
+                        _ => unreachable!(),
                     }
                 }
 
                 // Follow the indirection of an Upvalue to set the value from a local register
                 Opcode::SetUpvalue { dest, src } => {
-                    let upvalue_ptr = window[dest as usize].get(mem);
+                    let closure_env = window[ENV_REG].get(mem);
 
-                    if let Value::Upvalue(upvalue) = *upvalue_ptr {
-                        upvalue.set(mem, stack, window[src as usize].get_ptr())?;
-                    } else {
-                        return Err(err_eval("Expected to find Upvalue"));
+                    match *closure_env {
+                        Value::List(env) => {
+                            let upvalue_ptr =
+                                IndexedAnyContainer::get(&*env, mem, dest as ArraySize)?;
+
+                            match *upvalue_ptr {
+                                Value::Upvalue(upvalue) => {
+                                    upvalue.set(mem, stack, window[src as usize].get_ptr())?;
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        _ => unreachable!(),
                     }
                 }
 
-                // Move the Upvalue from pointing at the stack to pointing at itself and remove the
-                // Upvalue from the VM's list of unclosed Upvalues.
+                // Move up to 3 stack register values to the Upvalue objects referring to them
                 Opcode::CloseUpvalues { reg1, reg2, reg3 } => {
                     for reg in &[reg1, reg2, reg3] {
-                        // The zero register is always the return register and so is never a valid
-                        // upvalue pointer.
-                        if *reg > 0 {
-                            let upvalue_ptr = window[*reg as usize].get(mem);
+                        // Registers 0 and 1 cannot be closed over
+                        if *reg >= FIRST_ARG_REG as u8 {
+                            // 1. calculate absolute stack offset of reg
+                            let frame = frames.top(mem)?;
+                            let location = frame.base + *reg as ArraySize;
 
-                            if let Value::Upvalue(upvalue) = *upvalue_ptr {
-                                upvalue.close(mem, stack)?;
-                                // Convert the location integer to a TaggedScopedPtr for passing
-                                // into the VM's upvalues Dict
-                                let location = TaggedScopedPtr::new(
-                                    mem,
-                                    TaggedPtr::number(upvalue.location as isize),
-                                );
-                                // Remove this upvalue from the mapping of stack locations to heap
-                                // Upvalue objects, it is now closed.
-                                upvalues.dissoc(mem, location)?;
-                            } else {
-                                return Err(err_eval("Expected to find Upvalue"));
+                            // Convert the location integer to a TaggedScopedPtr for passing
+                            // into the VM's upvalues Dict
+                            let tagged_location =
+                                TaggedScopedPtr::new(mem, TaggedPtr::number(location as isize));
+
+                            // 2. lookup upvalue in upvalues dict
+                            match upvalues.lookup(mem, tagged_location) {
+                                Ok(upvalue_ptr) => {
+                                    // 3. close it and unlink it from the global upvalues dict
+                                    match *upvalue_ptr {
+                                        Value::Upvalue(upvalue) => upvalue.close(mem, stack)?,
+                                        _ => unreachable!(),
+                                    };
+                                    upvalues.dissoc(mem, tagged_location)?;
+                                }
+                                // If there is no upvalue associated with this stack location,
+                                // something was compiled wrong :frowny_face:
+                                Err(_) => unreachable!(),
                             }
                         }
                     }
