@@ -18,9 +18,9 @@ use crate::vm::FIRST_ARG_REG;
 enum VariableKind {
     /// An Unclosed variable is one never refered to by a closure
     Unclosed,
-    /// An Upvalue variable is one refered to by a closure and must be converted to an Upvalue
-    /// when it goes out of scope
-    Upvalue,
+    /// An closed-over variable is one refered to by a closure and will be associated with an
+    /// Upvalue at runtime, it must be closed when it goes out of scope
+    ClosedOver,
 }
 
 /// A variable is a named register. It has compile time metadata about how it is used by closures.
@@ -48,7 +48,7 @@ impl Variable {
 
     /// Convert the variable to an Upvalue.
     fn make_upvalue(&self) {
-        self.kind.set(VariableKind::Upvalue);
+        self.kind.set(VariableKind::ClosedOver);
     }
 }
 
