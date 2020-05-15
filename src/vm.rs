@@ -199,6 +199,31 @@ impl Thread {
         })
     }
 
+    /// Retrieve an Upvalue for the given absolute stack offset
+    fn get_upvalue<'guard>(
+        &self,
+        guard: &'guard dyn MutatorScope,
+        location: ArraySize,
+    ) -> Result<ScopedPtr<'guard, Upvalue>, RuntimeError> {
+        // Convert the location integer to a TaggedScopedPtr for passing
+        // into the VM's upvalues Dict
+        let tagged_location = TaggedScopedPtr::new(guard, TaggedPtr::number(location as isize));
+
+        // 2. lookup upvalue in upvalues dict
+        match self.upvalues.get(guard).lookup(guard, tagged_location) {
+            Ok(upvalue_ptr) => {
+                // 3. close it and unlink it from the global upvalues dict
+                match *upvalue_ptr {
+                    Value::Upvalue(upvalue) => Ok(upvalue),
+                    _ => unreachable!(),
+                }
+            }
+            // If there is no upvalue associated with this stack location,
+            // something was compiled wrong :frowny_face:
+            Err(_) => unreachable!(),
+        }
+    }
+
     /// Execute the next instruction in the current instruction stream
     fn eval_next_instr<'guard>(
         &self,
@@ -691,6 +716,10 @@ impl Thread {
                             // 1. calculate absolute stack offset of reg
                             let frame = frames.top(mem)?;
                             let location = frame.base + *reg as ArraySize;
+
+                            // TODO simplify refactor
+                            //let upvalue = self.get_upvalue(mem, location)?;
+                            //upvalue.close(mem, stack)?;
 
                             // Convert the location integer to a TaggedScopedPtr for passing
                             // into the VM's upvalues Dict
