@@ -4,7 +4,7 @@ use crate::array::{Array, ArraySize};
 use crate::bytecode::{ByteCode, InstructionStream, Opcode};
 use crate::containers::{
     Container, FillAnyContainer, HashIndexedAnyContainer, IndexedAnyContainer, IndexedContainer,
-    SliceableContainer, StackContainer,
+    SliceableContainer, StackAnyContainer, StackContainer,
 };
 use crate::dict::Dict;
 use crate::error::{err_eval, RuntimeError};
@@ -146,6 +146,26 @@ impl Upvalue {
     }
 }
 
+/// Get the Upvalue for the index into the given closure environment.
+/// Function will panic if types are not as expected.
+fn env_upvalue_lookup<'guard>(
+    guard: &'guard dyn MutatorScope,
+    closure_env: TaggedScopedPtr<'guard>,
+    upvalue_id: u8,
+) -> Result<ScopedPtr<'guard, Upvalue>, RuntimeError> {
+    match *closure_env {
+        Value::List(env) => {
+            let upvalue_ptr = IndexedAnyContainer::get(&*env, guard, upvalue_id as ArraySize)?;
+
+            match *upvalue_ptr {
+                Value::Upvalue(upvalue) => Ok(upvalue),
+                _ => unreachable!(),
+            }
+        }
+        _ => unreachable!(),
+    }
+}
+
 /// An execution Thread object.
 /// It is composed of all the data structures required for execution of a bytecode stream -
 /// register stack, call frames, closure upvalues, thread-local global associations and the current
@@ -199,28 +219,49 @@ impl Thread {
         })
     }
 
-    /// Retrieve an Upvalue for the given absolute stack offset
-    fn get_upvalue<'guard>(
+    /// Retrieve an Upvalue for the given absolute stack offset.
+    fn upvalue_lookup<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
         location: ArraySize,
-    ) -> Result<ScopedPtr<'guard, Upvalue>, RuntimeError> {
-        // Convert the location integer to a TaggedScopedPtr for passing
-        // into the VM's upvalues Dict
-        let tagged_location = TaggedScopedPtr::new(guard, TaggedPtr::number(location as isize));
+    ) -> Result<(TaggedScopedPtr<'guard>, ScopedPtr<'guard, Upvalue>), RuntimeError> {
+        let upvalues = self.upvalues.get(guard);
 
-        // 2. lookup upvalue in upvalues dict
-        match self.upvalues.get(guard).lookup(guard, tagged_location) {
+        // Convert the location integer to a TaggedScopedPtr for passing
+        // into the Thread's upvalues Dict
+        let location_ptr = TaggedScopedPtr::new(guard, TaggedPtr::number(location as isize));
+
+        // Lookup upvalue in upvalues dict
+        match upvalues.lookup(guard, location_ptr) {
             Ok(upvalue_ptr) => {
-                // 3. close it and unlink it from the global upvalues dict
+                // Return it and the tagged-pointer version of the location number
                 match *upvalue_ptr {
-                    Value::Upvalue(upvalue) => Ok(upvalue),
+                    Value::Upvalue(upvalue) => Ok((location_ptr, upvalue)),
                     _ => unreachable!(),
                 }
             }
-            // If there is no upvalue associated with this stack location,
-            // something was compiled wrong :frowny_face:
-            Err(_) => unreachable!(),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Retrieve an Upvalue for the given absolute stack offset or allocate a new one if none was
+    /// found
+    fn upvalue_lookup_or_alloc<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+        location: ArraySize,
+    ) -> Result<(TaggedScopedPtr<'guard>, ScopedPtr<'guard, Upvalue>), RuntimeError> {
+        match self.upvalue_lookup(mem, location) {
+            Ok(v) => Ok(v),
+            Err(_) => {
+                let upvalues = self.upvalues.get(mem);
+                let upvalue = Upvalue::alloc(mem, location)?;
+
+                let location_ptr = TaggedScopedPtr::new(mem, TaggedPtr::number(location as isize));
+                upvalues.assoc(mem, location_ptr, upvalue.as_tagged(mem))?;
+
+                Ok((location_ptr, upvalue))
+            }
         }
     }
 
@@ -233,7 +274,6 @@ impl Thread {
         // where needed
         let frames = self.frames.get(mem);
         let stack = self.stack.get(mem);
-        let upvalues = self.upvalues.get(mem);
         let globals = self.globals.get(mem);
         let instr = self.instr.get(mem);
 
@@ -478,8 +518,12 @@ impl Thread {
                                 let args_start = dest as usize + FIRST_ARG_REG;
                                 let args_end = args_start + arg_count as usize;
 
-                                let partial =
-                                    Partial::alloc(mem, function, &window[args_start..args_end])?;
+                                let partial = Partial::alloc(
+                                    mem,
+                                    function,
+                                    None,
+                                    &window[args_start..args_end],
+                                )?;
 
                                 window[dest as usize].set(partial.as_tagged(mem));
 
@@ -529,6 +573,9 @@ impl Thread {
                                 )));
                             }
 
+                            // Copy closure env pointer
+                            window[dest as usize + ENV_REG] = partial.closure_env();
+
                             // Shunt _call_ args back into the window to make space for the
                             // partially applied args
                             let push_dist = partial.used();
@@ -567,62 +614,35 @@ impl Thread {
                     // 3. set dest to Partial
                     let function_ptr = window[function as usize].get(mem);
                     if let Value::Function(f) = *function_ptr {
+                        let nonlocals = f.nonlocals(mem);
+
                         // Allocate a temp array on the native stack
-                        let mut stack_locations: [ArraySize; 254] = [0; 254];
+                        let env = List::alloc_with_capacity(mem, nonlocals.length())?;
 
                         // Iter over function nonlocals, calculating absolute stack offset for each
-                        f.nonlocals(mem).access_slice(
-                            mem,
-                            |nonlocals| -> Result<(), RuntimeError> {
-                                for (index, compound) in nonlocals.iter().enumerate() {
-                                    let frame_offset = (*compound >> 8) as ArraySize;
-                                    let window_offset = (*compound & 0xff) as ArraySize;
+                        nonlocals.access_slice(mem, |nonlocals| -> Result<(), RuntimeError> {
+                            for compound in nonlocals {
+                                let frame_offset = (*compound >> 8) as ArraySize;
+                                let window_offset = (*compound & 0xff) as ArraySize;
 
-                                    // subtract 2:
-                                    //  - 1 because frames.length() a 0-based index
-                                    //  - 1 because the function counts it's frame offsets from
-                                    //    inside it's scope and we're outside it here
-                                    let frame =
-                                        frames.get(mem, frames.length() - 2 - frame_offset)?;
-                                    let frame_base = frame.base;
-                                    let location = frame_base + window_offset;
-                                    stack_locations[index] = location;
-                                }
-                                Ok(())
-                            },
-                        )?;
+                                // subtract 2:
+                                //  - 1 because frames.length() is a count, not an index
+                                //  - 1 because the function itself counts it's frame offsets from
+                                //    inside it's scope and we're outside it here
+                                let frame = frames.get(mem, frames.length() - 2 - frame_offset)?;
+                                let frame_base = frame.base;
+                                let location = frame_base + window_offset;
 
-                        // allocate a block of the register window to push upvalues into
-                        let num_upvalues = f.nonlocals(mem).length() as usize;
-                        let args_start = dest as usize + 1;
-                        let args_end = args_start + num_upvalues;
-
-                        // For each absolute stack index, find an existing Upvalue or create a new
-                        // one. Put the Upvalue pointer on the register stack.
-                        for index in 0..num_upvalues as usize {
-                            // Convert the location integer to a TaggedScopedPtr for passing
-                            // into the VM's upvalues Dict
-                            let location = stack_locations[index];
-                            let location_as_ptr =
-                                TaggedScopedPtr::new(mem, TaggedPtr::number(location as isize));
-
-                            match upvalues.lookup(mem, location_as_ptr) {
-                                // An Upvalue already exists
-                                Ok(upvalue) => {
-                                    window[args_start + index].set_to_ptr(upvalue.get_ptr());
-                                }
-                                // Need to create a new Upvalue
-                                Err(_) => {
-                                    let upvalue = Upvalue::alloc(mem, location)?.as_tagged(mem);
-                                    upvalues.assoc(mem, location_as_ptr, upvalue)?;
-                                    window[args_start + index].set_to_ptr(upvalue.get_ptr());
-                                }
+                                let (_, upvalue) = self.upvalue_lookup_or_alloc(mem, location)?;
+                                StackAnyContainer::push(&*env, mem, upvalue.as_tagged(mem))?;
                             }
-                        }
 
-                        // Instantiate a Partial function application from the Upvalues and set the
-                        // destination register
-                        let partial = Partial::alloc(mem, f, &window[args_start..args_end])?;
+                            Ok(())
+                        })?;
+
+                        // Instantiate a Partial function application from the closure environment
+                        // and set the destination register
+                        let partial = Partial::alloc(mem, f, Some(env), &[])?;
                         window[dest as usize].set(partial.as_tagged(mem));
                     } else {
                         return Err(err_eval("Cannot make a closure from a non-Function type"));
@@ -666,46 +686,15 @@ impl Thread {
                 // local register
                 Opcode::GetUpvalue { dest, src } => {
                     let closure_env = window[ENV_REG].get(mem);
-
-                    match *closure_env {
-                        Value::List(env) => {
-                            let upvalue_ptr =
-                                IndexedAnyContainer::get(&*env, mem, src as ArraySize)?;
-
-                            match *upvalue_ptr {
-                                Value::Upvalue(upvalue) => {
-                                    window[dest as usize].set_to_ptr(upvalue.get(mem, stack)?)
-                                }
-                                // a closure env should only contain Upvalue objects, anything else
-                                // is a bug!
-                                _ => unreachable!(),
-                            }
-                        }
-                        // the closure env should _always always always_ be a List or nil but there
-                        // is a compiler bug if we tried to access a closure environment for a
-                        // non-closure function
-                        _ => unreachable!(),
-                    }
+                    let upvalue = env_upvalue_lookup(mem, closure_env, src)?;
+                    window[dest as usize].set_to_ptr(upvalue.get(mem, stack)?);
                 }
 
                 // Follow the indirection of an Upvalue to set the value from a local register
                 Opcode::SetUpvalue { dest, src } => {
                     let closure_env = window[ENV_REG].get(mem);
-
-                    match *closure_env {
-                        Value::List(env) => {
-                            let upvalue_ptr =
-                                IndexedAnyContainer::get(&*env, mem, dest as ArraySize)?;
-
-                            match *upvalue_ptr {
-                                Value::Upvalue(upvalue) => {
-                                    upvalue.set(mem, stack, window[src as usize].get_ptr())?;
-                                }
-                                _ => unreachable!(),
-                            }
-                        }
-                        _ => unreachable!(),
-                    }
+                    let upvalue = env_upvalue_lookup(mem, closure_env, dest)?;
+                    upvalue.set(mem, stack, window[src as usize].get_ptr())?;
                 }
 
                 // Move up to 3 stack register values to the Upvalue objects referring to them
@@ -713,33 +702,14 @@ impl Thread {
                     for reg in &[reg1, reg2, reg3] {
                         // Registers 0 and 1 cannot be closed over
                         if *reg >= FIRST_ARG_REG as u8 {
-                            // 1. calculate absolute stack offset of reg
+                            // calculate absolute stack offset of reg
                             let frame = frames.top(mem)?;
                             let location = frame.base + *reg as ArraySize;
-
-                            // TODO simplify refactor
-                            //let upvalue = self.get_upvalue(mem, location)?;
-                            //upvalue.close(mem, stack)?;
-
-                            // Convert the location integer to a TaggedScopedPtr for passing
-                            // into the VM's upvalues Dict
-                            let tagged_location =
-                                TaggedScopedPtr::new(mem, TaggedPtr::number(location as isize));
-
-                            // 2. lookup upvalue in upvalues dict
-                            match upvalues.lookup(mem, tagged_location) {
-                                Ok(upvalue_ptr) => {
-                                    // 3. close it and unlink it from the global upvalues dict
-                                    match *upvalue_ptr {
-                                        Value::Upvalue(upvalue) => upvalue.close(mem, stack)?,
-                                        _ => unreachable!(),
-                                    };
-                                    upvalues.dissoc(mem, tagged_location)?;
-                                }
-                                // If there is no upvalue associated with this stack location,
-                                // something was compiled wrong :frowny_face:
-                                Err(_) => unreachable!(),
-                            }
+                            // find the Upvalue object by location
+                            let (location_ptr, upvalue) = self.upvalue_lookup(mem, location)?;
+                            // close it and unanchor from the Thread
+                            upvalue.close(mem, stack)?;
+                            self.upvalues.get(mem).dissoc(mem, location_ptr)?;
                         }
                     }
                 }

@@ -124,8 +124,8 @@ pub struct Partial {
     used: u8,
     /// List of argument values already applied
     args: CellPtr<List>,
-    /// List of Upvalues if this is a closure
-    upvalues: CellPtr<List>,
+    /// Closure environment - must be either nil or a List of Upvalues
+    env: TaggedCellPtr,
     /// Function that will be activated when all arguments are applied
     func: CellPtr<Function>,
 }
@@ -135,10 +135,18 @@ impl Partial {
     pub fn alloc<'guard>(
         mem: &'guard MutatorView,
         function: ScopedPtr<'guard, Function>,
+        env: Option<ScopedPtr<'guard, List>>,
         args: &[TaggedCellPtr],
     ) -> Result<ScopedPtr<'guard, Partial>, RuntimeError> {
         let used = args.len() as u8;
         let arity = function.arity() - used;
+
+        // Store a nil ptr if no closure env is given
+        let env = if let Some(env_ptr) = env {
+            TaggedCellPtr::new_with(env_ptr.as_tagged(mem))
+        } else {
+            TaggedCellPtr::new_nil()
+        };
 
         // copy args to the Partial's own list
         let args_list: ScopedPtr<'guard, List> = ContainerFromSlice::from_slice(mem, &args)?;
@@ -147,7 +155,7 @@ impl Partial {
             arity,
             used,
             args: CellPtr::new_with(args_list),
-            upvalues: CellPtr::new_with(List::alloc(mem)?),
+            env,
             func: CellPtr::new_with(function),
         })
     }
@@ -172,8 +180,8 @@ impl Partial {
             arity,
             used,
             args: CellPtr::new_with(arg_list),
-            upvalues: CellPtr::new_with(partial.upvalues(mem)),
-            func: CellPtr::new_with(partial.function(mem)),
+            env: partial.env.clone(),
+            func: partial.func.clone(),
         })
     }
 
@@ -192,8 +200,10 @@ impl Partial {
         self.args.get(guard)
     }
 
-    pub fn upvalues<'guard>(&self, guard: &'guard dyn MutatorScope) -> ScopedPtr<'guard, List> {
-        self.upvalues.get(guard)
+    /// Return the closure environment. This will be nil if the Partial does not close over any
+    /// variables.
+    pub fn closure_env(&self) -> TaggedCellPtr {
+        self.env.clone()
     }
 
     /// Return the Function object that the Partial will call
