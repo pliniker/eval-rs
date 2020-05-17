@@ -1,8 +1,8 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
 use crate::array::{Array, ArraySize};
-use crate::bytecode::{ByteCode, JumpOffset, Opcode, Register, JUMP_UNKNOWN};
+use crate::bytecode::{ByteCode, JumpOffset, Opcode, Register, UpvalueId, JUMP_UNKNOWN};
 use crate::containers::AnyContainerFromSlice;
 use crate::error::{err_eval, RuntimeError};
 use crate::function::Function;
@@ -13,42 +13,39 @@ use crate::safeptr::{CellPtr, ScopedPtr, TaggedScopedPtr};
 use crate::taggedptr::Value;
 use crate::vm::FIRST_ARG_REG;
 
-/// A variable can be of three different kinds depending on how a closure refers to it.
+/// A binding can be either local or via an upvalue depending on how a closure refers to it.
 #[derive(Copy, Clone, PartialEq)]
-enum VariableKind {
-    /// An Unclosed variable is one never refered to by a closure
-    Unclosed,
-    /// An closed-over variable is one refered to by a closure and will be associated with an
-    /// Upvalue at runtime, it must be closed when it goes out of scope
-    ClosedOver,
+enum Binding {
+    /// An local variable is local to a function scope
+    Local(Register),
+    /// An Upvalue is an indirection for pointing at a nonlocal variable on the stack
+    Upvalue(UpvalueId),
 }
 
 /// A variable is a named register. It has compile time metadata about how it is used by closures.
 struct Variable {
-    register: Cell<Register>,
-    kind: Cell<VariableKind>,
+    register: Register,
+    closed_over: Cell<bool>,
 }
 
 impl Variable {
-    /// A variable can be initialised as Unclosed
-    fn new_unclosed(register: Register) -> Variable {
+    fn new(register: Register) -> Variable {
         Variable {
-            register: Cell::new(register),
-            kind: Cell::new(VariableKind::Unclosed),
+            register,
+            closed_over: Cell::new(false),
         }
     }
 
     fn register(&self) -> Register {
-        self.register.get()
+        self.register
     }
 
-    fn kind(&self) -> VariableKind {
-        self.kind.get()
+    fn close_over(&self) {
+        self.closed_over.set(true);
     }
 
-    /// Convert the variable to an Upvalue.
-    fn make_upvalue(&self) {
-        self.kind.set(VariableKind::ClosedOver);
+    fn is_closed_over(&self) -> bool {
+        self.closed_over.get()
     }
 }
 
@@ -65,7 +62,7 @@ impl Scope {
         }
     }
 
-    // Add a Symbol->Register binding to this scope
+    /// Add a Symbol->Register binding to this scope
     fn push_binding<'guard>(
         &mut self,
         name: TaggedScopedPtr<'guard>,
@@ -76,14 +73,13 @@ impl Scope {
             _ => return Err(err_eval("A binding name must be a symbol")),
         };
 
-        self.bindings
-            .insert(name_string, Variable::new_unclosed(reg));
+        self.bindings.insert(name_string, Variable::new(reg));
 
         Ok(())
     }
 
-    // Push a block of bindings into this scope, returning the next register available
-    // after these bound registers. All these variables will be Unclosed by default.
+    /// Push a block of bindings into this scope, returning the next register available
+    /// after these bound registers. All these variables will be Unclosed by default.
     fn push_bindings<'guard>(
         &mut self,
         names: &[TaggedScopedPtr<'guard>],
@@ -97,11 +93,62 @@ impl Scope {
         Ok(reg)
     }
 
-    // Find a Symbol->Register binding in this scope
+    /// Find a Symbol->Register binding in this scope
+    fn lookup_binding<'guard>(&self, name: &str) -> Option<&Variable> {
+        self.bindings.get(name)
+    }
+}
+
+/// A nonlocal reference will turn in to an Upvalue at VM runtime.
+/// This struct stores the non-zero frame offset and register values of a parent function call
+/// frame where a binding will be located.
+struct Nonlocal {
+    upvalue_id: u8,
+    frame_offset: u8,
+    frame_register: u8,
+}
+
+impl Nonlocal {
+    fn new(upvalue_id: UpvalueId, frame_offset: u8, frame_register: Register) -> Nonlocal {
+        Nonlocal {
+            upvalue_id,
+            frame_offset,
+            frame_register,
+        }
+    }
+}
+
+/// A Scope instance represents a set of nested variable binding scopes for a single function
+/// definition.
+struct Variables<'parent> {
+    /// The parent function's variables.
+    parent: Option<&'parent Variables<'parent>>,
+    /// Nested scopes, starting with parameters/arguments on the outermost scope and let scopes on
+    /// the inside.
+    scopes: Vec<Scope>,
+    /// Mapping of referenced nonlocal nonglobal variables and their upvalue indexes and where to
+    /// find them on the stack.
+    nonlocals: RefCell<HashMap<String, Nonlocal>>,
+    /// The next upvalue index to assign when a new nonlocal is encountered.
+    next_upvalue: Cell<u8>,
+}
+
+impl<'parent> Variables<'parent> {
+    fn new(parent: Option<&'parent Variables<'parent>>) -> Variables<'parent> {
+        Variables {
+            parent,
+            scopes: Vec::new(),
+            nonlocals: RefCell::new(HashMap::new()),
+            next_upvalue: Cell::new(0),
+        }
+    }
+
+    /// Search for a binding, following parent scopes.
     fn lookup_binding<'guard>(
         &self,
         name: TaggedScopedPtr<'guard>,
-    ) -> Result<Option<&Variable>, RuntimeError> {
+    ) -> Result<Option<Binding>, RuntimeError> {
+        //  return value should be (count-of-parent-functions-followed, Variable)
         let name_string = match *name {
             Value::Symbol(s) => String::from(s.as_str(&name)),
             _ => {
@@ -111,79 +158,84 @@ impl Scope {
             }
         };
 
-        match self.bindings.get(&name_string) {
-            Some(var) => Ok(Some(var)),
-            None => Ok(None),
-        }
-    }
-}
-
-/// A Scope instance represents a set of nested local binding scopes for a single function
-/// definition.
-struct Locals<'parent> {
-    scopes: Vec<Scope>,
-    parent: Option<&'parent Locals<'parent>>,
-}
-
-impl<'parent> Locals<'parent> {
-    fn new(parent: Option<&'parent Locals<'parent>>) -> Locals<'parent> {
-        Locals {
-            scopes: Vec::new(),
-            parent,
-        }
-    }
-
-    /// Search for a binding, following parent scopes.
-    fn lookup_binding<'guard>(
-        &self,
-        name: TaggedScopedPtr<'guard>,
-    ) -> Result<Option<(u8, &Variable)>, RuntimeError> {
-        //  return value should be (count-of-parent-functions-followed, Variable)
-
-        // The depth is the number of parent nesting functions searched for a variable
-        let mut depth: u8 = 0;
+        // The frame_offset is the number of parent nesting functions searched for a variable
+        let mut frame_offset: u8 = 0;
 
         let mut locals = Some(self);
         while let Some(l) = locals {
             for scope in l.scopes.iter().rev() {
-                if let Some(var) = scope.lookup_binding(name)? {
-                    return Ok(Some((depth, var)));
+                if let Some(var) = scope.lookup_binding(&name_string) {
+                    if frame_offset == 0 {
+                        // At depth 0, this is a local binding
+                        return Ok(Some(Binding::Local(var.register())));
+                    } else {
+                        // Otherwise it is a nonlocal and needs to be referenced as an upvalue.
+                        // Look up to see if we already know about this as an upvalue- if not,
+                        // create a new upvalue.
+                        let nonlocals = self.nonlocals.borrow_mut();
+                        if let None = nonlocals.get(&name_string) {
+                            let nonlocal = Nonlocal::new(
+                                self.acquire_upvalue_id(),
+                                frame_offset,
+                                var.register(),
+                            );
+                            nonlocals.insert(name_string, nonlocal);
+                        }
+                    }
                 }
             }
+
+            // We've reached the end of the local scopes at this point so we can check if we
+            // already know about this binding as an upvalue and return it
+            if frame_offset == 0 {
+                let nonlocals = self.nonlocals.borrow();
+                match nonlocals.get(&name_string) {
+                    Some(nonlocal) => return Ok(Some(Binding::Upvalue(nonlocal.upvalue_id))),
+                    _ => (),
+                };
+            }
+
             locals = l.parent;
-            depth += 1;
+            frame_offset += 1;
         }
 
         Ok(None)
+    }
+
+    fn acquire_upvalue_id(&self) -> UpvalueId {
+        let id = self.next_upvalue.get();
+        self.next_upvalue.set(id + 1);
+        id
     }
 }
 
 /// This is a simple, naive compiler of a nested s-expression Pair (Cons cell) data structure.
 /// It compiles for the VM in vm.rs, a sliding-window register machine.  Register allocation
 /// follows the expression nesting structure, essentially pushing and popping register locations
-/// from the evaluation tree as scopes are entered and exited. This is super simple but not
+/// from the evaluation tree as expressions are entered and exited. This is super simple but not
 /// the most efficient scheme possible.
 struct Compiler<'parent> {
     bytecode: CellPtr<ByteCode>,
+    /// Next available register slot.
     next_reg: Register,
-    // optional function name
+    /// Optional function name
     name: Option<String>,
-    // function-local nested scopes bindings list (including parameters at outer level)
-    locals: Locals<'parent>,
+    /// Function-local nested scopes bindings list (including parameters at outer level)
+    vars: Variables<'parent>,
 }
 
 impl<'parent> Compiler<'parent> {
     /// Instantiate a new nested function-level compiler
     fn new<'guard>(
         mem: &'guard MutatorView,
-        parent: Option<&'parent Locals<'parent>>,
+        parent: Option<&'parent Variables<'parent>>,
     ) -> Result<Compiler<'parent>, RuntimeError> {
         Ok(Compiler {
             bytecode: CellPtr::new_with(ByteCode::alloc(mem)?),
             // register 0 is reserved for the return value, 1 is reserved for a closure environment
             next_reg: FIRST_ARG_REG as u8,
             name: None,
-            locals: Locals::new(parent),
+            vars: Variables::new(parent),
         })
     }
 
@@ -217,7 +269,7 @@ impl<'parent> Compiler<'parent> {
         // also assign params to the first level function scope and give each one a register
         let mut param_scope = Scope::new();
         self.next_reg = param_scope.push_bindings(params, self.next_reg)?;
-        self.locals.scopes.push(param_scope);
+        self.vars.scopes.push(param_scope);
 
         // validate expression list
         if exprs.len() == 0 {
@@ -266,35 +318,30 @@ impl<'parent> Compiler<'parent> {
 
                     // Search scopes for a binding; if none do a global lookup
                     _ => {
-                        // First search local and nonlocal bindings from inner to outermost scope
-                        if let Some((frame_offset, src)) = self.locals.lookup_binding(ast_node)? {
-                            let src_register = src.register();
+                        match self.vars.lookup_binding(ast_node)? {
+                            Binding::Local(register) => Ok(register),
 
-                            if frame_offset > 0 {
-                                // nonlocal nonglobal binding
-                                // TODO instead of issuing a LoadNonLocal, add this variable to the
-                                // parameter scope as an Upvalue and issue a GetUpvalue instruction
+                            Binding::Upvalue(upvalue_id) => {
+                                // Retrieve the value via Upvalue indirection
                                 let dest = self.acquire_reg();
                                 self.push(
                                     mem,
-                                    Opcode::LoadNonLocal {
+                                    Opcode::GetUpvalue {
                                         dest,
-                                        src: src_register,
-                                        frame_offset,
+                                        src: upvalue_id,
                                     },
                                 )?;
-                                return Ok(dest);
-                            } else {
-                                // local call-frame register
-                                return Ok(src.register());
+                                Ok(dest)
+                            }
+
+                            Binding::None => {
+                                // Otherwise do a late-binding global lookup
+                                let name = self.push_load_literal(mem, ast_node)?;
+                                let dest = name; // reuse the register
+                                self.push(mem, Opcode::LoadGlobal { dest, name })?;
+                                Ok(dest)
                             }
                         }
-
-                        // Otherwise do a late-binding global lookup
-                        let name = self.push_load_literal(mem, ast_node)?;
-                        let dest = name; // reuse the register
-                        self.push(mem, Opcode::LoadGlobal { dest, name })?;
-                        Ok(dest)
                     }
                 }
             }
@@ -455,7 +502,7 @@ impl<'parent> Compiler<'parent> {
         let fn_exprs = &items[1..];
 
         // compile the function to a Function object
-        let fn_object = compile_function(mem, Some(&self.locals), mem.nil(), &fn_params, fn_exprs)?;
+        let fn_object = compile_function(mem, Some(&self.vars), mem.nil(), &fn_params, fn_exprs)?;
 
         // load the function object as a literal
         self.push_load_literal(mem, fn_object)
@@ -483,7 +530,7 @@ impl<'parent> Compiler<'parent> {
         let fn_exprs = &items[2..];
 
         // compile the function to a Function object
-        let fn_object = compile_function(mem, Some(&self.locals), fn_name, &fn_params, fn_exprs)?;
+        let fn_object = compile_function(mem, Some(&self.vars), fn_name, &fn_params, fn_exprs)?;
 
         // load the function object as a literal and associate it with a global name
         // TODO store in local scope if we're nested in an expression
@@ -576,7 +623,7 @@ impl<'parent> Compiler<'parent> {
 
         let mut let_scope = Scope::new();
         self.next_reg = let_scope.push_bindings(&names, self.next_reg)?;
-        self.locals.scopes.push(let_scope);
+        self.vars.scopes.push(let_scope);
 
         // compile each binding expression
         for (name, expr) in let_exprs {
@@ -596,7 +643,7 @@ impl<'parent> Compiler<'parent> {
         }
 
         // finish up - pop the scope, de-scope all registers except the result, return the result
-        self.locals.scopes.pop();
+        self.vars.scopes.pop();
         self.reset_reg(dest + 1);
         Ok(dest)
     }
@@ -687,7 +734,7 @@ impl<'parent> Compiler<'parent> {
 /// Compile a function - parameters and expression, returning a tagged Function object
 fn compile_function<'guard, 'scope>(
     mem: &'guard MutatorView,
-    parent: Option<&'scope Locals<'scope>>,
+    parent: Option<&'scope Variables<'scope>>,
     name: TaggedScopedPtr<'guard>,
     params: &[TaggedScopedPtr<'guard>],
     exprs: &[TaggedScopedPtr<'guard>],
