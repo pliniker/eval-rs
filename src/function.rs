@@ -23,8 +23,9 @@ pub struct Function {
     /// Param names are stored for introspection of a function signature
     param_names: CellPtr<List>,
     /// List of (CallFrame-index: u8 | Window-index: u8) relative offsets from this function's
-    /// declaration where nonlocal variables will be found. Needed when creating a closure.
-    nonlocal_refs: CellPtr<ArrayU16>,
+    /// declaration where nonlocal variables will be found. Needed when creating a closure. May be
+    /// nil
+    nonlocal_refs: TaggedCellPtr,
 }
 
 impl Function {
@@ -38,14 +39,21 @@ impl Function {
         name: TaggedScopedPtr<'guard>,
         param_names: ScopedPtr<'guard, List>,
         code: ScopedPtr<'guard, ByteCode>,
-        nonlocal_refs: ScopedPtr<'guard, ArrayU16>,
+        nonlocal_refs: Option<ScopedPtr<'guard, ArrayU16>>,
     ) -> Result<ScopedPtr<'guard, Function>, RuntimeError> {
+        // Store a nil ptr if no nonlocal references are given
+        let nonlocal_refs = if let Some(refs_ptr) = nonlocal_refs {
+            TaggedCellPtr::new_with(refs_ptr.as_tagged(mem))
+        } else {
+            TaggedCellPtr::new_nil()
+        };
+
         mem.alloc(Function {
             name: TaggedCellPtr::new_with(name),
             arity: param_names.length() as u8,
             code: CellPtr::new_with(code),
             param_names: CellPtr::new_with(param_names),
-            nonlocal_refs: CellPtr::new_with(nonlocal_refs),
+            nonlocal_refs: nonlocal_refs,
         })
     }
 
@@ -73,12 +81,22 @@ impl Function {
         self.code.get(guard)
     }
 
-    /// Return a list of nonlocal stack references referenced by the function
+    /// Return true if the function is a closure - it has nonlocal variable references
+    pub fn is_closure<'guard>(&self) -> bool {
+        !self.nonlocal_refs.is_nil()
+    }
+
+    /// Return a list of nonlocal stack references referenced by the function. It is a panickable
+    /// offense to call this when there are no nonlocals referenced by the function. This would
+    /// indicate a compiler bug.
     pub fn nonlocals<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
     ) -> ScopedPtr<'guard, ArrayU16> {
-        self.nonlocal_refs.get(guard)
+        match *self.nonlocal_refs.get(guard) {
+            Value::ArrayU16(nonlocals) => nonlocals,
+            _ => unreachable!(),
+        }
     }
 }
 

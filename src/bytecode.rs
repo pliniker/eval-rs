@@ -119,11 +119,6 @@ pub enum Opcode {
         dest: Register,
         src: Register,
     },
-    LoadNonLocal {
-        dest: Register,
-        src: Register,
-        frame_offset: FrameOffset,
-    },
     Add {
         dest: Register,
         reg1: Register,

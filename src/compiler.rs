@@ -1,9 +1,9 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
-use crate::array::{Array, ArraySize};
+use crate::array::{Array, ArraySize, ArrayU16};
 use crate::bytecode::{ByteCode, JumpOffset, Opcode, Register, UpvalueId, JUMP_UNKNOWN};
-use crate::containers::AnyContainerFromSlice;
+use crate::containers::{AnyContainerFromSlice, StackContainer};
 use crate::error::{err_eval, RuntimeError};
 use crate::function::Function;
 use crate::list::List;
@@ -170,42 +170,71 @@ impl<'parent> Variables<'parent> {
                         return Ok(Some(Binding::Local(var.register())));
                     } else {
                         // Otherwise it is a nonlocal and needs to be referenced as an upvalue.
-                        // Look up to see if we already know about this as an upvalue- if not,
-                        // create a new upvalue.
-                        let nonlocals = self.nonlocals.borrow_mut();
+                        // Create a new upvalue reference if one does not exist.
+                        let mut nonlocals = self.nonlocals.borrow_mut();
+
                         if let None = nonlocals.get(&name_string) {
+                            // Create a new non-local descriptor and add it
                             let nonlocal = Nonlocal::new(
                                 self.acquire_upvalue_id(),
                                 frame_offset,
                                 var.register(),
                             );
-                            nonlocals.insert(name_string, nonlocal);
+                            nonlocals.insert(name_string.clone(), nonlocal);
+
+                            // Mark the variable as closed-over, as in, a closure will refer to it
+                            // and it's upvalue must be closed at runtime
+                            var.close_over();
                         }
                     }
                 }
-            }
-
-            // We've reached the end of the local scopes at this point so we can check if we
-            // already know about this binding as an upvalue and return it
-            if frame_offset == 0 {
-                let nonlocals = self.nonlocals.borrow();
-                match nonlocals.get(&name_string) {
-                    Some(nonlocal) => return Ok(Some(Binding::Upvalue(nonlocal.upvalue_id))),
-                    _ => (),
-                };
             }
 
             locals = l.parent;
             frame_offset += 1;
         }
 
+        // We've reached the end of the scopes at this point so we can check if we
+        // know about this binding as an upvalue and return it
+        if frame_offset == 0 {
+            let nonlocals = self.nonlocals.borrow();
+            match nonlocals.get(&name_string) {
+                Some(nonlocal) => return Ok(Some(Binding::Upvalue(nonlocal.upvalue_id))),
+                _ => (),
+            };
+        }
+
         Ok(None)
     }
 
+    /// Return the next upvalue id and increment the counter
     fn acquire_upvalue_id(&self) -> UpvalueId {
         let id = self.next_upvalue.get();
         self.next_upvalue.set(id + 1);
         id
+    }
+
+    fn get_nonlocals<'guard>(
+        &self,
+        mem: &'guard MutatorView,
+    ) -> Result<Option<ScopedPtr<'guard, ArrayU16>>, RuntimeError> {
+        let count = self.next_upvalue.get();
+        if count == 0 {
+            Ok(None)
+        } else {
+            let nonlocals = self.nonlocals.borrow();
+            let mut values: Vec<_> = nonlocals.values().collect();
+            values.sort_by(|x, y| x.upvalue_id.cmp(&y.upvalue_id));
+
+            let list = ArrayU16::alloc_with_capacity(mem, count as ArraySize)?;
+
+            for value in &values {
+                let compound: u16 = (value.frame_offset as u16) << 8 | value.frame_register as u16;
+                list.push(mem, compound)?;
+            }
+
+            Ok(Some(list))
+        }
     }
 }
 
@@ -282,18 +311,17 @@ impl<'parent> Compiler<'parent> {
             result_reg = self.compile_eval(mem, *expr)?;
         }
 
-        // TODO Question: for every Return instruction in the bytecode, if the preceding
-        // instruction is a Call, can the Call be converted to a TAILCall?
-
         let fn_bytecode = self.bytecode.get(mem);
         fn_bytecode.push(mem, Opcode::Return { reg: result_reg })?;
+
+        let fn_nonlocals = self.vars.get_nonlocals(mem)?;
 
         Ok(Function::alloc(
             mem,
             fn_name,
             fn_params,
             fn_bytecode,
-            Array::alloc(mem)?,
+            fn_nonlocals,
         )?)
     }
 
@@ -319,9 +347,9 @@ impl<'parent> Compiler<'parent> {
                     // Search scopes for a binding; if none do a global lookup
                     _ => {
                         match self.vars.lookup_binding(ast_node)? {
-                            Binding::Local(register) => Ok(register),
+                            Some(Binding::Local(register)) => Ok(register),
 
-                            Binding::Upvalue(upvalue_id) => {
+                            Some(Binding::Upvalue(upvalue_id)) => {
                                 // Retrieve the value via Upvalue indirection
                                 let dest = self.acquire_reg();
                                 self.push(
@@ -334,7 +362,7 @@ impl<'parent> Compiler<'parent> {
                                 Ok(dest)
                             }
 
-                            Binding::None => {
+                            None => {
                                 // Otherwise do a late-binding global lookup
                                 let name = self.push_load_literal(mem, ast_node)?;
                                 let dest = name; // reuse the register
@@ -505,9 +533,27 @@ impl<'parent> Compiler<'parent> {
         let fn_object = compile_function(mem, Some(&self.vars), mem.nil(), &fn_params, fn_exprs)?;
 
         // load the function object as a literal
-        self.push_load_literal(mem, fn_object)
+        let dest = self.push_load_literal(mem, fn_object)?;
 
-        // TODO if fn_object has nonlocal refs, compile a MakeClosure instruction in addition
+        // if fn_object has nonlocal refs, compile a MakeClosure instruction in addition, replacing
+        // the Function register with a Partial with a closure environment
+        match *fn_object {
+            Value::Function(f) => {
+                if f.is_closure() {
+                    self.push(
+                        mem,
+                        Opcode::MakeClosure {
+                            function: dest,
+                            dest,
+                        },
+                    )?;
+                }
+            }
+            // 's gotta be a function
+            _ => unreachable!(),
+        }
+
+        Ok(dest)
     }
 
     /// (def name (args) (expr))

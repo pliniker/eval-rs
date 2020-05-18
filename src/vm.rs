@@ -615,8 +615,6 @@ impl Thread {
                     let function_ptr = window[function as usize].get(mem);
                     if let Value::Function(f) = *function_ptr {
                         let nonlocals = f.nonlocals(mem);
-
-                        // Allocate a temp array on the native stack
                         let env = List::alloc_with_capacity(mem, nonlocals.length())?;
 
                         // Iter over function nonlocals, calculating absolute stack offset for each
@@ -630,8 +628,7 @@ impl Thread {
                                 //  - 1 because the function itself counts it's frame offsets from
                                 //    inside it's scope and we're outside it here
                                 let frame = frames.get(mem, frames.length() - 2 - frame_offset)?;
-                                let frame_base = frame.base;
-                                let location = frame_base + window_offset;
+                                let location = frame.base + window_offset;
 
                                 let (_, upvalue) = self.upvalue_lookup_or_alloc(mem, location)?;
                                 StackAnyContainer::push(&*env, mem, upvalue.as_tagged(mem))?;
@@ -652,22 +649,6 @@ impl Thread {
                 // Simple copy of one register to another
                 Opcode::CopyRegister { dest, src } => {
                     window[dest as usize] = window[src as usize].clone();
-                }
-
-                // TODO - deprecate
-                Opcode::LoadNonLocal {
-                    dest,
-                    src,
-                    frame_offset,
-                } => {
-                    let full_dest = stack_base + dest as usize;
-
-                    let frame = frames.get(mem, frames.length() - 1 - frame_offset as ArraySize)?;
-                    let frame_base = frame.base;
-                    let full_src = frame_base + src as ArraySize;
-
-                    let value = &full_stack[full_src as usize];
-                    full_stack[full_dest] = value.clone();
                 }
 
                 // TODO
