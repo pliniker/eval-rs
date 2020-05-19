@@ -62,6 +62,8 @@ impl ObjectHeader {
 
         // Only Object* types should be derived from the header.
         // Symbol, Pair and Number should have been derived from a pointer tag.
+        //
+        // NOTE any type that is a runtime dynamic type must be added to the below list
         match self.type_id {
             TypeList::NumberObject => {
                 FatPtr::NumberObject(RawPtr::untag(object_addr.cast::<NumberObject>()))
@@ -74,6 +76,7 @@ impl ObjectHeader {
             TypeList::Dict => FatPtr::Dict(RawPtr::untag(object_addr.cast::<Dict>())),
             TypeList::Function => FatPtr::Function(RawPtr::untag(object_addr.cast::<Function>())),
             TypeList::Partial => FatPtr::Partial(RawPtr::untag(object_addr.cast::<Partial>())),
+            TypeList::Upvalue => FatPtr::Upvalue(RawPtr::untag(object_addr.cast::<Upvalue>())),
 
             _ => panic!("Invalid ObjectHeader type tag {:?}!", self.type_id),
         }

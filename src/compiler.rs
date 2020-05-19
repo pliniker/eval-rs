@@ -196,12 +196,9 @@ impl<'parent> Variables<'parent> {
 
         // We've reached the end of the scopes at this point so we can check if we
         // know about this binding as an upvalue and return it
-        if frame_offset == 0 {
-            let nonlocals = self.nonlocals.borrow();
-            match nonlocals.get(&name_string) {
-                Some(nonlocal) => return Ok(Some(Binding::Upvalue(nonlocal.upvalue_id))),
-                _ => (),
-            };
+        let nonlocals = self.nonlocals.borrow();
+        if let Some(nonlocal) = nonlocals.get(&name_string) {
+            return Ok(Some(Binding::Upvalue(nonlocal.upvalue_id)));
         }
 
         Ok(None)
@@ -214,6 +211,7 @@ impl<'parent> Variables<'parent> {
         id
     }
 
+    /// Return an ArrayU16 of nonlocal references if there are any for the function
     fn get_nonlocals<'guard>(
         &self,
         mem: &'guard MutatorView,
@@ -235,6 +233,25 @@ impl<'parent> Variables<'parent> {
 
             Ok(Some(list))
         }
+    }
+
+    /// Pop the last scoped variables and create close-upvalue instructions for any closed over
+    fn pop_scope<'guard>(&mut self) -> Vec<Opcode> {
+        let mut closings = Vec::new();
+
+        if let Some(scope) = self.scopes.pop() {
+            for var in scope.bindings.values() {
+                if var.is_closed_over() {
+                    closings.push(Opcode::CloseUpvalues {
+                        reg1: var.register(),
+                        reg2: 0,
+                        reg3: 0,
+                    });
+                }
+            }
+        }
+
+        closings
     }
 }
 
@@ -311,6 +328,13 @@ impl<'parent> Compiler<'parent> {
             result_reg = self.compile_eval(mem, *expr)?;
         }
 
+        // pop parameter scope
+        let closing_instructions = self.vars.pop_scope();
+        for opcode in &closing_instructions {
+            self.push(mem, *opcode)?;
+        }
+
+        // finish with a return
         let fn_bytecode = self.bytecode.get(mem);
         fn_bytecode.push(mem, Opcode::Return { reg: result_reg })?;
 
@@ -689,7 +713,11 @@ impl<'parent> Compiler<'parent> {
         }
 
         // finish up - pop the scope, de-scope all registers except the result, return the result
-        self.vars.scopes.pop();
+        let closing_instructions = self.vars.pop_scope();
+        for opcode in &closing_instructions {
+            self.push(mem, *opcode)?;
+        }
+
         self.reset_reg(dest + 1);
         Ok(dest)
     }
@@ -1061,6 +1089,45 @@ mod integration {
 
             let result = eval_helper(mem, t, query)?;
             assert!(result == mem.lookup_sym("x"));
+
+            Ok(())
+        }
+
+        test_helper(test_inner);
+    }
+
+    #[test]
+    fn compile_function_returning_lambda_with_nonlocal_ref() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            // this test compiles a function that returns a lambda that references a nonlocal
+            let head_fn = "(def head (a) (let ((inner (\\ () (car a)))) inner))";
+            let inner_fn = "(set 'inner (head '(x y z z y)))";
+            let query = "(inner)";
+
+            let t = Thread::alloc(mem)?;
+
+            eval_helper(mem, t, head_fn)?;
+            eval_helper(mem, t, inner_fn)?;
+
+            let result = eval_helper(mem, t, query)?;
+            assert!(result == mem.lookup_sym("x"));
+
+            Ok(())
+        }
+
+        test_helper(test_inner);
+    }
+
+    #[test]
+    fn compile_let_with_lambda_with_nested_call() {
+        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
+            // this test compiles a let containing a lambda that is referenced in a sub-let scope
+            let f = "(let ((f (\\ (a) a))) (let ((g (f 'b))) g))";
+
+            let t = Thread::alloc(mem)?;
+
+            let result = eval_helper(mem, t, f)?;
+            assert!(result == mem.lookup_sym("b"));
 
             Ok(())
         }

@@ -544,9 +544,10 @@ impl Thread {
                         Value::Partial(partial) => {
                             let arity = partial.arity();
 
-                            if arg_count == 0 {
-                                // Partial is unchanged, no args added
-                                window[dest as usize].set(partial.as_tagged(mem));
+                            if arg_count == 0 && arity > 0 {
+                                // Partial is unchanged, no args added, copy directly to dest
+                                window[dest as usize]
+                                    .set_to_ptr(window[function as usize].get_ptr());
                                 return Ok(EvalStatus::Pending);
                             } else if arg_count < arity {
                                 // Too few args, bake a new Partial from the existing one, adding the new
@@ -623,11 +624,8 @@ impl Thread {
                                 let frame_offset = (*compound >> 8) as ArraySize;
                                 let window_offset = (*compound & 0xff) as ArraySize;
 
-                                // subtract 2:
-                                //  - 1 because frames.length() is a count, not an index
-                                //  - 1 because the function itself counts it's frame offsets from
-                                //    inside it's scope and we're outside it here
-                                let frame = frames.get(mem, frames.length() - 2 - frame_offset)?;
+                                // look back frame_offset frames and add the register number
+                                let frame = frames.get(mem, frames.length() - frame_offset)?;
                                 let location = frame.base + window_offset;
 
                                 let (_, upvalue) = self.upvalue_lookup_or_alloc(mem, location)?;
@@ -684,8 +682,7 @@ impl Thread {
                         // Registers 0 and 1 cannot be closed over
                         if *reg >= FIRST_ARG_REG as u8 {
                             // calculate absolute stack offset of reg
-                            let frame = frames.top(mem)?;
-                            let location = frame.base + *reg as ArraySize;
+                            let location = stack_base as ArraySize + *reg as ArraySize;
                             // find the Upvalue object by location
                             let (location_ptr, upvalue) = self.upvalue_lookup(mem, location)?;
                             // close it and unanchor from the Thread
