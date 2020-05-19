@@ -141,6 +141,10 @@ impl<'guard> TaggedScopedPtr<'guard> {
     pub fn value(&self) -> Value<'guard> {
         self.value
     }
+
+    pub fn get_ptr(&self) -> TaggedPtr {
+        self.ptr
+    }
 }
 
 /// Anything that _has_ a scope lifetime can pass as a scope representation. `Value` also implements
@@ -192,6 +196,12 @@ impl TaggedCellPtr {
     pub fn new_with(source: TaggedScopedPtr) -> TaggedCellPtr {
         TaggedCellPtr {
             inner: Cell::new(TaggedPtr::from(source.ptr)),
+        }
+    }
+
+    pub fn new_ptr(source: TaggedPtr) -> TaggedCellPtr {
+        TaggedCellPtr {
+            inner: Cell::new(source),
         }
     }
 

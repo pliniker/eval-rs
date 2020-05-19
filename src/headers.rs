@@ -4,7 +4,7 @@ use stickyimmix::{
     AllocHeader, AllocObject, AllocRaw, AllocTypeId, ArraySize, Mark, RawPtr, SizeClass,
 };
 
-use crate::array::{ArrayU32, ArrayU8};
+use crate::array::{ArrayU16, ArrayU32, ArrayU8};
 use crate::bytecode::{ArrayOpcode, ByteCode, InstructionStream};
 use crate::dict::Dict;
 use crate::function::{Function, Partial};
@@ -16,7 +16,7 @@ use crate::pointerops::{AsNonNull, Tagged};
 use crate::symbol::Symbol;
 use crate::taggedptr::FatPtr;
 use crate::text::Text;
-use crate::vm::{CallFrameList, Thread};
+use crate::vm::{CallFrameList, Thread, Upvalue};
 
 /// Recognized heap-allocated types.
 /// This should represent every type native to the runtime with the exception of tagged pointer inline value types.
@@ -30,6 +30,7 @@ pub enum TypeList {
     Array, // type id for array backing bytes
     List,
     ArrayU8,
+    ArrayU16,
     ArrayU32,
     Dict,
     ArrayOpcode,
@@ -39,6 +40,7 @@ pub enum TypeList {
     Partial,
     CallFrameList,
     Thread,
+    Upvalue,
 }
 
 // Mark this as a Stickyimmix type-identifier type
@@ -60,17 +62,21 @@ impl ObjectHeader {
 
         // Only Object* types should be derived from the header.
         // Symbol, Pair and Number should have been derived from a pointer tag.
+        //
+        // NOTE any type that is a runtime dynamic type must be added to the below list
         match self.type_id {
             TypeList::NumberObject => {
                 FatPtr::NumberObject(RawPtr::untag(object_addr.cast::<NumberObject>()))
             }
             TypeList::Text => FatPtr::Text(RawPtr::untag(object_addr.cast::<Text>())),
             TypeList::ArrayU8 => FatPtr::ArrayU8(RawPtr::untag(object_addr.cast::<ArrayU8>())),
+            TypeList::ArrayU16 => FatPtr::ArrayU16(RawPtr::untag(object_addr.cast::<ArrayU16>())),
             TypeList::ArrayU32 => FatPtr::ArrayU32(RawPtr::untag(object_addr.cast::<ArrayU32>())),
             TypeList::List => FatPtr::List(RawPtr::untag(object_addr.cast::<List>())),
             TypeList::Dict => FatPtr::Dict(RawPtr::untag(object_addr.cast::<Dict>())),
             TypeList::Function => FatPtr::Function(RawPtr::untag(object_addr.cast::<Function>())),
             TypeList::Partial => FatPtr::Partial(RawPtr::untag(object_addr.cast::<Partial>())),
+            TypeList::Upvalue => FatPtr::Upvalue(RawPtr::untag(object_addr.cast::<Upvalue>())),
 
             _ => panic!("Invalid ObjectHeader type tag {:?}!", self.type_id),
         }
@@ -140,6 +146,7 @@ declare_allocobject!(NumberObject, NumberObject);
 declare_allocobject!(Text, Text);
 declare_allocobject!(List, List);
 declare_allocobject!(ArrayU8, ArrayU8);
+declare_allocobject!(ArrayU16, ArrayU16);
 declare_allocobject!(ArrayU32, ArrayU32);
 declare_allocobject!(Dict, Dict);
 declare_allocobject!(ArrayOpcode, ArrayOpcode);
@@ -149,3 +156,4 @@ declare_allocobject!(Function, Function);
 declare_allocobject!(Partial, Partial);
 declare_allocobject!(CallFrameList, CallFrameList);
 declare_allocobject!(Thread, Thread);
+declare_allocobject!(Upvalue, Upvalue);

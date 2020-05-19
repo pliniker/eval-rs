@@ -16,7 +16,7 @@ use std::ptr::NonNull;
 
 use stickyimmix::{AllocRaw, RawPtr};
 
-use crate::array::{ArrayU32, ArrayU8};
+use crate::array::{ArrayU16, ArrayU32, ArrayU8};
 use crate::dict::Dict;
 use crate::function::{Function, Partial};
 use crate::list::List;
@@ -28,6 +28,7 @@ use crate::printer::Print;
 use crate::safeptr::{MutatorScope, ScopedPtr};
 use crate::symbol::Symbol;
 use crate::text::Text;
+use crate::vm::Upvalue;
 
 /// A safe interface to GC-heap managed objects. The `'guard` lifetime must be a safe lifetime for
 /// the GC not to move or collect the referenced object.
@@ -42,10 +43,12 @@ pub enum Value<'guard> {
     Text(ScopedPtr<'guard, Text>),
     List(ScopedPtr<'guard, List>),
     ArrayU8(ScopedPtr<'guard, ArrayU8>),
+    ArrayU16(ScopedPtr<'guard, ArrayU16>),
     ArrayU32(ScopedPtr<'guard, ArrayU32>),
     Dict(ScopedPtr<'guard, Dict>),
     Function(ScopedPtr<'guard, Function>),
     Partial(ScopedPtr<'guard, Partial>),
+    Upvalue(ScopedPtr<'guard, Upvalue>),
 }
 
 /// `Value` can have a safe `Display` implementation
@@ -59,10 +62,12 @@ impl<'guard> fmt::Display for Value<'guard> {
             Value::Text(t) => t.print(self, f),
             Value::List(a) => a.print(self, f),
             Value::ArrayU8(a) => a.print(self, f),
+            Value::ArrayU16(a) => a.print(self, f),
             Value::ArrayU32(a) => a.print(self, f),
             Value::Dict(d) => d.print(self, f),
             Value::Function(n) => n.print(self, f),
             Value::Partial(p) => p.print(self, f),
+            Value::Upvalue(_) => write!(f, "Upvalue"),
             _ => write!(f, "<unidentified-object-type>"),
         }
     }
@@ -78,10 +83,12 @@ impl<'guard> fmt::Debug for Value<'guard> {
             Value::Text(t) => t.debug(self, f),
             Value::List(a) => a.debug(self, f),
             Value::ArrayU8(a) => a.debug(self, f),
+            Value::ArrayU16(a) => a.debug(self, f),
             Value::ArrayU32(a) => a.debug(self, f),
             Value::Dict(d) => d.debug(self, f),
             Value::Function(n) => n.debug(self, f),
             Value::Partial(p) => p.debug(self, f),
+            Value::Upvalue(_) => write!(f, "Upvalue"),
             _ => write!(f, "<unidentified-object-type>"),
         }
     }
@@ -101,10 +108,12 @@ pub enum FatPtr {
     Text(RawPtr<Text>),
     List(RawPtr<List>),
     ArrayU8(RawPtr<ArrayU8>),
+    ArrayU16(RawPtr<ArrayU16>),
     ArrayU32(RawPtr<ArrayU32>),
     Dict(RawPtr<Dict>),
     Function(RawPtr<Function>),
     Partial(RawPtr<Partial>),
+    Upvalue(RawPtr<Upvalue>),
 }
 
 impl FatPtr {
@@ -126,6 +135,9 @@ impl FatPtr {
             FatPtr::ArrayU8(raw_ptr) => {
                 Value::ArrayU8(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
             }
+            FatPtr::ArrayU16(raw_ptr) => {
+                Value::ArrayU16(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
+            }
             FatPtr::ArrayU32(raw_ptr) => {
                 Value::ArrayU32(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
             }
@@ -135,6 +147,9 @@ impl FatPtr {
             }
             FatPtr::Partial(raw_ptr) => {
                 Value::Partial(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
+            }
+            FatPtr::Upvalue(raw_ptr) => {
+                Value::Upvalue(ScopedPtr::new(guard, raw_ptr.scoped_ref(guard)))
             }
         }
     }
@@ -157,10 +172,20 @@ fatptr_from_rawptr!(NumberObject, NumberObject);
 fatptr_from_rawptr!(Text, Text);
 fatptr_from_rawptr!(List, List);
 fatptr_from_rawptr!(ArrayU8, ArrayU8);
+fatptr_from_rawptr!(ArrayU16, ArrayU16);
 fatptr_from_rawptr!(ArrayU32, ArrayU32);
 fatptr_from_rawptr!(Dict, Dict);
 fatptr_from_rawptr!(Function, Function);
 fatptr_from_rawptr!(Partial, Partial);
+fatptr_from_rawptr!(Upvalue, Upvalue);
+
+/// Conversion from an integer type
+impl From<isize> for FatPtr {
+    fn from(num: isize) -> FatPtr {
+        // TODO big numbers
+        FatPtr::Number(num)
+    }
+}
 
 /// Conversion from a TaggedPtr type
 impl From<TaggedPtr> for FatPtr {
@@ -229,7 +254,7 @@ impl TaggedPtr {
 
     /// Construct an inline integer TaggedPtr
     // TODO deal with big numbers later
-    fn number(value: isize) -> TaggedPtr {
+    pub fn number(value: isize) -> TaggedPtr {
         TaggedPtr {
             number: (((value as usize) << 2) | TAG_NUMBER) as isize,
         }
@@ -277,10 +302,12 @@ impl From<FatPtr> for TaggedPtr {
             FatPtr::Text(raw) => TaggedPtr::object(raw),
             FatPtr::List(raw) => TaggedPtr::object(raw),
             FatPtr::ArrayU8(raw) => TaggedPtr::object(raw),
+            FatPtr::ArrayU16(raw) => TaggedPtr::object(raw),
             FatPtr::ArrayU32(raw) => TaggedPtr::object(raw),
             FatPtr::Dict(raw) => TaggedPtr::object(raw),
             FatPtr::Function(raw) => TaggedPtr::object(raw),
             FatPtr::Partial(raw) => TaggedPtr::object(raw),
+            FatPtr::Upvalue(raw) => TaggedPtr::object(raw),
         }
     }
 }

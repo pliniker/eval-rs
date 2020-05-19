@@ -22,6 +22,9 @@ pub type LiteralInteger = i16;
 /// Literals are stored in a list, a LiteralId describes the index of the value in the list
 pub type LiteralId = u16;
 
+/// Upvalues are stored in a list on a Partial, an UpvalueId is the index into the list
+pub type UpvalueId = u8;
+
 /// An instruction jump target is a signed integer, relative to the jump instruction
 pub type JumpOffset = i16;
 /// Jump offset when the target is still unknown.
@@ -107,7 +110,6 @@ pub enum Opcode {
     MakeClosure {
         dest: Register,
         function: Register,
-        function_scope: FrameOffset,
     },
     LoadInteger {
         dest: Register,
@@ -116,11 +118,6 @@ pub enum Opcode {
     CopyRegister {
         dest: Register,
         src: Register,
-    },
-    LoadNonLocal {
-        dest: Register,
-        src: Register,
-        frame_offset: FrameOffset,
     },
     Add {
         dest: Register,
@@ -141,6 +138,19 @@ pub enum Opcode {
         dest: Register,
         num: Register,
         denom: Register,
+    },
+    GetUpvalue {
+        dest: Register,
+        src: UpvalueId,
+    },
+    SetUpvalue {
+        dest: UpvalueId,
+        src: Register,
+    },
+    CloseUpvalues {
+        reg1: Register,
+        reg2: Register,
+        reg3: Register,
     },
 }
 
@@ -170,12 +180,12 @@ impl ByteCode {
         })
     }
 
-    /// Push an instuction to the back of the sequence
+    /// Append an instuction to the back of the sequence
     pub fn push<'guard>(&self, mem: &'guard MutatorView, op: Opcode) -> Result<(), RuntimeError> {
         self.code.push(mem, op)
     }
 
-    /// Set the jump offset of a jump instruction to a new value
+    /// Set the jump offset of an existing jump instruction to a new value
     pub fn update_jump_offset<'guard>(
         &self,
         mem: &'guard MutatorView,
@@ -197,7 +207,7 @@ impl ByteCode {
         Ok(())
     }
 
-    /// Push a literal-load operation to the back of the sequence
+    /// Append a literal-load operation to the back of the sequence
     pub fn push_loadlit<'guard>(
         &self,
         mem: &'guard MutatorView,
@@ -229,131 +239,6 @@ impl ByteCode {
     pub fn next_instruction(&self) -> ArraySize {
         self.code.length()
     }
-
-    /// To construct a closure, a lambda is lifted so that all free variables are converted into
-    /// function parameters. All existing parameter and evaluation registers must be punted
-    /// further back into the register window to make space. This function iterates over all
-    /// instructions, incrementing each register by 1, to make space for 1 free variable param
-    /// at the head of the register window.
-    pub fn increment_all_registers<'guard>(
-        &self,
-        guard: &'guard dyn MutatorScope,
-    ) -> Result<(), RuntimeError> {
-        use Opcode::*;
-        self.code.access_slice(guard, |code| {
-            for opcode in code {
-                *opcode = match *opcode {
-                    NoOp => NoOp,
-                    Return { reg } => Return { reg: reg + 1 },
-                    LoadLiteral { dest, literal_id } => LoadLiteral {
-                        dest: dest + 1,
-                        literal_id,
-                    },
-                    IsNil { dest, test } => IsNil {
-                        dest: dest + 1,
-                        test: test + 1,
-                    },
-                    IsAtom { dest, test } => IsAtom {
-                        dest: dest + 1,
-                        test: test + 1,
-                    },
-                    FirstOfPair { dest, reg } => FirstOfPair {
-                        dest: dest + 1,
-                        reg: reg + 1,
-                    },
-                    SecondOfPair { dest, reg } => SecondOfPair {
-                        dest: dest + 1,
-                        reg: reg + 1,
-                    },
-                    MakePair { dest, reg1, reg2 } => MakePair {
-                        dest: dest + 1,
-                        reg1: reg1 + 1,
-                        reg2: reg2 + 1,
-                    },
-                    IsIdentical { dest, test1, test2 } => IsIdentical {
-                        dest: dest + 1,
-                        test1: test1 + 1,
-                        test2: test2 + 1,
-                    },
-                    Jump { offset } => Jump { offset },
-                    JumpIfTrue { test, offset } => JumpIfTrue {
-                        test: test + 1,
-                        offset,
-                    },
-                    JumpIfNotTrue { test, offset } => JumpIfNotTrue {
-                        test: test + 1,
-                        offset,
-                    },
-                    LoadNil { dest } => LoadNil { dest: dest + 1 },
-                    LoadGlobal { dest, name } => LoadGlobal {
-                        dest: dest + 1,
-                        name: name + 1,
-                    },
-                    StoreGlobal { src, name } => StoreGlobal {
-                        src: src + 1,
-                        name: name + 1,
-                    },
-                    Call {
-                        function,
-                        dest,
-                        arg_count,
-                    } => Call {
-                        function: function + 1,
-                        dest: dest + 1,
-                        arg_count,
-                    },
-                    MakeClosure {
-                        dest,
-                        function,
-                        function_scope,
-                    } => MakeClosure {
-                        dest: dest + 1,
-                        function: function + 1,
-                        function_scope,
-                    },
-                    LoadInteger { dest, integer } => LoadInteger {
-                        dest: dest + 1,
-                        integer,
-                    },
-                    CopyRegister { dest, src } => CopyRegister {
-                        dest: dest + 1,
-                        src: src + 1,
-                    },
-                    LoadNonLocal {
-                        dest,
-                        src,
-                        frame_offset,
-                    } => LoadNonLocal {
-                        dest: dest + 1,
-                        src: src + 1,
-                        frame_offset,
-                    },
-                    Add { dest, reg1, reg2 } => Add {
-                        dest: dest + 1,
-                        reg1: reg1 + 1,
-                        reg2: reg2 + 1,
-                    },
-                    Subtract { dest, left, right } => Subtract {
-                        dest: dest + 1,
-                        left: left + 1,
-                        right: right + 1,
-                    },
-                    Multiply { dest, reg1, reg2 } => Multiply {
-                        dest: dest + 1,
-                        reg1: reg1 + 1,
-                        reg2: reg2 + 1,
-                    },
-                    DivideInteger { dest, num, denom } => DivideInteger {
-                        dest: dest + 1,
-                        num: num + 1,
-                        denom: denom + 1,
-                    },
-                }
-            }
-        });
-
-        Ok(())
-    }
 }
 
 impl Print for ByteCode {
@@ -372,7 +257,8 @@ impl Print for ByteCode {
     }
 }
 
-/// Interpret a ByteCode as a stream of instructions, handling an instruction-pointer abstraction.
+/// An InstructionStream is a pointer to a ByteCode instance and an instruction pointer giving the
+/// current index into the ByteCode
 pub struct InstructionStream {
     instructions: CellPtr<ByteCode>,
     ip: Cell<ArraySize>,
@@ -396,7 +282,7 @@ impl InstructionStream {
         self.ip.set(ip);
     }
 
-    /// Retrieve the next instruction and return the Opcode, if it correctly decodes
+    /// Retrieve the next instruction and return it, incrementing the instruction pointer
     pub fn get_next_opcode<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
@@ -410,7 +296,7 @@ impl InstructionStream {
         Ok(instr)
     }
 
-    /// Retrieve the literal pointer from the current instruction
+    /// Given an index into the literals list, return the pointer in the list at that index.
     pub fn get_literal<'guard>(
         &self,
         guard: &'guard dyn MutatorScope,
@@ -443,258 +329,10 @@ mod test {
     use crate::memory::{Memory, Mutator};
     use std::mem::size_of;
 
-    // TODO - create common module for test utilities
-    fn test_helper(test_fn: fn(&MutatorView) -> Result<(), RuntimeError>) {
-        let mem = Memory::new();
-
-        struct Test {}
-        impl Mutator for Test {
-            type Input = fn(&MutatorView) -> Result<(), RuntimeError>;
-            type Output = ();
-
-            fn run(
-                &self,
-                mem: &MutatorView,
-                test_fn: Self::Input,
-            ) -> Result<Self::Output, RuntimeError> {
-                test_fn(mem)
-            }
-        }
-
-        let test = Test {};
-        mem.mutate(&test, test_fn).unwrap();
-    }
-
     #[test]
     fn test_opcode_is_32_bits() {
         // An Opcode should be 32 bits; anything bigger and we've mis-defined some
         // discriminant
         assert!(size_of::<Opcode>() == 4);
-    }
-
-    #[test]
-    fn test_increment_all_registers() {
-        fn test_inner(mem: &MutatorView) -> Result<(), RuntimeError> {
-            use Opcode::*;
-
-            let code = ByteCode::alloc(mem)?;
-            code.push(mem, NoOp)?;
-            code.push(mem, Return { reg: 1 })?;
-            code.push(
-                mem,
-                LoadLiteral {
-                    dest: 1,
-                    literal_id: 0,
-                },
-            )?;
-            code.push(mem, IsNil { dest: 1, test: 1 })?;
-            code.push(mem, IsAtom { dest: 1, test: 1 })?;
-            code.push(mem, FirstOfPair { dest: 1, reg: 1 })?;
-            code.push(mem, SecondOfPair { dest: 1, reg: 1 })?;
-            code.push(
-                mem,
-                MakePair {
-                    dest: 1,
-                    reg1: 1,
-                    reg2: 1,
-                },
-            )?;
-            code.push(
-                mem,
-                IsIdentical {
-                    dest: 1,
-                    test1: 1,
-                    test2: 1,
-                },
-            )?;
-            code.push(mem, Jump { offset: 0 })?;
-            code.push(mem, JumpIfTrue { test: 1, offset: 0 })?;
-            code.push(mem, JumpIfNotTrue { test: 1, offset: 0 })?;
-            code.push(mem, LoadNil { dest: 1 })?;
-            code.push(mem, LoadGlobal { dest: 1, name: 1 })?;
-            code.push(mem, StoreGlobal { src: 1, name: 1 })?;
-            code.push(
-                mem,
-                Call {
-                    function: 1,
-                    dest: 1,
-                    arg_count: 0,
-                },
-            )?;
-            code.push(
-                mem,
-                MakeClosure {
-                    dest: 1,
-                    function: 1,
-                    function_scope: 0,
-                },
-            )?;
-            code.push(
-                mem,
-                LoadInteger {
-                    dest: 1,
-                    integer: 0,
-                },
-            )?;
-            code.push(mem, CopyRegister { dest: 1, src: 1 })?;
-            code.push(
-                mem,
-                LoadNonLocal {
-                    dest: 1,
-                    src: 1,
-                    frame_offset: 0,
-                },
-            )?;
-            code.push(
-                mem,
-                Add {
-                    dest: 1,
-                    reg1: 1,
-                    reg2: 1,
-                },
-            )?;
-            code.push(
-                mem,
-                Subtract {
-                    dest: 1,
-                    left: 1,
-                    right: 1,
-                },
-            )?;
-            code.push(
-                mem,
-                Multiply {
-                    dest: 1,
-                    reg1: 1,
-                    reg2: 1,
-                },
-            )?;
-            code.push(
-                mem,
-                DivideInteger {
-                    dest: 1,
-                    num: 1,
-                    denom: 1,
-                },
-            )?;
-
-            code.increment_all_registers(mem)?;
-
-            code.code.access_slice(mem, |code| {
-                for opcode in code {
-                    match *opcode {
-                        NoOp => (),
-                        Return { reg } => assert!(reg == 2),
-                        LoadLiteral { dest, literal_id } => {
-                            assert!(dest == 2);
-                            assert!(literal_id == 0);
-                        }
-                        IsNil { dest, test } => {
-                            assert!(dest == 2);
-                            assert!(test == 2);
-                        }
-                        IsAtom { dest, test } => {
-                            assert!(dest == 2);
-                            assert!(test == 2);
-                        }
-                        FirstOfPair { dest, reg } => {
-                            assert!(dest == 2);
-                            assert!(reg == 2);
-                        }
-                        SecondOfPair { dest, reg } => {
-                            assert!(dest == 2);
-                            assert!(reg == 2);
-                        }
-                        MakePair { dest, reg1, reg2 } => {
-                            assert!(dest == 2);
-                            assert!(reg1 == 2);
-                            assert!(reg2 == 2);
-                        }
-                        IsIdentical { dest, test1, test2 } => {
-                            assert!(dest == 2);
-                            assert!(test1 == 2);
-                            assert!(test2 == 2);
-                        }
-                        Jump { offset } => assert!(offset == 0),
-                        JumpIfTrue { test, offset } => {
-                            assert!(test == 2);
-                            assert!(offset == 0);
-                        }
-                        JumpIfNotTrue { test, offset } => {
-                            assert!(test == 2);
-                            assert!(offset == 0);
-                        }
-                        LoadNil { dest } => assert!(dest == 2),
-                        LoadGlobal { dest, name } => {
-                            assert!(dest == 2);
-                            assert!(name == 2);
-                        }
-                        StoreGlobal { src, name } => {
-                            assert!(src == 2);
-                            assert!(name == 2);
-                        }
-                        Call {
-                            function,
-                            dest,
-                            arg_count,
-                        } => {
-                            assert!(function == 2);
-                            assert!(dest == 2);
-                            assert!(arg_count == 0);
-                        }
-                        MakeClosure {
-                            dest,
-                            function,
-                            function_scope,
-                        } => {
-                            assert!(dest == 2);
-                            assert!(function == 2);
-                            assert!(function_scope == 0);
-                        }
-                        LoadInteger { dest, integer } => {
-                            assert!(dest == 2);
-                            assert!(integer == 0);
-                        }
-                        CopyRegister { dest, src } => {
-                            assert!(dest == 2);
-                            assert!(src == 2);
-                        }
-                        LoadNonLocal {
-                            dest,
-                            src,
-                            frame_offset,
-                        } => {
-                            assert!(dest == 2);
-                            assert!(src == 2);
-                            assert!(frame_offset == 0);
-                        }
-                        Add { dest, reg1, reg2 } => {
-                            assert!(dest == 2);
-                            assert!(reg1 == 2);
-                            assert!(reg2 == 2);
-                        }
-                        Subtract { dest, left, right } => {
-                            assert!(dest == 2);
-                            assert!(left == 2);
-                            assert!(right == 2);
-                        }
-                        Multiply { dest, reg1, reg2 } => {
-                            assert!(dest == 2);
-                            assert!(reg1 == 2);
-                            assert!(reg2 == 2);
-                        }
-                        DivideInteger { dest, num, denom } => {
-                            assert!(dest == 2);
-                            assert!(num == 2);
-                            assert!(denom == 2);
-                        }
-                    }
-                }
-            });
-
-            Ok(())
-        }
-
-        test_helper(test_inner);
     }
 }

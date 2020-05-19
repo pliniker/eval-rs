@@ -2,6 +2,7 @@
 ///
 ///  Array<T>
 ///  ArrayU32 = Array<u32>
+///  ArrayU16 = Array<u16>
 ///  ArrayU8 = Array<u8>
 use std::cell::Cell;
 use std::fmt;
@@ -332,6 +333,19 @@ impl Print for ArrayU8 {
         f: &mut fmt::Formatter,
     ) -> fmt::Result {
         write!(f, "ArrayU8[...]")
+    }
+}
+
+/// Array of u16
+pub type ArrayU16 = Array<u16>;
+
+impl Print for ArrayU16 {
+    fn print<'guard>(
+        &self,
+        _guard: &'guard dyn MutatorScope,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
+        write!(f, "ArrayU16[...]")
     }
 }
 

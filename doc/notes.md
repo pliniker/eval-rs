@@ -1,6 +1,11 @@
 # Notes
 
-## TODO
+## To finish now
+
+ - the book
+ - gc
+
+## TODO later
 
 ### Source Maps
 
@@ -34,49 +39,37 @@
 Glue language:
  - Immutable values and data structures, structural sharing
  - Mutable unique copy-on-write
- - Mutable concurrency-safe variables?
- - Mutable stack-pinned resource/state/io management - 'with' (needs escape analysis?)
- - Closures with lambda lifting
+ - Mutable concurrency-safe variables
+ - Mutable stack-pinned resource/state/io management types - 'with'
+ - Closures
  - Partial application
  - Tail call recursion
- - Duck typed?
- - Pattern matching, destructuring?
+ - Pattern matching on tuple values
 
-## Syntax - easy to parse but unergonomic s-exprs
-
-### v1
-
-(atom sym)
-(quote thing)
-(car (quote (list of things)))
-(cdr (quote (list of things)))
-(cons thing (quote (list of things)))
-(eq thing1 thing2)
+## Syntax & Semantics - easy to parse but unergonomic s-exprs
 
 ### v2
 
-(def fib (n)
-  (match n
-    ((0) 1)
-    ((n) (+ n (fib (- n 1))))))
-
-(def function (x y)
-  (let (variable expr)
-    (* x y)))
-
+```
+# stack-managed resources
 (with (io.file "name" 'r) f
-  (let 
+  (let
     ((content (f.read)))
     content))
 
-(data Option
-  (Some value)
-  (None))
+# basic pattern matching
+(def fib (n)
+  (match n
+    (0 1)
+    (n (+ n (fib (- n 1))))))
+```
 
 ### Partials and Currying
 
+```
 (def addn (a) (+ a)) -> (Partial + a b)
 (def muln (x) (* x)) -> (partial * x y)
+```
 
 Chaining partials? Stack of partials?
 (Partial div 2 (Partial add 3 (Partial mul 5)))
@@ -94,51 +87,36 @@ Chaining partials? Stack of partials?
 
 iterate until arg stack is empty
 
-### Closures
-
-(def bob (x)             # scope 0
-  (let (
-    (y (lambda () x))    # scope 1a
-    (z (lambda () (y)))  # scope 1b, must call y knowing y's scope so that x is loaded from bob's call frame
-    z))
 
 ### Functors, Applicative, Monads
 
+```
 data Maybe = Just a | Nothing
 
 instance Functor Maybe where
   fmap :: (a -> b) -> Maybe a -> Maybe b
   fmap _ Nothing  = Nothing
   fmap g (Just a) = Just (g a)
+```
 
----
-
-(data Maybe 
+```
+(data Maybe
     (Just a)
     (Nothing))
-->
+# compiles to:
 (set 'Maybe (object))
 (def Just (a) (append '(Maybe Just) (list a))
 (def Nothing () '(Maybe Nothing))
 
 (def Maybe::fmap (self f)
   (match self
-    (Nothing) (Nothing)
-    (Just a) (Just (f a))))
+    ((Nothing) (Nothing))
+    ((Just a) (Just (f a)))))
 
 (def Maybe::amap (self mf)
   (match self
-    (Nothing) (Nothing)
-    (Just a) (match mf
+    ((Nothing) (Nothing))
+    ((Just a) (match mf
       (Nothing) (Nothing)
-      (Just f) (Just (f a))
-)))
-
-
-(let 
-  (
-    (is (lambda (a b) (is? a b)))
-    (is_not (lambda (x y) (is x y)))
-  )
-  (is_not 'a 'b)
-)
+      (Just f) (Just (f a))))))
+```
